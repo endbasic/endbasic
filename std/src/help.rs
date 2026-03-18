@@ -1,28 +1,29 @@
 // EndBASIC
 // Copyright 2020 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Interactive help support.
 
+use crate::MachineBuilder;
 use crate::console::{AnsiColor, Console, Pager, refill_and_page};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
-use endbasic_core::LineCol;
-use endbasic_core::ast::ExprType;
-use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Error, Machine, Result, Scope};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder, Symbols};
+use endbasic_core2::{
+    ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
+    ExprType, RequiredValueSyntax, Scope, SingularArgSyntax, SymbolKey,
+};
 use radix_trie::{Trie, TrieCommon};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -46,7 +47,7 @@ fn header() -> Vec<String> {
         format!("    This is EndBASIC {}.", env!("CARGO_PKG_VERSION")),
         "".to_owned(),
         format!("    Project page at <{}>", env!("CARGO_PKG_HOMEPAGE")),
-        "    License Apache Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>".to_owned(),
+        "    License GNU AGPLv3+ <https://www.gnu.org/licenses/agpl-3.0.html>".to_owned(),
     ]
 }
 
@@ -69,7 +70,7 @@ trait Topic {
 /// A help topic to describe a callable.
 struct CallableTopic {
     name: String,
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 #[async_trait(?Send)]
@@ -137,7 +138,7 @@ impl Topic for CallableTopic {
 }
 
 /// Generates the index for a collection of `CallableMetadata`s to use in a `CategoryTopic`.
-fn callables_to_index(metadatas: &[CallableMetadata]) -> BTreeMap<String, &'static str> {
+fn callables_to_index(metadatas: &[Rc<CallableMetadata>]) -> BTreeMap<String, &'static str> {
     let category = metadatas.first().expect("Must have at least one symbol").category();
 
     let mut index = BTreeMap::default();
@@ -306,8 +307,8 @@ fn parse_lang_reference(lang_md: &'static str) -> Vec<(&'static str, &'static st
 struct Topics(Trie<String, Box<dyn Topic>>);
 
 impl Topics {
-    /// Builds an index of the given `symbols` and returns a new collection of help topics.
-    fn new(symbols: &Symbols) -> Self {
+    /// Builds an index of the given `callables` and returns a new collection of help topics.
+    fn new(callables: &HashMap<SymbolKey, Rc<CallableMetadata>>) -> Self {
         fn insert(topics: &mut Trie<String, Box<dyn Topic>>, topic: Box<dyn Topic>) {
             let key = topic.name().to_ascii_uppercase();
             topics.insert(key, topic);
@@ -335,14 +336,13 @@ impl Topics {
         }
 
         let mut categories = HashMap::new();
-        for (name, symbol) in symbols.callables().iter() {
-            let metadata = symbol.metadata();
+        for metadata in callables.values() {
             let category_title = metadata.category().lines().next().unwrap();
             categories.entry(category_title).or_insert_with(Vec::default).push(metadata.clone());
 
             let name = match metadata.return_type() {
                 None => metadata.name().to_owned(),
-                Some(return_type) => format!("{}{}", name, return_type.annotation()),
+                Some(return_type) => format!("{}{}", metadata.name(), return_type.annotation()),
             };
 
             insert(&mut topics, Box::from(CallableTopic { name, metadata: metadata.clone() }));
@@ -360,7 +360,7 @@ impl Topics {
     ///
     /// If `name` is not long enough to uniquely identify a topic or if the topic does not exist,
     /// returns an error.
-    fn find(&self, name: &str, pos: LineCol) -> Result<&dyn Topic> {
+    fn find(&self, name: &str, scope: &Scope<'_>, narg: u8) -> CallResult<&dyn Topic> {
         let key = name.to_ascii_uppercase();
 
         if let Some(topic) = self.0.get(&key) {
@@ -375,8 +375,8 @@ impl Topics {
                     _ => {
                         let completions: Vec<String> =
                             children.iter().map(|(name, _topic)| (*name).to_owned()).collect();
-                        Err(Error::SyntaxError(
-                            pos,
+                        Err(CallError::Syntax(
+                            scope.get_pos(narg),
                             format!(
                                 "Ambiguous help topic {}; candidates are: {}",
                                 name,
@@ -386,7 +386,9 @@ impl Topics {
                     }
                 }
             }
-            None => Err(Error::SyntaxError(pos, format!("Unknown help topic {}", name))),
+            None => {
+                Err(CallError::Syntax(scope.get_pos(narg), format!("Unknown help topic {}", name)))
+            }
         }
     }
 
@@ -398,13 +400,17 @@ impl Topics {
 
 /// The `HELP` command.
 pub struct HelpCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
+    callables: Rc<RefCell<HashMap<SymbolKey, Rc<CallableMetadata>>>>,
     console: Rc<RefCell<dyn Console>>,
 }
 
 impl HelpCommand {
     /// Creates a new command that writes help messages to `output`.
-    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+    pub fn new(
+        callables: Rc<RefCell<HashMap<SymbolKey, Rc<CallableMetadata>>>>,
+        console: Rc<RefCell<dyn Console>>,
+    ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("HELP")
                 .with_syntax(&[
@@ -431,6 +437,7 @@ name starts with the prefix will be shown.  For example, the following invocatio
 equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
                 )
                 .build(),
+            callables,
             console,
         })
     }
@@ -478,31 +485,31 @@ equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
 
 #[async_trait(?Send)]
 impl Callable for HelpCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
-        let topics = Topics::new(machine.get_symbols());
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        let topics = Topics::new(&self.callables.borrow());
 
         if scope.nargs() == 0 {
             let mut console = self.console.borrow_mut();
             let result = {
-                let mut pager = Pager::new(&mut *console).map_err(|e| scope.io_error(e))?;
+                let mut pager = Pager::new(&mut *console).map_err(CallError::from)?;
                 self.summary(&topics, &mut pager).await
             };
-            result.map_err(|e| scope.io_error(e))?;
+            result.map_err(CallError::from)?;
         } else {
             debug_assert_eq!(1, scope.nargs());
-            let (t, pos) = scope.pop_string_with_pos();
+            let t = scope.get_string(0).to_owned();
 
-            let topic = topics.find(&t, pos)?;
+            let topic = topics.find(&t, &scope, 0)?;
             let mut console = self.console.borrow_mut();
             let result = {
-                let mut pager = Pager::new(&mut *console).map_err(|e| scope.io_error(e))?;
+                let mut pager = Pager::new(&mut *console).map_err(CallError::from)?;
                 topic.describe(&mut pager).await
             };
-            result.map_err(|e| scope.io_error(e))?;
+            result.map_err(CallError::from)?;
         }
 
         Ok(())
@@ -510,18 +517,17 @@ impl Callable for HelpCommand {
 }
 
 /// Adds all help-related commands to the `machine` and makes them write to `console`.
-pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
-    machine.add_callable(HelpCommand::new(console));
+pub fn add_all(machine: &mut MachineBuilder, console: Rc<RefCell<dyn Console>>) {
+    machine.add_callable(HelpCommand::new(machine.callables_metadata(), console));
 }
 
 #[cfg(test)]
 pub(crate) mod testutils {
     use super::*;
-    use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 
     /// A command that does nothing.
     pub(crate) struct DoNothingCommand {
-        metadata: CallableMetadata,
+        metadata: Rc<CallableMetadata>,
     }
 
     impl DoNothingCommand {
@@ -560,18 +566,18 @@ Second paragraph of the extended description.",
 
     #[async_trait(?Send)]
     impl Callable for DoNothingCommand {
-        fn metadata(&self) -> &CallableMetadata {
-            &self.metadata
+        fn metadata(&self) -> Rc<CallableMetadata> {
+            self.metadata.clone()
         }
 
-        async fn exec(&self, _scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+        async fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
             Ok(())
         }
     }
 
     /// A function that does nothing that can take any name.
     pub(crate) struct EmptyFunction {
-        metadata: CallableMetadata,
+        metadata: Rc<CallableMetadata>,
     }
 
     impl EmptyFunction {
@@ -611,11 +617,11 @@ Second paragraph of the extended description.",
 
     #[async_trait(?Send)]
     impl Callable for EmptyFunction {
-        fn metadata(&self) -> &CallableMetadata {
-            &self.metadata
+        fn metadata(&self) -> Rc<CallableMetadata> {
+            self.metadata.clone()
         }
 
-        async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+        async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
             scope.return_string("irrelevant".to_owned())
         }
     }
@@ -625,8 +631,10 @@ Second paragraph of the extended description.",
 mod tests {
     use super::testutils::*;
     use super::*;
+    use crate::MachineBuilder;
     use crate::console::{CharsXY, Key};
     use crate::testutils::*;
+    use futures_lite::future::block_on;
 
     #[test]
     fn test_parse_lang_reference_empty() {
@@ -702,16 +710,32 @@ This is the first and only topic with just one line.
         assert_eq!(exp_content, content);
     }
 
-    fn tester() -> Tester {
-        let tester = Tester::empty();
+    fn tester_with(callables: Vec<Rc<dyn Callable>>) -> Tester {
+        let metadata = Rc::new(RefCell::new(HashMap::default()));
+        let mut tester = Tester::empty();
+        for callable in callables {
+            metadata
+                .borrow_mut()
+                .insert(SymbolKey::from(callable.metadata().name()), callable.metadata());
+            tester = tester.add_callable(callable);
+        }
+
         let console = tester.get_console();
-        tester.add_callable(HelpCommand::new(console))
+        let help_probe =
+            HelpCommand::new(Rc::new(RefCell::new(HashMap::default())), console.clone());
+        metadata
+            .borrow_mut()
+            .insert(SymbolKey::from(help_probe.metadata().name()), help_probe.metadata());
+        tester.add_callable(HelpCommand::new(metadata, console))
+    }
+
+    fn tester() -> Tester {
+        tester_with(vec![])
     }
 
     #[test]
     fn test_help_summarize_symbols() {
-        let mut t =
-            tester().add_callable(DoNothingCommand::new()).add_callable(EmptyFunction::new());
+        let mut t = tester_with(vec![DoNothingCommand::new(), EmptyFunction::new()]);
         t.get_console().borrow_mut().set_color(Some(100), Some(200)).unwrap();
         t.run("HELP")
             .expect_output([CapturedOut::SetColor(Some(100), Some(200))])
@@ -753,9 +777,33 @@ This is the first and only topic with just one line.
     }
 
     #[test]
+    fn test_help_includes_scripting_categories() {
+        let console = Rc::new(RefCell::new(MockConsole::default()));
+        let mut machine =
+            MachineBuilder::default().with_console(console.clone()).make_interactive().build();
+
+        machine.compile(&mut "HELP".as_bytes()).unwrap();
+        block_on(machine.exec()).unwrap();
+
+        assert!(
+            console
+                .borrow()
+                .captured_out()
+                .contains(&CapturedOut::Print("Numerical functions".to_owned())),
+            "HELP output must include Numerical functions category"
+        );
+        assert!(
+            console
+                .borrow()
+                .captured_out()
+                .contains(&CapturedOut::Print("String and character functions".to_owned())),
+            "HELP output must include String and character functions category"
+        );
+    }
+
+    #[test]
     fn test_help_describe_callables_topic() {
-        let mut t =
-            tester().add_callable(DoNothingCommand::new()).add_callable(EmptyFunction::new());
+        let mut t = tester_with(vec![DoNothingCommand::new(), EmptyFunction::new()]);
         t.get_console().borrow_mut().set_color(Some(70), Some(50)).unwrap();
         t.run(r#"help "testing""#)
             .expect_output([CapturedOut::SetColor(Some(70), Some(50))])
@@ -786,7 +834,7 @@ This is the first and only topic with just one line.
 
     #[test]
     fn test_help_describe_command() {
-        let mut t = tester().add_callable(DoNothingCommand::new());
+        let mut t = tester_with(vec![DoNothingCommand::new()]);
         t.get_console().borrow_mut().set_color(Some(20), Some(21)).unwrap();
         t.run(r#"help "Do_Nothing""#)
             .expect_output([CapturedOut::SetColor(Some(20), Some(21))])
@@ -809,7 +857,7 @@ This is the first and only topic with just one line.
     }
 
     fn do_help_describe_function_test(name: &str) {
-        let mut t = tester().add_callable(EmptyFunction::new());
+        let mut t = tester_with(vec![EmptyFunction::new()]);
         t.get_console().borrow_mut().set_color(Some(30), Some(26)).unwrap();
         t.run(format!(r#"help "{}""#, name))
             .expect_output([CapturedOut::SetColor(Some(30), Some(26))])
@@ -843,8 +891,7 @@ This is the first and only topic with just one line.
 
     #[test]
     fn test_help_eval_arg() {
-        tester()
-            .add_callable(DoNothingCommand::new())
+        tester_with(vec![DoNothingCommand::new()])
             .run(r#"topic = "Do_Nothing": HELP topic"#)
             .expect_prints([""])
             .expect_output([
@@ -861,7 +908,7 @@ This is the first and only topic with just one line.
                 "    Second paragraph of the extended description.",
                 "",
             ])
-            .expect_var("TOPIC", "Do_Nothing")
+            .expect_var("topic", "Do_Nothing")
             .check();
     }
 
@@ -889,46 +936,49 @@ This is the first and only topic with just one line.
         }
 
         for cmd in &[r#"help "aa""#, r#"help "aab""#, r#"help "aabc""#] {
-            tester()
-                .add_callable(EmptyFunction::new_with_name("AABC"))
-                .add_callable(EmptyFunction::new_with_name("ABC"))
-                .add_callable(EmptyFunction::new_with_name("BC"))
-                .run(*cmd)
-                .expect_output(exp_output("AABC$", true))
-                .check();
+            tester_with(vec![
+                EmptyFunction::new_with_name("AABC"),
+                EmptyFunction::new_with_name("ABC"),
+                EmptyFunction::new_with_name("BC"),
+            ])
+            .run(*cmd)
+            .expect_output(exp_output("AABC$", true))
+            .check();
         }
 
         for cmd in &[r#"help "b""#, r#"help "bc""#] {
-            tester()
-                .add_callable(EmptyFunction::new_with_name("AABC"))
-                .add_callable(EmptyFunction::new_with_name("ABC"))
-                .add_callable(EmptyFunction::new_with_name("BC"))
-                .run(*cmd)
-                .expect_output(exp_output("BC$", true))
-                .check();
+            tester_with(vec![
+                EmptyFunction::new_with_name("AABC"),
+                EmptyFunction::new_with_name("ABC"),
+                EmptyFunction::new_with_name("BC"),
+            ])
+            .run(*cmd)
+            .expect_output(exp_output("BC$", true))
+            .check();
         }
 
-        tester()
-            .add_callable(DoNothingCommand::new_with_name("AAAB"))
-            .add_callable(DoNothingCommand::new_with_name("AAAA"))
-            .add_callable(DoNothingCommand::new_with_name("AAAAA"))
-            .run(r#"help "aaaa""#)
-            .expect_output(exp_output("AAAA", false))
-            .check();
+        tester_with(vec![
+            DoNothingCommand::new_with_name("AAAB"),
+            DoNothingCommand::new_with_name("AAAA"),
+            DoNothingCommand::new_with_name("AAAAA"),
+        ])
+        .run(r#"help "aaaa""#)
+        .expect_output(exp_output("AAAA", false))
+        .check();
 
-        tester()
-            .add_callable(DoNothingCommand::new_with_name("ZAB"))
-            .add_callable(EmptyFunction::new_with_name("ZABC"))
-            .add_callable(EmptyFunction::new_with_name("ZAABC"))
-            .run(r#"help "za""#)
-            .expect_err("1:6: Ambiguous help topic za; candidates are: ZAABC$, ZAB, ZABC$")
-            .check();
+        tester_with(vec![
+            DoNothingCommand::new_with_name("ZAB"),
+            EmptyFunction::new_with_name("ZABC"),
+            EmptyFunction::new_with_name("ZAABC"),
+        ])
+        .run(r#"help "za""#)
+        .expect_err("1:6: Ambiguous help topic za; candidates are: ZAABC$, ZAB, ZABC$")
+        .check();
     }
 
     #[test]
     fn test_help_errors() {
-        let mut t =
-            tester().add_callable(DoNothingCommand::new()).add_callable(EmptyFunction::new());
+        let mut t = tester_with(vec![DoNothingCommand::new(), EmptyFunction::new()]);
 
         t.run(r#"HELP foo bar"#).expect_err("1:10: Unexpected value in expression").check();
         t.run(r#"HELP foo"#).expect_compilation_err("1:6: Undefined symbol foo").check();

@@ -1,34 +1,33 @@
 // EndBASIC
 // Copyright 2021 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Commands for console interaction.
 
+use crate::MachineBuilder;
 use crate::console::readline::read_line;
 use crate::console::{CharsXY, ClearType, Console, ConsoleClearable, Key};
 use crate::strings::{
     format_boolean, format_double, format_integer, parse_boolean, parse_double, parse_integer,
 };
 use async_trait::async_trait;
-use endbasic_core::LineCol;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarRef};
-use endbasic_core::compiler::{
-    ArgSepSyntax, OptionalValueSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax,
-    RequiredValueSyntax, SingularArgSyntax,
+use endbasic_core2::{
+    ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
+    CallableMetadataBuilder, ExprType, OptionalValueSyntax, RepeatedSyntax, RepeatedTypeSyntax,
+    RequiredRefSyntax, RequiredValueSyntax, Scope, SingularArgSyntax, VarArgTag,
 };
-use endbasic_core::exec::{Error, Machine, Result, Scope, ValueTag};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::convert::TryFrom;
@@ -55,7 +54,7 @@ or web browser.  If you do resize them, however, restart the interpreter.";
 
 /// The `CLS` command.
 pub struct ClsCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -75,27 +74,24 @@ impl ClsCommand {
 
 #[async_trait(?Send)]
 impl Callable for ClsCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
-        self.console.borrow_mut().clear(ClearType::All).map_err(|e| scope.io_error(e))?;
+        self.console.borrow_mut().clear(ClearType::All)?;
         Ok(())
     }
 }
 
 /// The `COLOR` command.
 pub struct ColorCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
 impl ColorCommand {
-    const NO_COLOR: i32 = 0;
-    const HAS_COLOR: i32 = 1;
-
     /// Creates a new `COLOR` command that changes the color of the `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
@@ -118,8 +114,6 @@ impl ColorCommand {
                                 OptionalValueSyntax {
                                     name: Cow::Borrowed("fg"),
                                     vtype: ExprType::Integer,
-                                    missing_value: Self::NO_COLOR,
-                                    present_value: Self::HAS_COLOR,
                                 },
                                 ArgSepSyntax::Exactly(ArgSep::Long),
                             ),
@@ -127,8 +121,6 @@ impl ColorCommand {
                                 OptionalValueSyntax {
                                     name: Cow::Borrowed("bg"),
                                     vtype: ExprType::Integer,
-                                    missing_value: Self::NO_COLOR,
-                                    present_value: Self::HAS_COLOR,
                                 },
                                 ArgSepSyntax::End,
                             ),
@@ -151,43 +143,66 @@ necessarily match any other color specifiable in the 0 to 255 range, as it might
 
 #[async_trait(?Send)]
 impl Callable for ColorCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
-        fn get_color((i, pos): (i32, LineCol)) -> Result<Option<u8>> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        fn get_color(scope: &Scope<'_>, narg: u8) -> CallResult<Option<u8>> {
+            let i = scope.get_integer(narg);
             if i >= 0 && i <= u8::MAX as i32 {
                 Ok(Some(i as u8))
             } else {
-                Err(Error::SyntaxError(pos, "Color out of range".to_owned()))
-            }
-        }
-
-        fn get_optional_color(scope: &mut Scope<'_>) -> Result<Option<u8>> {
-            match scope.pop_integer() {
-                ColorCommand::NO_COLOR => Ok(None),
-                ColorCommand::HAS_COLOR => get_color(scope.pop_integer_with_pos()),
-                _ => unreachable!(),
+                Err(CallError::Syntax(scope.get_pos(narg), "Color out of range".to_owned()))
             }
         }
 
         let (fg, bg) = if scope.nargs() == 0 {
             (None, None)
         } else if scope.nargs() == 1 {
-            (get_color(scope.pop_integer_with_pos())?, None)
+            (get_color(&scope, 0)?, None)
         } else {
-            (get_optional_color(&mut scope)?, get_optional_color(&mut scope)?)
+            let mut reg: u8 = 0;
+            let fg = if usize::from(reg) < scope.nargs() {
+                match scope.get_type(reg) {
+                    VarArgTag::Immediate(sep, etype) => {
+                        debug_assert!([ArgSep::Long, ArgSep::End].contains(&sep));
+                        debug_assert_eq!(ExprType::Integer, etype);
+                        reg += 1;
+                        get_color(&scope, reg)?
+                    }
+                    VarArgTag::Missing(_sep) => None,
+                    VarArgTag::Pointer(..) => unreachable!(),
+                }
+            } else {
+                None
+            };
+            reg += 1;
+            let bg = if usize::from(reg) < scope.nargs() {
+                match scope.get_type(reg) {
+                    VarArgTag::Immediate(sep, etype) => {
+                        debug_assert!([ArgSep::Long, ArgSep::End].contains(&sep));
+                        debug_assert_eq!(ExprType::Integer, etype);
+                        reg += 1;
+                        get_color(&scope, reg)?
+                    }
+                    VarArgTag::Missing(_sep) => None,
+                    VarArgTag::Pointer(..) => unreachable!(),
+                }
+            } else {
+                None
+            };
+            (fg, bg)
         };
 
-        self.console.borrow_mut().set_color(fg, bg).map_err(|e| scope.io_error(e))?;
+        self.console.borrow_mut().set_color(fg, bg)?;
         Ok(())
     }
 }
 
 /// The `INKEY` function.
 pub struct InKeyFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -221,14 +236,14 @@ GPIO_INPUT?, within the same loop.",
 
 #[async_trait(?Send)]
 impl Callable for InKeyFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
-        let key = self.console.borrow_mut().poll_key().await.map_err(|e| scope.io_error(e))?;
+        let key = self.console.borrow_mut().poll_key().await?;
         let key_name = match key {
             Some(Key::ArrowDown) => "DOWN".to_owned(),
             Some(Key::ArrowLeft) => "LEFT".to_owned(),
@@ -257,7 +272,7 @@ impl Callable for InKeyFunction {
 
 /// The `INPUT` command.
 pub struct InputCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -284,10 +299,8 @@ impl InputCommand {
                                 OptionalValueSyntax {
                                     name: Cow::Borrowed("prompt"),
                                     vtype: ExprType::Text,
-                                    missing_value: 0,
-                                    present_value: 1,
                                 },
-                                ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
+                                ArgSepSyntax::OneOf(&[ArgSep::Long, ArgSep::Short]),
                             ),
                             SingularArgSyntax::RequiredRef(
                                 RequiredRefSyntax {
@@ -318,26 +331,29 @@ variable to update with the obtained input.",
 
 #[async_trait(?Send)]
 impl Callable for InputCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
+        let mut reg = 0;
         let prompt = if scope.nargs() == 1 {
             "".to_owned()
         } else {
-            debug_assert!((3..=4).contains(&scope.nargs()));
+            debug_assert!((2..=3).contains(&scope.nargs()));
 
-            let has_prompt = scope.pop_integer();
-
-            let mut prompt = if has_prompt == 1 {
-                scope.pop_string()
-            } else {
-                debug_assert_eq!(0, has_prompt);
-                String::new()
+            let (mut prompt, sep) = match scope.get_type(reg) {
+                VarArgTag::Immediate(sep, etype) => {
+                    debug_assert_eq!(ExprType::Text, etype);
+                    reg += 1;
+                    (scope.get_string(1).to_owned(), sep)
+                }
+                VarArgTag::Missing(sep) => (String::new(), sep),
+                VarArgTag::Pointer(..) => unreachable!(),
             };
+            reg += 1;
 
-            match scope.pop_sep_tag() {
+            match sep {
                 ArgSep::Long => (),
                 ArgSep::Short => prompt.push_str("? "),
                 _ => unreachable!(),
@@ -345,22 +361,18 @@ impl Callable for InputCommand {
 
             prompt
         };
-        let (vname, vtype, pos) = scope.pop_varref_with_pos();
+        let mut regref = scope.get_mut_ref(reg);
 
         let mut console = self.console.borrow_mut();
         let mut previous_answer = String::new();
-        let vref = VarRef::new(vname.to_string(), Some(vtype));
         loop {
             match read_line(&mut *console, &prompt, &previous_answer, None).await {
                 Ok(answer) => {
                     let trimmed_answer = answer.trim_end();
-                    let e = match vtype {
+                    let e = match regref.vtype {
                         ExprType::Boolean => match parse_boolean(trimmed_answer) {
                             Ok(b) => {
-                                machine
-                                    .get_mut_symbols()
-                                    .set_var(&vref, Value::Boolean(b))
-                                    .map_err(|e| Error::EvalError(pos, format!("{}", e)))?;
+                                regref.set_boolean(b);
                                 return Ok(());
                             }
                             Err(e) => e,
@@ -368,10 +380,7 @@ impl Callable for InputCommand {
 
                         ExprType::Double => match parse_double(trimmed_answer) {
                             Ok(d) => {
-                                machine
-                                    .get_mut_symbols()
-                                    .set_var(&vref, Value::Double(d))
-                                    .map_err(|e| Error::EvalError(pos, format!("{}", e)))?;
+                                regref.set_double(d);
                                 return Ok(());
                             }
                             Err(e) => e,
@@ -379,31 +388,25 @@ impl Callable for InputCommand {
 
                         ExprType::Integer => match parse_integer(trimmed_answer) {
                             Ok(i) => {
-                                machine
-                                    .get_mut_symbols()
-                                    .set_var(&vref, Value::Integer(i))
-                                    .map_err(|e| Error::EvalError(pos, format!("{}", e)))?;
+                                regref.set_integer(i);
                                 return Ok(());
                             }
                             Err(e) => e,
                         },
 
                         ExprType::Text => {
-                            machine
-                                .get_mut_symbols()
-                                .set_var(&vref, Value::Text(trimmed_answer.to_owned()))
-                                .map_err(|e| Error::EvalError(pos, format!("{}", e)))?;
+                            regref.set_string(trimmed_answer);
                             return Ok(());
                         }
                     };
 
-                    console.print(&format!("Retry input: {}", e)).map_err(|e| scope.io_error(e))?;
+                    console.print(&format!("Retry input: {}", e))?;
                     previous_answer = answer;
                 }
                 Err(e) if e.kind() == io::ErrorKind::InvalidData => {
-                    console.print(&format!("Retry input: {}", e)).map_err(|e| scope.io_error(e))?
+                    console.print(&format!("Retry input: {}", e))?;
                 }
-                Err(e) => return Err(scope.io_error(e)),
+                Err(e) => return Err(e.into()),
             }
         }
     }
@@ -411,7 +414,7 @@ impl Callable for InputCommand {
 
 /// The `LOCATE` command.
 pub struct LocateCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -449,46 +452,49 @@ impl LocateCommand {
 
 #[async_trait(?Send)]
 impl Callable for LocateCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
-        fn get_coord((i, pos): (i32, LineCol), name: &str) -> Result<(u16, LineCol)> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        fn get_coord(scope: &Scope<'_>, narg: u8, name: &str) -> CallResult<u16> {
+            let i = scope.get_integer(narg);
             match u16::try_from(i) {
-                Ok(v) => Ok((v, pos)),
-                Err(_) => Err(Error::SyntaxError(pos, format!("{} out of range", name))),
+                Ok(v) => Ok(v),
+                Err(_) => {
+                    Err(CallError::Syntax(scope.get_pos(narg), format!("{} out of range", name)))
+                }
             }
         }
 
         debug_assert_eq!(2, scope.nargs());
-        let (column, column_pos) = get_coord(scope.pop_integer_with_pos(), "Column")?;
-        let (row, row_pos) = get_coord(scope.pop_integer_with_pos(), "Row")?;
+        let column = get_coord(&scope, 0, "Column")?;
+        let row = get_coord(&scope, 1, "Row")?;
 
         let mut console = self.console.borrow_mut();
-        let size = console.size_chars().map_err(|e| scope.io_error(e))?;
+        let size = console.size_chars()?;
 
         if column >= size.x {
-            return Err(Error::SyntaxError(
-                column_pos,
+            return Err(CallError::Syntax(
+                scope.get_pos(0),
                 format!("Column {} exceeds visible range of {}", column, size.x - 1),
             ));
         }
         if row >= size.y {
-            return Err(Error::SyntaxError(
-                row_pos,
+            return Err(CallError::Syntax(
+                scope.get_pos(1),
                 format!("Row {} exceeds visible range of {}", row, size.y - 1),
             ));
         }
 
-        console.locate(CharsXY::new(column, row)).map_err(|e| scope.io_error(e))?;
+        console.locate(CharsXY::new(column, row))?;
         Ok(())
     }
 }
 
 /// The `PRINT` command.
 pub struct PrintCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -502,7 +508,7 @@ impl PrintCommand {
                     Some(&RepeatedSyntax {
                         name: Cow::Borrowed("expr"),
                         type_syn: RepeatedTypeSyntax::AnyValue,
-                        sep: ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
+                        sep: ArgSepSyntax::OneOf(&[ArgSep::Long, ArgSep::Short]),
                         require_one: false,
                         allow_missing: true,
                     }),
@@ -528,67 +534,75 @@ the cursor position remains on the same line of the message right after what was
 
 #[async_trait(?Send)]
 impl Callable for PrintCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut text = String::new();
-        let mut nl = true;
-        while scope.nargs() > 0 {
+        let mut reg = 0;
+        let mut nl;
+        loop {
             let mut add_space = false;
 
-            match scope.pop_value_tag() {
-                ValueTag::Boolean => {
-                    let b = scope.pop_boolean();
-                    add_space = true;
-                    nl = true;
-                    text += format_boolean(b);
+            let sep = match scope.get_type(reg) {
+                VarArgTag::Immediate(sep, etype) => {
+                    let value_reg = reg + 1;
+                    reg += 2;
+                    match etype {
+                        ExprType::Boolean => {
+                            add_space = true;
+                            nl = true;
+                            text += format_boolean(scope.get_boolean(value_reg));
+                        }
+                        ExprType::Double => {
+                            add_space = true;
+                            nl = true;
+                            text += &format_double(scope.get_double(value_reg));
+                        }
+                        ExprType::Integer => {
+                            add_space = true;
+                            nl = true;
+                            text += &format_integer(scope.get_integer(value_reg));
+                        }
+                        ExprType::Text => {
+                            nl = true;
+                            text += scope.get_string(value_reg);
+                        }
+                    }
+                    sep
                 }
-                ValueTag::Double => {
-                    let d = scope.pop_double();
-                    add_space = true;
-                    nl = true;
-                    text += &format_double(d);
+                VarArgTag::Missing(sep) => {
+                    reg += 1;
+                    nl = sep == ArgSep::End && reg == 1 && text.is_empty();
+                    sep
                 }
-                ValueTag::Integer => {
-                    let i = scope.pop_integer();
-                    add_space = true;
-                    nl = true;
-                    text += &format_integer(i);
+                VarArgTag::Pointer(_sep) => {
+                    unreachable!();
                 }
-                ValueTag::Text => {
-                    let s = scope.pop_string();
-                    nl = true;
-                    text += &s;
-                }
-                ValueTag::Missing => {
-                    nl = false;
-                }
-            }
+            };
 
-            if scope.nargs() > 0 {
-                match scope.pop_sep_tag() {
-                    ArgSep::Short => {
-                        if add_space {
-                            text += " "
-                        }
-                    }
-                    ArgSep::Long => {
+            match sep {
+                ArgSep::As => unreachable!(),
+                ArgSep::End => break,
+                ArgSep::Long => {
+                    text += " ";
+                    while !text.len().is_multiple_of(14) {
                         text += " ";
-                        while !text.len().is_multiple_of(14) {
-                            text += " ";
-                        }
                     }
-                    _ => unreachable!(),
+                }
+                ArgSep::Short => {
+                    if add_space {
+                        text += " "
+                    }
                 }
             }
         }
 
         if nl {
-            self.console.borrow_mut().print(&text).map_err(|e| scope.io_error(e))?;
+            self.console.borrow_mut().print(&text)?;
         } else {
-            self.console.borrow_mut().write(&text).map_err(|e| scope.io_error(e))?;
+            self.console.borrow_mut().write(&text)?;
         }
         Ok(())
     }
@@ -596,7 +610,7 @@ impl Callable for PrintCommand {
 
 /// The `SCRCOLS` function.
 pub struct ScrColsFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -620,20 +634,20 @@ See SCRROWS to query the other dimension.",
 
 #[async_trait(?Send)]
 impl Callable for ScrColsFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
-        let size = self.console.borrow().size_chars().map_err(|e| scope.io_error(e))?;
+        let size = self.console.borrow().size_chars()?;
         scope.return_integer(i32::from(size.x))
     }
 }
 
 /// The `SCRROWS` function.
 pub struct ScrRowsFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -657,19 +671,19 @@ See SCRCOLS to query the other dimension.",
 
 #[async_trait(?Send)]
 impl Callable for ScrRowsFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
-        let size = self.console.borrow().size_chars().map_err(|e| scope.io_error(e))?;
+        let size = self.console.borrow().size_chars()?;
         scope.return_integer(i32::from(size.y))
     }
 }
 
 /// Adds all console-related commands for the given `console` to the `machine`.
-pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
+pub fn add_all(machine: &mut MachineBuilder, console: Rc<RefCell<dyn Console>>) {
     machine.add_clearable(ConsoleClearable::new(console.clone()));
     machine.add_callable(ClsCommand::new(console.clone()));
     machine.add_callable(ColorCommand::new(console.clone()));
@@ -711,6 +725,14 @@ mod tests {
         t().run("COLOR 255, 255")
             .expect_output([CapturedOut::SetColor(Some(255), Some(255))])
             .check();
+
+        Tester::default()
+            .run_n(&["COLOR 3, 4", "COLOR"])
+            .expect_output([
+                CapturedOut::SetColor(Some(3), Some(4)),
+                CapturedOut::SetColor(None, None),
+            ])
+            .check();
     }
 
     #[test]
@@ -730,23 +752,26 @@ mod tests {
 
     #[test]
     fn test_inkey_ok() {
-        Tester::default()
-            .run("result = INKEY")
-            .expect_var("result", Value::Text("".to_owned()))
-            .check();
+        Tester::default().run("result = INKEY").expect_var("result", "").check();
 
         Tester::default()
             .add_input_chars("x")
             .run("result = INKEY")
-            .expect_var("result", Value::Text("x".to_owned()))
+            .expect_var("result", "x")
             .check();
 
         Tester::default()
             .add_input_keys(&[Key::CarriageReturn, Key::Backspace, Key::NewLine])
-            .run("r1 = INKEY$: r2 = INKEY: r3 = INKEY$")
-            .expect_var("r1", Value::Text("ENTER".to_owned()))
-            .expect_var("r2", Value::Text("BS".to_owned()))
-            .expect_var("r3", Value::Text("ENTER".to_owned()))
+            .run(
+                r#"
+                r1 = INKEY$
+                r2 = INKEY
+                r3 = INKEY$
+                "#,
+            )
+            .expect_var("r1", "ENTER")
+            .expect_var("r2", "BS")
+            .expect_var("r3", "ENTER")
             .check();
     }
 
@@ -758,34 +783,21 @@ mod tests {
 
     #[test]
     fn test_input_ok() {
-        fn t<V: Into<Value>>(stmt: &str, input: &str, output: &str, var: &str, value: V) {
-            Tester::default()
-                .add_input_chars(input)
-                .run(stmt)
-                .expect_prints([output])
-                .expect_var(var, value)
-                .check();
+        fn t(stmt: &str, input: &str, output: &str) {
+            Tester::default().add_input_chars(input).run(stmt).expect_prints([output]).check();
         }
 
-        t("INPUT foo\nPRINT foo", "9\n", " 9", "foo", 9);
-        t("INPUT ; foo\nPRINT foo", "9\n", " 9", "foo", 9);
-        t("INPUT ; foo\nPRINT foo", "-9\n", "-9", "foo", -9);
-        t("INPUT , bar?\nPRINT bar", "true\n", "TRUE", "bar", true);
-        t("INPUT ; foo$\nPRINT foo", "\n", "", "foo", "");
-        t(
-            "INPUT \"With question mark\"; a$\nPRINT a$",
-            "some long text\n",
-            "some long text",
-            "a",
-            "some long text",
-        );
+        t("INPUT foo\nPRINT foo", "9\n", " 9");
+        t("INPUT ; foo\nPRINT foo", "9\n", " 9");
+        t("INPUT ; foo\nPRINT foo", "-9\n", "-9");
+        t("INPUT , bar?\nPRINT bar", "true\n", "TRUE");
+        t("INPUT ; foo$\nPRINT foo", "\n", "");
+        t("INPUT \"With question mark\"; a$\nPRINT a$", "some long text\n", "some long text");
 
         Tester::default()
             .add_input_chars("42\n")
             .run("prompt$ = \"Indirectly without question mark\"\nINPUT prompt$, b\nPRINT b * 2")
             .expect_prints([" 84"])
-            .expect_var("prompt", "Indirectly without question mark")
-            .expect_var("b", 42)
             .check();
     }
 
@@ -793,19 +805,19 @@ mod tests {
     fn test_input_on_predefined_vars() {
         Tester::default()
             .add_input_chars("1.5\n")
-            .run("d = 3.0\nINPUT ; d")
+            .run("DIM d AS DOUBLE: d = 3.0: INPUT ; d")
             .expect_var("d", 1.5)
             .check();
 
         Tester::default()
             .add_input_chars("foo bar\n")
-            .run("DIM s AS STRING\nINPUT ; s")
+            .run("DIM s AS STRING: INPUT ; s")
             .expect_var("s", "foo bar")
             .check();
 
         Tester::default()
             .add_input_chars("5\ntrue\n")
-            .run("DIM b AS BOOLEAN\nINPUT ; b")
+            .run("DIM b AS BOOLEAN: INPUT ; b")
             .expect_prints(["Retry input: Invalid boolean literal 5"])
             .expect_var("b", true)
             .check();
@@ -815,28 +827,28 @@ mod tests {
     fn test_input_retry() {
         Tester::default()
             .add_input_chars("\ntrue\n")
-            .run("INPUT ; b?")
+            .run("DIM b AS BOOLEAN: INPUT ; b?")
             .expect_prints(["Retry input: Invalid boolean literal "])
             .expect_var("b", true)
             .check();
 
         Tester::default()
             .add_input_chars("0\ntrue\n")
-            .run("INPUT ; b?")
+            .run("DIM b AS BOOLEAN: INPUT ; b?")
             .expect_prints(["Retry input: Invalid boolean literal 0"])
             .expect_var("b", true)
             .check();
 
         Tester::default()
             .add_input_chars("\n7\n")
-            .run("a = 3\nINPUT ; a")
+            .run("DIM a: a = 3: INPUT ; a")
             .expect_prints(["Retry input: Invalid integer literal "])
             .expect_var("a", 7)
             .check();
 
         Tester::default()
             .add_input_chars("x\n7\n")
-            .run("a = 3\nINPUT ; a")
+            .run("DIM a: a = 3: INPUT ; a")
             .expect_prints(["Retry input: Invalid integer literal x"])
             .expect_var("a", 7)
             .check();
@@ -861,7 +873,7 @@ mod tests {
         check_stmt_err("1:7: Undefined symbol a", "INPUT a + 1 ; b");
         Tester::default()
             .run("a = 3: INPUT ; a + 1")
-            .expect_compilation_err("1:16: Requires a reference, not a value")
+            .expect_compilation_err("1:16: INPUT expected <vref> | <[prompt$] <,|;> vref>")
             .check();
         check_stmt_err("1:11: Cannot + STRING and BOOLEAN", "INPUT \"a\" + TRUE; b?");
     }
@@ -982,10 +994,10 @@ mod tests {
                 &ch_var
             };
             Tester::default()
-                .set_var("ch", Value::Text(ch_var.clone()))
+                .set_var("ch", ch_var.clone())
                 .run("PRINT ch")
                 .expect_prints([exp_ch])
-                .expect_var("ch", Value::Text(ch_var.clone()))
+                .expect_var("ch", ch_var)
                 .check();
         }
         assert!(found_any, "Test did not exercise what we wanted");

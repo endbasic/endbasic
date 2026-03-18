@@ -1,24 +1,24 @@
 // EndBASIC
 // Copyright 2020 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Web interface for the EndBASIC language.
 
 use async_channel::{Receiver, Sender};
-use endbasic_core::LineCol;
-use endbasic_core::exec::{Error, Result, Signal, YieldNowFn};
 use endbasic_std::console::{Console, GraphicsConsole};
+use endbasic_std::{Signal, YieldNowFn};
 use std::cell::RefCell;
 use std::future::Future;
 use std::io;
@@ -95,17 +95,14 @@ fn do_sleep<T: 'static>(ms: i32, ret: T) -> Pin<Box<dyn Future<Output = T>>> {
 /// Implementation of a `SleepFn` using `do_sleep`.
 fn js_sleep(
     d: Duration,
-    pos: LineCol,
     yielder: Rc<RefCell<Yielder>>,
-) -> Pin<Box<dyn Future<Output = Result<()>>>> {
+) -> Pin<Box<dyn Future<Output = Result<(), String>>>> {
     let ms = d.as_millis();
     if ms > i32::MAX as u128 {
         // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it
         // doesn't, you can imagine chaining calls to setTimeout to achieve the desired delay...
         // but the numbers we are talking about are so big that this doesn't make sense.
-        return Box::pin(async move {
-            Err(Error::InternalError(pos, "Cannot sleep for that long".to_owned()))
-        });
+        return Box::pin(async move { Err("Cannot sleep for that long".to_owned()) });
     }
     let ms = ms as i32;
 
@@ -176,7 +173,7 @@ impl Yielder {
         self.last -= Duration::from_millis(Self::MAX_INTERVAL_MILLIS);
     }
 
-    /// Creates a new `YieldNowFn` that can be passed to the core executor for a given `yielder`.
+    /// Creates a new `YieldNowFn` for this yielder.
     fn new_yield_now_fn(yielder: Rc<RefCell<Yielder>>) -> YieldNowFn {
         Box::from(move || {
             let yielder = yielder.clone();
@@ -260,33 +257,28 @@ impl WebTerminal {
         let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
-            .with_yield_now_fn(Yielder::new_yield_now_fn(self.yielder))
+            .with_yield_now_fn(Yielder::new_yield_now_fn(self.yielder.clone()))
             .with_signals_chan(self.signals_chan)
-            .with_sleep_fn(Box::from(move |d, pos| js_sleep(d, pos, yielder.clone())))
-            .make_interactive()
-            .with_program(Rc::from(RefCell::from(endbasic_repl::editor::Editor::default())));
-
-        let program = builder.get_program();
-
-        let storage = builder.get_storage();
+            .with_sleep_fn(Box::from(move |d| js_sleep(d, yielder.clone())));
+        let program = Rc::from(RefCell::from(endbasic_repl::editor::Editor::default()));
+        let storage = Rc::from(RefCell::from(endbasic_std::storage::Storage::default()));
         setup_storage(&mut storage.borrow_mut());
-
-        let mut machine = match builder.build() {
-            Ok(machine) => machine,
-            Err(e) => {
-                return Err(io::Error::other(format!("Machine initialization failed: {}", e)));
-            }
-        };
 
         let service =
             Rc::from(RefCell::from(endbasic_client::CloudService::new(&self.service_url)?));
         endbasic_client::add_all(
-            &mut machine,
+            &mut builder,
             service,
             console.clone(),
             storage.clone(),
             format!("{}/", location.origin().unicode_serialization()),
         );
+
+        let mut machine = builder
+            .make_interactive()
+            .with_program(program.clone())
+            .with_storage(storage.clone())
+            .build();
 
         endbasic_repl::print_welcome(console.clone())?;
 
@@ -352,7 +344,7 @@ pub fn get_build_id() -> String {
 }
 
 /// Module initialization.
-pub fn main() -> std::result::Result<(), JsValue> {
+pub fn main() -> Result<(), JsValue> {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 
@@ -369,7 +361,7 @@ mod tests {
     async fn test_js_sleep_ok() {
         let yielder = Rc::from(RefCell::from(Yielder::new()));
         let before = Date::now();
-        js_sleep(Duration::from_millis(10), LineCol { line: 1, col: 1 }, yielder).await.unwrap();
+        js_sleep(Duration::from_millis(10), yielder).await.unwrap();
         let elapsed = Date::now() - before;
         assert!(10.0 <= elapsed);
     }
@@ -377,19 +369,9 @@ mod tests {
     #[wasm_bindgen_test]
     async fn test_js_sleep_too_big() {
         let yielder = Rc::from(RefCell::from(Yielder::new()));
-        match js_sleep(
-            Duration::from_millis(i32::MAX as u64 + 1),
-            LineCol { line: 1, col: 2 },
-            yielder,
-        )
-        .await
-        .unwrap_err()
-        {
-            Error::InternalError(pos, e) => {
-                assert_eq!(LineCol { line: 1, col: 2 }, pos);
-                assert_eq!("Cannot sleep for that long", e);
-            }
-            e => panic!("Unexpected error type: {:?}", e),
-        }
+        assert_eq!(
+            "Cannot sleep for that long",
+            js_sleep(Duration::from_millis(i32::MAX as u64 + 1), yielder).await.unwrap_err()
+        );
     }
 }

@@ -1,25 +1,29 @@
 // EndBASIC
 // Copyright 2022 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Commands to interact with the data provided by `DATA` statements.
 
+use crate::numerics::double_to_integer;
+use crate::{Clearable, MachineBuilder};
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, Value, VarRef};
-use endbasic_core::compiler::{ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax};
-use endbasic_core::exec::{Clearable, Error, Machine, Result, Scope};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
+use endbasic_core2::{
+    ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
+    CallableMetadataBuilder, ConstantDatum, ExprType, RepeatedSyntax, RepeatedTypeSyntax, Scope,
+    VarArgTag,
+};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -30,14 +34,32 @@ pub(crate) const CATEGORY: &str = "Data management";
 struct ClearableIndex(Rc<RefCell<usize>>);
 
 impl Clearable for ClearableIndex {
-    fn reset_state(&self, _syms: &mut endbasic_core::syms::Symbols) {
+    fn reset_state(&self) {
         *self.0.borrow_mut() = 0;
+    }
+}
+
+fn expr_type_name(vtype: ExprType) -> &'static str {
+    match vtype {
+        ExprType::Boolean => "BOOLEAN",
+        ExprType::Double => "DOUBLE",
+        ExprType::Integer => "INTEGER",
+        ExprType::Text => "STRING",
+    }
+}
+
+fn value_type_name(value: &ConstantDatum) -> &'static str {
+    match value {
+        ConstantDatum::Boolean(..) => "BOOLEAN",
+        ConstantDatum::Double(..) => "DOUBLE",
+        ConstantDatum::Integer(..) => "INTEGER",
+        ConstantDatum::Text(..) => "STRING",
     }
 }
 
 /// The `READ` command.
 pub struct ReadCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     index: Rc<RefCell<usize>>,
 }
 
@@ -79,45 +101,83 @@ CLEAR.",
 
 #[async_trait(?Send)]
 impl Callable for ReadCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
         debug_assert_ne!(0, scope.nargs());
 
-        let mut vrefs = Vec::with_capacity(scope.nargs());
-        while scope.nargs() > 0 {
-            vrefs.push(scope.pop_varref_with_pos());
+        fn assign_datum(scope: &mut Scope<'_>, reg: u8, datum: ConstantDatum) -> CallResult<()> {
+            let target_type = scope.get_ref(reg).vtype;
+            match (target_type, datum) {
+                (ExprType::Boolean, ConstantDatum::Boolean(b)) => {
+                    scope.get_mut_ref(reg).set_boolean(b);
+                    Ok(())
+                }
+                (ExprType::Double, ConstantDatum::Double(d)) => {
+                    scope.get_mut_ref(reg).set_double(d);
+                    Ok(())
+                }
+                (ExprType::Double, ConstantDatum::Integer(i)) => {
+                    scope.get_mut_ref(reg).set_double(i as f64);
+                    Ok(())
+                }
+                (ExprType::Integer, ConstantDatum::Double(d)) => {
+                    let i = double_to_integer(d)
+                        .map_err(|e| CallError::Syntax(scope.get_pos(reg), e.to_string()))?;
+                    scope.get_mut_ref(reg).set_integer(i);
+                    Ok(())
+                }
+                (ExprType::Integer, ConstantDatum::Integer(i)) => {
+                    scope.get_mut_ref(reg).set_integer(i);
+                    Ok(())
+                }
+                (ExprType::Text, ConstantDatum::Text(s)) => {
+                    scope.get_mut_ref(reg).set_string(s);
+                    Ok(())
+                }
+                (target_type, source_value) => Err(CallError::Syntax(
+                    scope.get_pos(reg),
+                    format!(
+                        "Cannot assign value of type {} to variable of type {}",
+                        value_type_name(&source_value),
+                        expr_type_name(target_type),
+                    ),
+                )),
+            }
         }
 
         let mut index = self.index.borrow_mut();
-        for (vname, vtype, pos) in vrefs {
-            let datum = {
-                let data = machine.get_data();
-                debug_assert!(*index <= data.len());
-                if *index == data.len() {
-                    return Err(Error::InternalError(
-                        pos,
-                        format!("Out of data reading into {}", vname),
-                    ));
-                }
+        let mut reg = 0;
+        loop {
+            let sep = if let VarArgTag::Pointer(sep) = scope.get_type(reg) {
+                sep
+            } else {
+                unreachable!();
+            };
+            reg += 1;
 
-                match (vtype, &data[*index]) {
-                    (_, Some(datum)) => datum.clone(),
-                    (ExprType::Boolean, None) => Value::Boolean(false),
-                    (ExprType::Double, None) => Value::Double(0.0),
-                    (ExprType::Integer, None) => Value::Integer(0),
-                    (ExprType::Text, None) => Value::Text("".to_owned()),
+            let vtype = scope.get_ref(reg).vtype;
+            let datum = match scope.data().get(*index) {
+                None => {
+                    return Err(CallError::Syntax(scope.get_pos(reg), "Out of data".to_owned()));
                 }
+                Some(Some(datum)) => datum.clone(),
+                Some(None) => match vtype {
+                    ExprType::Boolean => ConstantDatum::Boolean(false),
+                    ExprType::Double => ConstantDatum::Double(0.0),
+                    ExprType::Integer => ConstantDatum::Integer(0),
+                    ExprType::Text => ConstantDatum::Text(String::new()),
+                },
             };
             *index += 1;
+            assign_datum(&mut scope, reg, datum)?;
+            reg += 1;
 
-            let vref = VarRef::new(vname.to_string(), Some(vtype));
-            machine
-                .get_mut_symbols()
-                .set_var(&vref, datum)
-                .map_err(|e| Error::SyntaxError(pos, format!("{}", e)))?;
+            if sep == ArgSep::End {
+                break;
+            }
         }
 
         Ok(())
@@ -126,7 +186,7 @@ impl Callable for ReadCommand {
 
 /// The `RESTORE` command.
 pub struct RestoreCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     index: Rc<RefCell<usize>>,
 }
 
@@ -150,11 +210,11 @@ values defined by DATA.",
 
 #[async_trait(?Send)]
 impl Callable for RestoreCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         *self.index.borrow_mut() = 0;
         Ok(())
@@ -162,7 +222,7 @@ impl Callable for RestoreCommand {
 }
 
 /// Instantiates all symbols in this module and adds them to the `machine`.
-pub fn add_all(machine: &mut Machine) {
+pub fn add_all(machine: &mut MachineBuilder) {
     let index = Rc::from(RefCell::from(0));
     machine.add_clearable(Box::from(ClearableIndex(index.clone())));
     machine.add_callable(ReadCommand::new(index.clone()));
@@ -172,7 +232,6 @@ pub fn add_all(machine: &mut Machine) {
 #[cfg(test)]
 mod tests {
     use crate::testutils::*;
-    use endbasic_core::ast::Value;
 
     #[test]
     fn test_read_simple() {
@@ -186,7 +245,7 @@ mod tests {
             "#,
             )
             .expect_prints([" 3", " 5", "-7"])
-            .expect_var("I", Value::Integer(-7))
+            .expect_var("I", -7)
             .check();
     }
 
@@ -199,9 +258,9 @@ mod tests {
             DATA 3, 5, 7, 6
             "#,
             )
-            .expect_var("I", Value::Integer(6))
-            .expect_var("J", Value::Integer(5))
-            .expect_var("K", Value::Integer(7))
+            .expect_var("I", 6)
+            .expect_var("J", 5)
+            .expect_var("K", 7)
             .check();
     }
 
@@ -209,11 +268,11 @@ mod tests {
     fn test_read_defaults_with_annotations() {
         Tester::default()
             .run(r#"DATA , , , ,: READ a, b?, d#, i%, s$"#)
-            .expect_var("a", Value::Integer(0))
-            .expect_var("b", Value::Boolean(false))
-            .expect_var("d", Value::Double(0.0))
-            .expect_var("i", Value::Integer(0))
-            .expect_var("s", Value::Text("".to_owned()))
+            .expect_var("a", 0)
+            .expect_var("b", false)
+            .expect_var("d", 0.0)
+            .expect_var("i", 0)
+            .expect_var("s", "")
             .check();
     }
 
@@ -222,38 +281,38 @@ mod tests {
         Tester::default()
             .run(
                 r#"
-            DIM b AS BOOLEAN
-            DIM d AS DOUBLE
-            DIM i AS INTEGER
-            DIM s AS STRING
+            DIM SHARED b AS BOOLEAN
+            DIM SHARED d AS DOUBLE
+            DIM SHARED i AS INTEGER
+            DIM SHARED s AS STRING
             DATA , , , ,
             READ a, b, d, i, s
             "#,
             )
-            .expect_var("a", Value::Integer(0))
-            .expect_var("b", Value::Boolean(false))
-            .expect_var("d", Value::Double(0.0))
-            .expect_var("i", Value::Integer(0))
-            .expect_var("s", Value::Text("".to_owned()))
+            .expect_var("a", 0)
+            .expect_var("b", false)
+            .expect_var("d", 0.0)
+            .expect_var("i", 0)
+            .expect_var("s", "")
             .check();
     }
 
     #[test]
     fn test_read_double_to_integer() {
-        Tester::default().run(r#"DATA 5.6: READ i%"#).expect_var("i", Value::Integer(6)).check();
+        Tester::default().run(r#"DATA 5.6: READ i%"#).expect_var("i", 6).check();
     }
 
     #[test]
     fn test_read_integer_to_double() {
-        Tester::default().run(r#"DATA 5: READ d#"#).expect_var("d", Value::Double(5.0)).check();
+        Tester::default().run(r#"DATA 5: READ d#"#).expect_var("d", 5.0).check();
     }
 
     #[test]
     fn test_read_out_of_data() {
         Tester::default()
             .run(r#"DATA 5: READ i: READ j"#)
-            .expect_err("1:22: Out of data reading into J")
-            .expect_var("I", Value::Integer(5))
+            .expect_err("1:22: Out of data")
+            .expect_var("I", 5)
             .check();
     }
 
@@ -264,9 +323,7 @@ mod tests {
             .run(r#"RUN: RUN"#)
             .expect_clear()
             .expect_prints([" 1"])
-            .expect_clear()
-            .expect_prints([" 1"])
-            .expect_var("I", Value::Integer(1))
+            .expect_var("I", 1)
             .expect_program(None as Option<String>, "DATA 1: READ i: PRINT i")
             .check();
     }
@@ -274,45 +331,35 @@ mod tests {
     #[test]
     fn test_read_index_remains_out_of_bounds() {
         let mut t = Tester::default();
-        t.run(r#"DATA 1: READ i, j"#)
-            .expect_var("i", Value::Integer(1))
-            .expect_err("1:17: Out of data reading into J")
-            .check();
+        t.run(r#"DATA 1: READ i, j"#).expect_var("i", 1).expect_err("1:17: Out of data").check();
 
-        // This represents a second invocation in the REPL, which in principle should work to avoid
-        // surprises but currently doesn't due to the fact that we maintain the index outside of the
-        // machine and `machine.exec()` cannot clear it upfront.  Note how the read into `i` picks
-        // up the second value, not the first one, because the `DATA` is only [1, 2], NOT [1, 1, 2],
-        // but the index is still 1, not 0.  This is kind of intentional though, because adding
-        // extra hooks into `machine.exec()` just for this single use case seems overkill.
-        t.run(r#"DATA 1, 2: READ i, j"#)
-            .expect_var("i", Value::Integer(2))
-            .expect_err("1:20: Out of data reading into J")
-            .check();
+        // This represents a second invocation in the REPL, and the read index is reset before this
+        // execution, so the first and second data values are returned as expected.
+        t.run(r#"DATA 1, 2: READ i, j"#).expect_var("i", 1).expect_var("j", 2).check();
 
         // Running `CLEAR` explicitly should resolve the issue described above and give us the
         // expected behavior.
         t.run(r#"CLEAR"#).expect_clear().check();
         t.run(r#"DATA 1, 2: READ i, j"#)
             .expect_clear()
-            .expect_var("i", Value::Integer(1))
-            .expect_var("j", Value::Integer(2))
+            .expect_var("i", 1)
+            .expect_var("j", 2)
             .check();
     }
 
     #[test]
     fn test_read_errors() {
         check_stmt_compilation_err("1:1: READ expected vref1[, .., vrefN]", "READ");
-        check_stmt_compilation_err("1:6: Requires a reference, not a value", "READ 3");
+        check_stmt_compilation_err("1:6: READ expected vref1[, .., vrefN]", "READ 3");
         check_stmt_compilation_err("1:7: READ expected vref1[, .., vrefN]", "READ i; j");
 
         check_stmt_err(
-            "1:16: Cannot assign value of type STRING to variable of type INTEGER",
-            "DATA \"x\": READ i",
+            "1:34: Cannot assign value of type STRING to variable of type INTEGER",
+            "DIM i AS INTEGER: DATA \"x\": READ i",
         );
         check_stmt_err(
-            "1:18: Cannot assign value of type BOOLEAN to variable of type INTEGER",
-            "DATA FALSE: READ s%",
+            "1:36: Cannot assign value of type BOOLEAN to variable of type INTEGER",
+            "DIM s AS INTEGER: DATA FALSE: READ s",
         );
     }
 
@@ -333,7 +380,7 @@ mod tests {
             "#,
             )
             .expect_prints([" 3", " 5"])
-            .expect_var("I", Value::Integer(5))
+            .expect_var("I", 5)
             .check();
     }
 
@@ -350,7 +397,7 @@ mod tests {
             "#,
             )
             .expect_prints([" 3", "-5", " 3"])
-            .expect_var("I", Value::Integer(3))
+            .expect_var("I", 3)
             .check();
     }
 

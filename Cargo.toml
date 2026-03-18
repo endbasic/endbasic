@@ -15,7 +15,7 @@ members = [
 ]
 default-members = [
     "cli",
-    "core",
+    "core2",
     "repl",
     "std",
 ]

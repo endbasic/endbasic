@@ -19,7 +19,7 @@ performance or a much richer language.
 EndBASIC is written in Rust and runs both on the web and locally on a variety of
 operating systems and platforms, including macOS, Windows, and Linux.
 
-EndBASIC is free software under the [Apache 2.0 License](LICENSE).
+EndBASIC is free software under the [AGPL v3+](LICENSE).
 
 ## What's in this crate?
 

@@ -5,18 +5,18 @@
     Type HELP for interactive usage information.
 
 Hello,First-Name Last-Name!
-0000    LOADR       NAME                        # 16:27
-0001    PUSH%       1                           # 16:25
-0002    PUSH$       "What's your name"          # 16:7
-0003    PUSH%       1                           # 16:7
-0004    CALLB       30 (INPUT), 4               # 16:1
-0005    LOAD$       NAME                        # 17:17
-0006    PUSH$       "!"                         # 17:25
-0007    CONCAT$                                 # 17:23
-0008    PUSH%       4                           # 17:17
-0009    PUSH%       1                           # 17:15
-000a    PUSH$       "Hello,"                    # 17:7
-000b    PUSH%       4                           # 17:7
-000c    CALLB       48 (PRINT), 5               # 17:1
+0000:   ALLOC       R64, STRING         ; 16:27
+0001:   LOADI       R66, 0              ; 16:7
+0002:   LOADI       R65, 275            ; 16:7
+0003:   LOADRP      R67, STRING, R64    ; 16:27
+0004:   UPCALL      0, R65              ; 16:1, INPUT
+0005:   LOADI       R66, 1              ; 17:7
+0006:   LOADI       R65, 275            ; 17:7
+0007:   MOVE        R68, R64            ; 17:17
+0008:   LOADI       R69, 2              ; 17:25
+0009:   CONCAT      R68, R68, R69       ; 17:23
+0010:   LOADI       R67, 259            ; 17:17
+0011:   UPCALL      1, R65              ; 17:1, PRINT
+0012:   EOF                             ; 0:0
 
 End of input by CTRL-D

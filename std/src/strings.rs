@@ -1,31 +1,32 @@
 // EndBASIC
 // Copyright 2020 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! String functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType};
-use endbasic_core::compiler::{
-    AnyValueSyntax, ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax,
+use endbasic_core2::{
+    AnyValueSyntax, ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
+    CallableMetadataBuilder, ExprType, RequiredValueSyntax, Scope, SingularArgSyntax, VarArgTag,
 };
-use endbasic_core::exec::{Error, Machine, Result, Scope, ValueTag};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
 use std::borrow::Cow;
 use std::cmp::min;
 use std::convert::TryFrom;
 use std::rc::Rc;
+
+use crate::MachineBuilder;
 
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "String and character functions";
@@ -36,7 +37,7 @@ pub fn format_boolean(b: bool) -> &'static str {
 }
 
 /// Parses a string `s` as a boolean.
-pub fn parse_boolean(s: &str) -> std::result::Result<bool, String> {
+pub fn parse_boolean(s: &str) -> Result<bool, String> {
     let raw = s.to_uppercase();
     if raw == "TRUE" || raw == "YES" || raw == "Y" {
         Ok(true)
@@ -53,7 +54,7 @@ pub fn format_double(d: f64) -> String {
 }
 
 /// Parses a string `s` as a double.
-pub fn parse_double(s: &str) -> std::result::Result<f64, String> {
+pub fn parse_double(s: &str) -> Result<f64, String> {
     match s.parse::<f64>() {
         Ok(d) => Ok(d),
         Err(_) => Err(format!("Invalid double-precision floating point literal {}", s)),
@@ -66,7 +67,7 @@ pub fn format_integer(i: i32) -> String {
 }
 
 /// Parses a string `s` as an integer.
-pub fn parse_integer(s: &str) -> std::result::Result<i32, String> {
+pub fn parse_integer(s: &str) -> Result<i32, String> {
     match s.parse::<i32>() {
         Ok(d) => Ok(d),
         Err(_) => Err(format!("Invalid integer literal {}", s)),
@@ -75,7 +76,7 @@ pub fn parse_integer(s: &str) -> std::result::Result<i32, String> {
 
 /// The `ASC` function.
 pub struct AscFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl AscFunction {
@@ -106,27 +107,27 @@ See CHR$() for the inverse of this function.",
 
 #[async_trait(?Send)]
 impl Callable for AscFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let (s, spos) = scope.pop_string_with_pos();
+        let s = scope.get_string(0);
 
         let mut chars = s.chars();
         let ch = match chars.next() {
             Some(ch) => ch,
             None => {
-                return Err(Error::SyntaxError(
-                    spos,
+                return Err(CallError::Syntax(
+                    scope.get_pos(0),
                     format!("Input string \"{}\" must be 1-character long", s),
                 ));
             }
         };
         if chars.next().is_some() {
-            return Err(Error::SyntaxError(
-                spos,
+            return Err(CallError::Syntax(
+                scope.get_pos(0),
                 format!("Input string \"{}\" must be 1-character long", s),
             ));
         }
@@ -142,7 +143,7 @@ impl Callable for AscFunction {
 
 /// The `CHR` function.
 pub struct ChrFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl ChrFunction {
@@ -173,29 +174,34 @@ See ASC%() for the inverse of this function.",
 
 #[async_trait(?Send)]
 impl Callable for ChrFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let (i, ipos) = scope.pop_integer_with_pos();
+        let i = scope.get_integer(0);
 
         if i < 0 {
-            return Err(Error::SyntaxError(ipos, format!("Character code {} must be positive", i)));
+            return Err(CallError::Syntax(
+                scope.get_pos(0),
+                format!("Character code {} must be positive", i),
+            ));
         }
         let code = i as u32;
 
         match char::from_u32(code) {
             Some(ch) => scope.return_string(format!("{}", ch)),
-            None => Err(Error::SyntaxError(ipos, format!("Invalid character code {}", code))),
+            None => {
+                Err(CallError::Syntax(scope.get_pos(0), format!("Invalid character code {}", code)))
+            }
         }
     }
 }
 
 /// The `LEFT` function.
 pub struct LeftFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl LeftFunction {
@@ -236,17 +242,17 @@ If n% is greater than or equal to the number of characters in expr$, returns exp
 
 #[async_trait(?Send)]
 impl Callable for LeftFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
-        let s = scope.pop_string();
-        let (n, npos) = scope.pop_integer_with_pos();
+        let s = scope.get_string(0).to_owned();
+        let n = scope.get_integer(1);
 
         if n < 0 {
-            Err(Error::SyntaxError(npos, "n% cannot be negative".to_owned()))
+            Err(CallError::Syntax(scope.get_pos(1), "n% cannot be negative".to_owned()))
         } else {
             let n = min(s.len(), n as usize);
             scope.return_string(s[..n].to_owned())
@@ -256,7 +262,7 @@ impl Callable for LeftFunction {
 
 /// The `LEN` function.
 pub struct LenFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl LenFunction {
@@ -281,25 +287,22 @@ impl LenFunction {
 
 #[async_trait(?Send)]
 impl Callable for LenFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let (s, spos) = scope.pop_string_with_pos();
+        let s = scope.get_string(0);
 
-        if s.len() > i32::MAX as usize {
-            Err(Error::InternalError(spos, "String too long".to_owned()))
-        } else {
-            scope.return_integer(s.len() as i32)
-        }
+        let len = i32::try_from(s.len()).map_err(|_| CallError::Other("String too long"))?;
+        scope.return_integer(len)
     }
 }
 
 /// The `LTRIM` function.
 pub struct LtrimFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl LtrimFunction {
@@ -324,13 +327,13 @@ impl LtrimFunction {
 
 #[async_trait(?Send)]
 impl Callable for LtrimFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let s = scope.pop_string();
+        let s = scope.get_string(0).to_owned();
 
         scope.return_string(s.trim_start().to_owned())
     }
@@ -338,7 +341,7 @@ impl Callable for LtrimFunction {
 
 /// The `MID` function.
 pub struct MidFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl MidFunction {
@@ -408,25 +411,30 @@ until the end of the string.",
 
 #[async_trait(?Send)]
 impl Callable for MidFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert!((2..=3).contains(&scope.nargs()));
-        let s = scope.pop_string();
-        let (start, startpos) = scope.pop_integer_with_pos();
-        let lengtharg = if scope.nargs() > 0 { Some(scope.pop_integer_with_pos()) } else { None };
-        debug_assert_eq!(0, scope.nargs());
+        let s = scope.get_string(0).to_owned();
+        let start = scope.get_integer(1);
+        let lengtharg = if scope.nargs() == 3 { Some(scope.get_integer(2)) } else { None };
 
         if start < 0 {
-            return Err(Error::SyntaxError(startpos, "start% cannot be negative".to_owned()));
+            return Err(CallError::Syntax(
+                scope.get_pos(1),
+                "start% cannot be negative".to_owned(),
+            ));
         }
         let start = min(s.len(), start as usize);
 
-        let end = if let Some((length, lengthpos)) = lengtharg {
+        let end = if let Some(length) = lengtharg {
             if length < 0 {
-                return Err(Error::SyntaxError(lengthpos, "length% cannot be negative".to_owned()));
+                return Err(CallError::Syntax(
+                    scope.get_pos(2),
+                    "length% cannot be negative".to_owned(),
+                ));
             }
             min(start + (length as usize), s.len())
         } else {
@@ -439,7 +447,7 @@ impl Callable for MidFunction {
 
 /// The `RIGHT` function.
 pub struct RightFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl RightFunction {
@@ -480,17 +488,17 @@ If n% is greater than or equal to the number of characters in expr$, returns exp
 
 #[async_trait(?Send)]
 impl Callable for RightFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
-        let s = scope.pop_string();
-        let (n, npos) = scope.pop_integer_with_pos();
+        let s = scope.get_string(0).to_owned();
+        let n = scope.get_integer(1);
 
         if n < 0 {
-            Err(Error::SyntaxError(npos, "n% cannot be negative".to_owned()))
+            Err(CallError::Syntax(scope.get_pos(1), "n% cannot be negative".to_owned()))
         } else {
             let n = min(s.len(), n as usize);
             scope.return_string(s[s.len() - n..].to_owned())
@@ -500,7 +508,7 @@ impl Callable for RightFunction {
 
 /// The `RTRIM` function.
 pub struct RtrimFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl RtrimFunction {
@@ -525,13 +533,13 @@ impl RtrimFunction {
 
 #[async_trait(?Send)]
 impl Callable for RtrimFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let s = scope.pop_string();
+        let s = scope.get_string(0).to_owned();
 
         scope.return_string(s.trim_end().to_owned())
     }
@@ -539,7 +547,7 @@ impl Callable for RtrimFunction {
 
 /// The `STR` function.
 pub struct StrFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl StrFunction {
@@ -573,38 +581,40 @@ in it, do LTRIM$(STR$(expr)).",
 
 #[async_trait(?Send)]
 impl Callable for StrFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
-        match scope.pop_value_tag() {
-            ValueTag::Boolean => {
-                let b = scope.pop_boolean();
+        match scope.get_type(0) {
+            VarArgTag::Immediate(_, ExprType::Boolean) => {
+                let b = scope.get_boolean(1);
                 scope.return_string(format_boolean(b).to_owned())
             }
-            ValueTag::Double => {
-                let d = scope.pop_double();
+
+            VarArgTag::Immediate(_, ExprType::Double) => {
+                let d = scope.get_double(1);
                 scope.return_string(format_double(d))
             }
-            ValueTag::Integer => {
-                let i = scope.pop_integer();
+
+            VarArgTag::Immediate(_, ExprType::Integer) => {
+                let i = scope.get_integer(1);
                 scope.return_string(format_integer(i))
             }
-            ValueTag::Text => {
-                let s = scope.pop_string();
+
+            VarArgTag::Immediate(_, ExprType::Text) => {
+                let s = scope.get_string(1).to_owned();
                 scope.return_string(s)
             }
-            ValueTag::Missing => {
-                unreachable!("Missing expressions aren't allowed in function calls");
-            }
+
+            VarArgTag::Missing(..) | VarArgTag::Pointer(..) => unreachable!(),
         }
     }
 }
 
 /// Adds all symbols provided by this module to the given `machine`.
-pub fn add_all(machine: &mut Machine) {
+pub fn add_all(machine: &mut MachineBuilder) {
     machine.add_callable(AscFunction::new());
     machine.add_callable(ChrFunction::new());
     machine.add_callable(LeftFunction::new());

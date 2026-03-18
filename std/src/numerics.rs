@@ -1,28 +1,27 @@
 // EndBASIC
 // Copyright 2020 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Numerical functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType};
-use endbasic_core::compiler::{
-    ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax, SingularArgSyntax,
+use endbasic_core2::{
+    ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
+    CallableMetadataBuilder, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax,
+    Scope, SingularArgSyntax,
 };
-use endbasic_core::exec::{Clearable, Error, Machine, Result, Scope};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder, Symbols};
-use endbasic_core::value::double_to_integer;
 use rand::rngs::SmallRng;
 use rand::{RngCore, SeedableRng};
 use std::borrow::Cow;
@@ -30,8 +29,20 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
 
+use crate::{Clearable, MachineBuilder};
+
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Numerical functions";
+
+/// Converts the double `d` to an integer and fails if the conversion is not possible.
+pub fn double_to_integer(d: f64) -> Result<i32, String> {
+    let d = d.round();
+    if d.is_finite() && d >= (i32::MIN as f64) && (d <= i32::MAX as f64) {
+        Ok(d as i32)
+    } else {
+        Err(format!("Cannot cast {} to integer due to overflow", d))
+    }
+}
 
 /// Indicates the calculation mode for trigonometric functions.
 pub enum AngleMode {
@@ -47,16 +58,16 @@ struct ClearableAngleMode {
 }
 
 impl Clearable for ClearableAngleMode {
-    fn reset_state(&self, _syms: &mut Symbols) {
+    fn reset_state(&self) {
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
     }
 }
 
 /// Gets the single argument to a trigonometric function, which is its angle.  Applies units
 /// conversion based on `angle_mode`.
-async fn get_angle(scope: &mut Scope<'_>, angle_mode: &AngleMode) -> Result<f64> {
+async fn get_angle(scope: &mut Scope<'_>, angle_mode: &AngleMode) -> CallResult<f64> {
     debug_assert_eq!(1, scope.nargs());
-    let angle = scope.pop_double();
+    let angle = scope.get_double(0);
 
     match angle_mode {
         AngleMode::Degrees => Ok(angle.to_radians()),
@@ -101,7 +112,7 @@ impl Prng {
 
 /// The `ATN` function.
 pub struct AtnFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     angle_mode: Rc<RefCell<AngleMode>>,
 }
 
@@ -132,13 +143,13 @@ the DEG and RAD commands.",
 
 #[async_trait(?Send)]
 impl Callable for AtnFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let n = scope.pop_double();
+        let n = scope.get_double(0);
 
         match *self.angle_mode.borrow() {
             AngleMode::Degrees => scope.return_double(n.atan().to_degrees()),
@@ -149,7 +160,7 @@ impl Callable for AtnFunction {
 
 /// The `CINT` function.
 pub struct CintFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl CintFunction {
@@ -181,22 +192,23 @@ integer.  For example, 4.4 becomes 4, but both 4.5 and 4.6 become 5.",
 
 #[async_trait(?Send)]
 impl Callable for CintFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let (value, pos) = scope.pop_double_with_pos();
+        let value = scope.get_double(0);
 
-        let i = double_to_integer(value).map_err(|e| Error::SyntaxError(pos, e.to_string()))?;
+        let i = double_to_integer(value)
+            .map_err(|e| CallError::Syntax(scope.get_pos(0), e.to_string()))?;
         scope.return_integer(i)
     }
 }
 
 /// The `COS` function.
 pub struct CosFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     angle_mode: Rc<RefCell<AngleMode>>,
 }
 
@@ -230,11 +242,11 @@ selected by the DEG and RAD commands.",
 
 #[async_trait(?Send)]
 impl Callable for CosFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
         let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
         scope.return_double(angle.cos())
     }
@@ -242,7 +254,7 @@ impl Callable for CosFunction {
 
 /// The `DEG` command.
 pub struct DegCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     angle_mode: Rc<RefCell<AngleMode>>,
 }
 
@@ -266,11 +278,11 @@ environment to use degrees until instructed otherwise.",
 
 #[async_trait(?Send)]
 impl Callable for DegCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         *self.angle_mode.borrow_mut() = AngleMode::Degrees;
         Ok(())
@@ -279,7 +291,7 @@ impl Callable for DegCommand {
 
 /// The `INT` function.
 pub struct IntFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl IntFunction {
@@ -311,23 +323,23 @@ integer that is not larger than the double value.  For example, all of 4.4, 4.5 
 
 #[async_trait(?Send)]
 impl Callable for IntFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let (value, pos) = scope.pop_double_with_pos();
+        let value = scope.get_double(0);
 
-        let i =
-            double_to_integer(value.floor()).map_err(|e| Error::SyntaxError(pos, e.to_string()))?;
+        let i = double_to_integer(value.floor())
+            .map_err(|e| CallError::Syntax(scope.get_pos(0), e.to_string()))?;
         scope.return_integer(i)
     }
 }
 
 /// The `MAX` function.
 pub struct MaxFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl MaxFunction {
@@ -355,14 +367,14 @@ impl MaxFunction {
 
 #[async_trait(?Send)]
 impl Callable for MaxFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut max = f64::MIN;
-        while scope.nargs() > 0 {
-            let n = scope.pop_double();
+        for i in 0..(scope.nargs() as u8) {
+            let n = scope.get_double(i);
             if n > max {
                 max = n;
             }
@@ -373,7 +385,7 @@ impl Callable for MaxFunction {
 
 /// The `MIN` function.
 pub struct MinFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl MinFunction {
@@ -401,14 +413,14 @@ impl MinFunction {
 
 #[async_trait(?Send)]
 impl Callable for MinFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut min = f64::MAX;
-        while scope.nargs() > 0 {
-            let n = scope.pop_double();
+        for i in 0..(scope.nargs() as u8) {
+            let n = scope.get_double(i);
             if n < min {
                 min = n;
             }
@@ -419,7 +431,7 @@ impl Callable for MinFunction {
 
 /// The `PI` function.
 pub struct PiFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl PiFunction {
@@ -438,11 +450,11 @@ impl PiFunction {
 
 #[async_trait(?Send)]
 impl Callable for PiFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         scope.return_double(std::f64::consts::PI)
     }
@@ -450,7 +462,7 @@ impl Callable for PiFunction {
 
 /// The `RAD` command.
 pub struct RadCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     angle_mode: Rc<RefCell<AngleMode>>,
 }
 
@@ -474,11 +486,11 @@ degrees with the DEG command.  RAD restores the environment to use radians mode.
 
 #[async_trait(?Send)]
 impl Callable for RadCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
         Ok(())
@@ -487,7 +499,7 @@ impl Callable for RadCommand {
 
 /// The `RANDOMIZE` command.
 pub struct RandomizeCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     prng: Rc<RefCell<Prng>>,
 }
 
@@ -523,16 +535,16 @@ WARNING: These random numbers offer no cryptographic guarantees.",
 
 #[async_trait(?Send)]
 impl Callable for RandomizeCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if scope.nargs() == 0 {
             *self.prng.borrow_mut() = Prng::new_from_entryopy();
         } else {
             debug_assert_eq!(1, scope.nargs());
-            let n = scope.pop_integer();
+            let n = scope.get_integer(0);
             *self.prng.borrow_mut() = Prng::new_from_seed(n);
         }
         Ok(())
@@ -541,7 +553,7 @@ impl Callable for RandomizeCommand {
 
 /// The `RND` function.
 pub struct RndFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     prng: Rc<RefCell<Prng>>,
 }
 
@@ -581,20 +593,22 @@ WARNING: These random numbers offer no cryptographic guarantees.",
 
 #[async_trait(?Send)]
 impl Callable for RndFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if scope.nargs() == 0 {
             scope.return_double(self.prng.borrow_mut().next())
         } else {
             debug_assert_eq!(1, scope.nargs());
-            let (n, npos) = scope.pop_integer_with_pos();
+            let n = scope.get_integer(0);
             match n.cmp(&0) {
                 Ordering::Equal => scope.return_double(self.prng.borrow_mut().last()),
                 Ordering::Greater => scope.return_double(self.prng.borrow_mut().next()),
-                Ordering::Less => Err(Error::SyntaxError(npos, "n% cannot be negative".to_owned())),
+                Ordering::Less => {
+                    Err(CallError::Syntax(scope.get_pos(0), "n% cannot be negative".to_owned()))
+                }
             }
         }
     }
@@ -602,7 +616,7 @@ impl Callable for RndFunction {
 
 /// The `SIN` function.
 pub struct SinFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     angle_mode: Rc<RefCell<AngleMode>>,
 }
 
@@ -636,11 +650,11 @@ selected by the DEG and RAD commands.",
 
 #[async_trait(?Send)]
 impl Callable for SinFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
         let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
         scope.return_double(angle.sin())
     }
@@ -648,7 +662,7 @@ impl Callable for SinFunction {
 
 /// The `SQR` function.
 pub struct SqrFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl SqrFunction {
@@ -673,17 +687,17 @@ impl SqrFunction {
 
 #[async_trait(?Send)]
 impl Callable for SqrFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let (num, numpos) = scope.pop_double_with_pos();
+        let num = scope.get_double(0);
 
         if num < 0.0 {
-            return Err(Error::SyntaxError(
-                numpos,
+            return Err(CallError::Syntax(
+                scope.get_pos(0),
                 "Cannot take square root of a negative number".to_owned(),
             ));
         }
@@ -693,7 +707,7 @@ impl Callable for SqrFunction {
 
 /// The `TAN` function.
 pub struct TanFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     angle_mode: Rc<RefCell<AngleMode>>,
 }
 
@@ -727,18 +741,18 @@ selected by the DEG and RAD commands.",
 
 #[async_trait(?Send)]
 impl Callable for TanFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
         let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
         scope.return_double(angle.tan())
     }
 }
 
 /// Adds all symbols provided by this module to the given `machine`.
-pub fn add_all(machine: &mut Machine) {
+pub fn add_all(machine: &mut MachineBuilder) {
     let angle_mode = Rc::from(RefCell::from(AngleMode::Radians));
     let prng = Rc::from(RefCell::from(Prng::new_from_entryopy()));
     machine.add_clearable(Box::from(ClearableAngleMode { angle_mode: angle_mode.clone() }));
@@ -815,10 +829,14 @@ mod tests {
 
     #[test]
     fn test_deg_rad_reset_on_clear() {
-        let mut t = Tester::default();
-        t.run("DEG").check();
-        t.get_machine().clear();
-        t.run("result = SIN(90)").expect_clear().expect_var("result", 90f64.sin()).check();
+        Tester::default()
+            .run("DEG")
+            .check()
+            .clear()
+            .run("result = SIN(90)")
+            .expect_clear()
+            .expect_var("result", 90f64.sin())
+            .check();
     }
 
     #[test]
@@ -919,17 +937,27 @@ mod tests {
         check_expr_ok(false, "RND(1) = RND(10)");
         check_expr_ok(true, "RND(0) = RND(0)");
 
-        let mut t = Tester::default();
-        t.run("RANDOMIZE 10").check();
-
-        t.run("result = RND(1)").expect_var("result", 0.7097578208683426).check();
-        t.run("result = RND(1.1)").expect_var("result", 0.2205558922655312).check();
-        t.run("result = RND(0)").expect_var("result", 0.2205558922655312).check();
-        t.run("result = RND(10)").expect_var("result", 0.8273883964464507).check();
-
-        t.run("RANDOMIZE 10.2").expect_var("result", 0.8273883964464507).check();
-
-        t.run("result = RND(1)").expect_var("result", 0.7097578208683426).check();
+        Tester::default()
+            .run("RANDOMIZE 10")
+            .check()
+            .run("result = RND(1)")
+            .expect_var("result", 0.7097578208683426)
+            .check()
+            .run("result = RND(1.1)")
+            .expect_var("result", 0.2205558922655312)
+            .check()
+            .run("result = RND(0)")
+            .expect_var("result", 0.2205558922655312)
+            .check()
+            .run("result = RND(10)")
+            .expect_var("result", 0.8273883964464507)
+            .check()
+            .run("RANDOMIZE 10.2")
+            .expect_var("result", 0.8273883964464507)
+            .check()
+            .run("result = RND(1)")
+            .expect_var("result", 0.7097578208683426)
+            .check();
 
         check_expr_compilation_error("1:10: RND expected <> | <n%>", "RND(1, 7)");
         check_expr_compilation_error("1:14: BOOLEAN is not a number", "RND(FALSE)");
@@ -954,7 +982,7 @@ mod tests {
     #[test]
     fn test_sqr() {
         check_expr_ok(0f64.sqrt(), "SQR(0)");
-        check_expr_ok(0f64.sqrt(), "SQR(-0.0)");
+        check_expr_ok(-0f64.sqrt(), "SQR(-0.0)");
         check_expr_ok(9f64.sqrt(), "SQR(9)");
         check_expr_ok(100.50f64.sqrt(), "SQR(100.50)");
 

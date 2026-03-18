@@ -1,7 +1,7 @@
 [package]
 name = "endbasic-rpi"
 version = "0.12.99" # ENDBASIC-VERSION
-license = "Apache-2.0"
+license = "AGPL-3.0-or-later"
 authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
 keywords = ["basic", "interpreter", "learning", "programming"]

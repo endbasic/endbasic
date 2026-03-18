@@ -1,37 +1,41 @@
 // EndBASIC
 // Copyright 2021 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Test utilities for consumers of the EndBASIC interpreter.
 
 use crate::console::{
     self, CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels, remove_control_chars,
 };
-use crate::gpio;
 use crate::program::Program;
 use crate::storage::Storage;
+use crate::{Machine, MachineBuilder, gpio};
 use async_trait::async_trait;
-use endbasic_core::ast::{ExprType, Value, VarRef};
-use endbasic_core::exec::{self, Machine, StopReason};
-use endbasic_core::syms::{Array, Callable, Symbol, SymbolKey};
+use endbasic_core2::{
+    Callable, ConstantDatum, ExprType, GetGlobalError, GlobalDef, GlobalDefKind, StopReason,
+    SymbolKey,
+};
 use futures_lite::future::block_on;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::rc::Rc;
-use std::result::Result;
+use std::result::Result as StdResult;
 use std::str;
+
+type CheckerResult = StdResult<Option<i32>, String>;
 
 /// A captured command or messages sent to the mock console.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -383,11 +387,14 @@ impl Program for RecordedProgram {
 
 /// Builder pattern to prepare an EndBASIC machine for testing purposes.
 #[must_use]
+#[derive(Clone)]
 pub struct Tester {
     console: Rc<RefCell<MockConsole>>,
     storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<RecordedProgram>>,
-    machine: Machine,
+    callables: Vec<Rc<dyn Callable>>,
+    global_defs: Vec<GlobalDef>,
+    interactive: bool,
 }
 
 impl Default for Tester {
@@ -395,43 +402,52 @@ impl Default for Tester {
     fn default() -> Self {
         let console = Rc::from(RefCell::from(MockConsole::default()));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
+        let storage = Rc::from(RefCell::from(Storage::default()));
+        let callables = vec![];
+        let global_defs = vec![];
+        let interactive = true;
 
-        // Default to the no-op pins that always return errors.  GPIO unit tests use MockPins
-        // directly via `make_mock_machine` to validate operation; this Tester wiring is only used
-        // for the error-path tests that go through the real (NoopPins) backend.
-        let gpio_pins = Rc::from(RefCell::from(gpio::NoopPins::default()));
-
-        let mut builder = crate::MachineBuilder::default()
-            .with_console(console.clone())
-            .with_gpio_pins(gpio_pins)
-            .make_interactive()
-            .with_program(program.clone());
-
-        // Grab access to the machine's storage subsystem before we lose track of it, as we will
-        // need this to check its state.
-        let storage = builder.get_storage();
-
-        let machine = builder.build().unwrap();
-
-        Self { console, storage, program, machine }
+        Self { console, storage, program, callables, global_defs, interactive }
     }
 }
 
 impl Tester {
+    fn build_machine(
+        console: Rc<RefCell<MockConsole>>,
+        storage: Rc<RefCell<Storage>>,
+        program: Rc<RefCell<RecordedProgram>>,
+        callables: Vec<Rc<dyn Callable>>,
+        global_defs: Vec<GlobalDef>,
+        interactive: bool,
+    ) -> Machine {
+        // Default to the no-op pins that always return errors.  GPIO unit tests use MockPins
+        // directly via `make_mock_machine` to validate operation; this Tester wiring is only used
+        // for the error-path tests that go through the real (NoopPins) backend.
+        let gpio_pins = Rc::from(RefCell::from(gpio::NoopPins::default()));
+        let mut builder = MachineBuilder::default()
+            .with_console(console)
+            .with_globals(global_defs)
+            .with_gpio_pins(gpio_pins);
+
+        for callable in callables {
+            builder.add_callable(callable);
+        }
+
+        if interactive {
+            builder.make_interactive().with_program(program).with_storage(storage).build()
+        } else {
+            builder.build()
+        }
+    }
+
     /// Creates a new tester with an empty `Machine`.
     pub fn empty() -> Self {
-        let console = Rc::from(RefCell::from(MockConsole::default()));
-        let storage = Rc::from(RefCell::from(Storage::default()));
-        let program = Rc::from(RefCell::from(RecordedProgram::default()));
-
-        let machine = Machine::default();
-
-        Self { console, storage, program, machine }
+        Self { interactive: false, ..Self::default() }
     }
 
     /// Registers the given builtin command into the machine, which must not yet be registered.
     pub fn add_callable(mut self, callable: Rc<dyn Callable>) -> Self {
-        self.machine.add_callable(callable);
+        self.callables.push(callable);
         self
     }
 
@@ -445,14 +461,6 @@ impl Tester {
     pub fn add_input_keys(self, keys: &[Key]) -> Self {
         self.console.borrow_mut().add_input_keys(keys);
         self
-    }
-
-    /// Returns a mutable reference to the machine inside the tester.
-    ///
-    /// This method should generally not be used, except to run native methods that have
-    /// side-effects on the machine that we'd like to validate later.
-    pub fn get_machine(&mut self) -> &mut Machine {
-        &mut self.machine
     }
 
     /// Gets the mock console from the tester.
@@ -479,9 +487,21 @@ impl Tester {
         self.storage.clone()
     }
 
-    /// Sets a variable to an initial value.
-    pub fn set_var(mut self, name: &str, value: Value) -> Self {
-        self.machine.get_mut_symbols().set_var(&VarRef::new(name, None), value).unwrap();
+    /// Sets a global variable to an initial value.
+    pub fn set_var<S: Into<String>, V: Into<ConstantDatum>>(mut self, name: S, value: V) -> Self {
+        let value = value.into();
+        self.global_defs.push(GlobalDef {
+            name: name.into(),
+            kind: GlobalDefKind::Scalar {
+                etype: match &value {
+                    ConstantDatum::Boolean(..) => ExprType::Boolean,
+                    ConstantDatum::Double(..) => ExprType::Double,
+                    ConstantDatum::Integer(..) => ExprType::Integer,
+                    ConstantDatum::Text(..) => ExprType::Text,
+                },
+                initial_value: Some(value),
+            },
+        });
         self
     }
 
@@ -506,8 +526,29 @@ impl Tester {
     /// Runs `script` in the configured machine and returns a `Checker` object to validate
     /// expectations about the execution.
     pub fn run<S: Into<String>>(&mut self, script: S) -> Checker<'_> {
-        let result = block_on(self.machine.exec(&mut script.into().as_bytes()));
-        Checker::new(self, result)
+        let machine = Self::build_machine(
+            self.console.clone(),
+            self.storage.clone(),
+            self.program.clone(),
+            self.callables.clone(),
+            self.global_defs.clone(),
+            self.interactive,
+        );
+        let tester = TesterContinuation { tester: self, machine };
+        tester.run(script)
+    }
+
+    /// Creates a continuation from the current tester state without running any code.
+    pub fn continue_from_here(&self) -> TesterContinuation<'_> {
+        let machine = Self::build_machine(
+            self.console.clone(),
+            self.storage.clone(),
+            self.program.clone(),
+            self.callables.clone(),
+            self.global_defs.clone(),
+            self.interactive,
+        );
+        TesterContinuation { tester: self, machine }
     }
 
     /// Runs `scripts` in the configured machine and returns a `Checker` object to validate
@@ -519,29 +560,92 @@ impl Tester {
     /// This is useful when compared to `run` because `Machine::exec` compiles the script as one
     /// unit and thus compilation errors may prevent validating other operations later on.
     pub fn run_n(&mut self, scripts: &[&str]) -> Checker<'_> {
-        let mut result = Ok(StopReason::Eof);
+        let mut machine = Self::build_machine(
+            self.console.clone(),
+            self.storage.clone(),
+            self.program.clone(),
+            self.callables.clone(),
+            self.global_defs.clone(),
+            self.interactive,
+        );
+        let mut result = Ok(None);
         for script in scripts {
-            result = block_on(self.machine.exec(&mut script.as_bytes()));
+            match machine.compile(&mut script.as_bytes()) {
+                Ok(()) => (),
+                Err(e) => {
+                    result = Err(format!("{}", e));
+                    break;
+                }
+            }
+            result = block_on(machine.exec()).map_err(|e| format!("{}", e));
             if result.is_err() {
                 break;
             }
         }
-        Checker::new(self, result)
+        Checker::new(self, machine, result)
     }
+}
+
+/// A tester that allows continuing a previous check.
+///
+/// This differs from `Tester` in that it provides direct access to the machine, because
+/// the machine has already been built at this point.
+pub struct TesterContinuation<'a> {
+    tester: &'a Tester,
+    machine: Machine,
+}
+
+impl<'a> TesterContinuation<'a> {
+    /// Returns a mutable reference to the machine inside this continuation.
+    pub fn get_machine(&mut self) -> &mut Machine {
+        &mut self.machine
+    }
+
+    /// Runs `script` in the configured machine and returns a `Checker` object to validate
+    /// expectations about the execution.
+    pub fn run<S: Into<String>>(mut self, script: S) -> Checker<'a> {
+        let result = match self.machine.compile(&mut script.into().as_bytes()) {
+            Ok(()) => block_on(self.machine.exec()).map_err(|e| format!("{}", e)),
+            Err(e) => Err(format!("{}", e)),
+        };
+        Checker::new(self.tester, self.machine, result)
+    }
+
+    /// Clears the state of the machine.
+    pub fn clear(mut self) -> Self {
+        self.machine.clear();
+        self
+    }
+}
+
+/// Captures the expected post-execution shape and values of an array.
+struct ExpArray {
+    /// Expected type of each array element.
+    subtype: ExprType,
+
+    /// Expected length of every array dimension in declaration order.
+    dimensions: Vec<usize>,
+
+    /// Sparse collection of expected element values indexed by subscripts.
+    ///
+    /// Any in-bounds position not listed here is expected to contain the default value for
+    /// `subtype`.
+    contents: Vec<(Vec<i32>, ConstantDatum)>,
 }
 
 /// Captures expectations about the execution of a command and validates them.
 #[must_use]
 pub struct Checker<'a> {
     tester: &'a Tester,
-    result: exec::Result<StopReason>,
-    exp_result: Result<StopReason, String>,
+    machine: Machine,
+    result: CheckerResult,
+    exp_result: CheckerResult,
     exp_output: Vec<CapturedOut>,
     exp_drives: HashMap<String, String>,
     exp_program_name: Option<String>,
     exp_program_text: String,
-    exp_arrays: HashMap<SymbolKey, Array>,
-    exp_vars: HashMap<SymbolKey, Value>,
+    exp_arrays: HashMap<SymbolKey, ExpArray>,
+    exp_vars: HashMap<SymbolKey, ConstantDatum>,
 }
 
 impl<'a> Checker<'a> {
@@ -549,11 +653,12 @@ impl<'a> Checker<'a> {
     ///
     /// The default expectations are that the execution ran through completion and that it did not
     /// have any side-effects.
-    fn new(tester: &'a Tester, result: exec::Result<StopReason>) -> Self {
+    fn new(tester: &'a Tester, machine: Machine, result: CheckerResult) -> Self {
         Self {
             tester,
+            machine,
             result,
-            exp_result: Ok(StopReason::Eof),
+            exp_result: Ok(None),
             exp_output: vec![],
             exp_drives: HashMap::default(),
             exp_program_name: None,
@@ -568,8 +673,13 @@ impl<'a> Checker<'a> {
     /// If not called, defaults to expecting that execution terminated due to EOF.  This or
     /// `expect_err` can only be called once.
     pub fn expect_ok(mut self, stop_reason: StopReason) -> Self {
-        assert_eq!(Ok(StopReason::Eof), self.exp_result);
-        self.exp_result = Ok(stop_reason);
+        self.exp_result = Ok(match stop_reason {
+            StopReason::End(code) => Some(code.to_i32()),
+            StopReason::Eof => None,
+            StopReason::Exception(_, _) | StopReason::Upcall(_) | StopReason::Yield => {
+                unreachable!()
+            }
+        });
         self
     }
 
@@ -579,9 +689,7 @@ impl<'a> Checker<'a> {
     /// If not called, defaults to expecting that execution terminated due to EOF.  This or
     /// `expect_err` can only be called once.
     pub fn expect_compilation_err<S: Into<String>>(mut self, message: S) -> Self {
-        let message = message.into();
-        assert_eq!(Ok(StopReason::Eof), self.exp_result);
-        self.exp_result = Err(message.clone());
+        self.exp_result = Err(message.into());
         self
     }
 
@@ -590,9 +698,7 @@ impl<'a> Checker<'a> {
     /// If not called, defaults to expecting that execution terminated due to EOF.  This or
     /// `expect_err` can only be called once.
     pub fn expect_err<S: Into<String>>(mut self, message: S) -> Self {
-        let message = message.into();
-        assert_eq!(Ok(StopReason::Eof), self.exp_result);
-        self.exp_result = Err(message.clone());
+        self.exp_result = Err(message.into());
         self
     }
 
@@ -605,15 +711,12 @@ impl<'a> Checker<'a> {
         name: S,
         subtype: ExprType,
         dimensions: &[usize],
-        contents: Vec<(&[i32], Value)>,
+        contents: Vec<(Vec<i32>, ConstantDatum)>,
     ) -> Self {
         let key = SymbolKey::from(name);
         assert!(!self.exp_arrays.contains_key(&key));
-        let mut array = Array::new(subtype, dimensions.to_owned());
-        for (subscripts, value) in contents.into_iter() {
-            array.assign(subscripts, value).unwrap();
-        }
-        self.exp_arrays.insert(key, array);
+        self.exp_arrays
+            .insert(key, ExpArray { subtype, dimensions: dimensions.to_vec(), contents });
         self
     }
 
@@ -623,15 +726,18 @@ impl<'a> Checker<'a> {
         mut self,
         name: S,
         subtype: ExprType,
-        contents: Vec<Value>,
+        contents: Vec<ConstantDatum>,
     ) -> Self {
         let key = SymbolKey::from(name);
         assert!(!self.exp_arrays.contains_key(&key));
-        let mut array = Array::new(subtype, vec![contents.len()]);
+        let mut exp_array = Vec::with_capacity(contents.len());
         for (i, value) in contents.into_iter().enumerate() {
-            array.assign(&[i as i32], value).unwrap();
+            exp_array.push((vec![i as i32], value));
         }
-        self.exp_arrays.insert(key, array);
+        self.exp_arrays.insert(
+            key,
+            ExpArray { subtype, dimensions: vec![exp_array.len()], contents: exp_array },
+        );
         self
     }
 
@@ -689,7 +795,7 @@ impl<'a> Checker<'a> {
     }
 
     /// Adds the `name`/`value` pair as a variable to expect in the final state of the machine.
-    pub fn expect_var<S: AsRef<str>, V: Into<Value>>(mut self, name: S, value: V) -> Self {
+    pub fn expect_var<S: AsRef<str>, V: Into<ConstantDatum>>(mut self, name: S, value: V) -> Self {
         let key = SymbolKey::from(name);
         assert!(!self.exp_vars.contains_key(&key));
         self.exp_vars.insert(key, value.into());
@@ -706,30 +812,129 @@ impl<'a> Checker<'a> {
         self.tester.console.borrow_mut().take_captured_out()
     }
 
-    /// Validates all expectations.
-    pub fn check(self) {
-        match self.result {
-            Ok(stop_reason) => assert_eq!(self.exp_result.unwrap(), stop_reason),
-            Err(e) => assert_eq!(self.exp_result.unwrap_err(), format!("{}", e)),
+    fn query_array_element(&self, name: &SymbolKey, subscripts: &[i32]) -> Option<ConstantDatum> {
+        match self.machine.vm.get_global_array(&self.machine.image, name, subscripts) {
+            Ok(Some(value)) => Some(value),
+            Ok(None) => self
+                .machine
+                .vm
+                .get_program_array(&self.machine.image, name, subscripts)
+                .unwrap_or_else(|e| panic!("Expected array {} has wrong shape: {}", name, e)),
+            Err(e) => panic!("Expected array {} has wrong shape: {}", name, e),
+        }
+    }
+
+    fn check_array_dims(&self, name: &SymbolKey, dimensions: &[usize]) {
+        if dimensions.is_empty() {
+            panic!("Expected array {} must have at least one dimension", name);
+        }
+
+        let mut subscripts = vec![0; dimensions.len()];
+        for i in 0..dimensions.len() {
+            subscripts[i] = dimensions[i] as i32;
+            match self.machine.vm.get_global_array(&self.machine.image, name, &subscripts) {
+                Err(GetGlobalError::SubscriptOutOfBounds(_)) => (),
+                Ok(None) => {
+                    match self.machine.vm.get_program_array(&self.machine.image, name, &subscripts)
+                    {
+                        Err(GetGlobalError::SubscriptOutOfBounds(_)) => (),
+                        Ok(Some(_)) => panic!(
+                            "Expected array {} dimension {} to be {} but found larger",
+                            name, i, dimensions[i]
+                        ),
+                        Ok(None) => panic!("Expected array {} not defined", name),
+                        Err(e) => panic!("Expected array {} has wrong shape: {}", name, e),
+                    }
+                }
+                Ok(Some(_)) => panic!(
+                    "Expected array {} dimension {} to be {} but found larger",
+                    name, i, dimensions[i]
+                ),
+                Err(e) => panic!("Expected array {} has wrong shape: {}", name, e),
+            }
+            subscripts[i] = 0;
+        }
+    }
+
+    fn check_array(&self, name: &SymbolKey, exp_array: &ExpArray) {
+        let mut exp_contents = HashMap::with_capacity(exp_array.contents.len());
+        for (subscripts, value) in exp_array.contents.iter() {
+            assert_eq!(
+                exp_array.dimensions.len(),
+                subscripts.len(),
+                "Expected array {} has wrong number of subscripts",
+                name
+            );
+            for (i, subscript) in subscripts.iter().enumerate() {
+                assert!(
+                    *subscript >= 0 && *subscript < exp_array.dimensions[i] as i32,
+                    "Expected array {} has out-of-bounds subscript {} at dimension {}",
+                    name,
+                    subscript,
+                    i
+                );
+            }
+            let previous = exp_contents.insert(subscripts.clone(), value.clone());
+            assert!(previous.is_none(), "Expected array {} has duplicate subscripts", name);
+        }
+
+        let default_value = match exp_array.subtype {
+            ExprType::Boolean => ConstantDatum::Boolean(false),
+            ExprType::Double => ConstantDatum::Double(0.0),
+            ExprType::Integer => ConstantDatum::Integer(0),
+            ExprType::Text => ConstantDatum::Text(String::new()),
         };
 
-        let mut arrays = HashMap::default();
-        let mut vars = HashMap::default();
-        for (name, symbol) in self.tester.machine.get_symbols().locals() {
-            match symbol {
-                Symbol::Array(array) => {
-                    // TODO(jmmv): This array.clone() call is a hack to simplify the equality check
-                    // below.  Should try to avoid it and remove the Clone impl from Array.
-                    arrays.insert(name.clone(), array.clone());
+        let mut subscripts = vec![0; exp_array.dimensions.len()];
+        loop {
+            let value = self
+                .query_array_element(name, &subscripts)
+                .unwrap_or_else(|| panic!("Expected array {} not defined", name));
+            assert_eq!(
+                exp_contents.get(&subscripts).unwrap_or(&default_value),
+                &value,
+                "Expected array {} at {:?} has wrong value",
+                name,
+                subscripts
+            );
+
+            let mut i = 0;
+            while i < subscripts.len() {
+                subscripts[i] += 1;
+                if subscripts[i] < exp_array.dimensions[i] as i32 {
+                    break;
                 }
-                Symbol::Callable(_) => {
-                    // We currently don't support user-defined callables at runtime so there is no
-                    // need to validate anything about them.
-                }
-                Symbol::Variable(value) => {
-                    vars.insert(name.clone(), value.clone());
-                }
+                subscripts[i] = 0;
+                i += 1;
             }
+            if i == subscripts.len() {
+                break;
+            }
+        }
+
+        self.check_array_dims(name, &exp_array.dimensions);
+    }
+
+    /// Validates all expectations.
+    pub fn check(self) -> TesterContinuation<'a> {
+        assert_eq!(self.exp_result, self.result);
+
+        for (name, exp_value) in self.exp_vars.iter() {
+            let value = match self.machine.vm.get_global(&self.machine.image, name) {
+                Ok(Some(value)) => Some(value),
+                Ok(None) => {
+                    self.machine.vm.get_program(&self.machine.image, name).unwrap_or_else(|e| {
+                        panic!("Expected variable {} has wrong shape: {}", name, e)
+                    })
+                }
+                Err(e) => panic!("Expected variable {} has wrong shape: {}", name, e),
+            };
+            let value = value.unwrap_or_else(|| panic!("Expected variable {} not defined", name));
+            assert_eq!(exp_value, &value, "Expected variable {} has wrong value", name);
+        }
+
+        for (name, exp_array) in self.exp_arrays.iter() {
+            self.check_array(name, exp_array);
         }
 
         let drive_contents = {
@@ -753,12 +958,12 @@ impl<'a> Checker<'a> {
             files
         };
 
-        assert_eq!(self.exp_vars, vars);
-        assert_eq!(self.exp_arrays, arrays);
         assert_eq!(self.exp_output, self.tester.console.borrow().captured_out());
         assert_eq!(self.exp_program_name.as_deref(), self.tester.program.borrow().name());
         assert_eq!(self.exp_program_text, self.tester.program.borrow().text());
         assert_eq!(self.exp_drives, drive_contents);
+
+        TesterContinuation { tester: self.tester, machine: self.machine }
     }
 }
 
@@ -773,32 +978,61 @@ pub fn check_stmt_compilation_err<S: Into<String>>(exp_error: S, stmt: &str) {
     Tester::default().run(stmt).expect_compilation_err(exp_error).check();
 }
 
+fn datum_as_source(datum: &ConstantDatum) -> String {
+    match datum {
+        ConstantDatum::Boolean(v) => {
+            if *v {
+                "TRUE".to_owned()
+            } else {
+                "FALSE".to_owned()
+            }
+        }
+        ConstantDatum::Double(v) => {
+            let mut s = format!("{}", v);
+            if !s.contains('.') && !s.contains('e') && !s.contains('E') {
+                s.push_str(".0");
+            }
+            s
+        }
+        ConstantDatum::Integer(v) => format!("{}", v),
+        ConstantDatum::Text(v) => format!("\"{}\"", v.replace('"', "\"\"")),
+    }
+}
+
 /// Executes `expr` on a scripting interpreter and ensures that the result is `exp_value`.
-pub fn check_expr_ok<V: Into<Value>>(exp_value: V, expr: &str) {
-    Tester::default()
-        .run(format!("result = {}", expr))
-        .expect_var("result", exp_value.into())
-        .check();
+pub fn check_expr_ok<V: Into<ConstantDatum>>(exp_value: V, expr: &str) {
+    let exp_value = exp_value.into();
+    Tester::default().run(format!("result = {}", expr)).expect_var("result", exp_value).check();
 }
 
 /// Executes `expr` on a scripting interpreter and ensures that the result is `exp_value`.
 ///
 /// Sets all `vars` before evaluating the expression so that the expression can contain variable
 /// references.
-pub fn check_expr_ok_with_vars<V: Into<Value>, VS: Into<Vec<(&'static str, Value)>>>(
+pub fn check_expr_ok_with_vars<
+    V: Into<ConstantDatum>,
+    VS: Into<Vec<(&'static str, ConstantDatum)>>,
+>(
     exp_value: V,
     expr: &str,
     vars: VS,
 ) {
     let vars = vars.into();
 
-    let mut t = Tester::default();
-    for var in vars.as_slice() {
-        t = t.set_var(var.0, var.1.clone());
+    let mut input = String::new();
+    for (name, value) in vars.as_slice() {
+        input.push_str(name);
+        input.push_str(" = ");
+        input.push_str(&datum_as_source(value));
+        input.push_str(": ");
     }
+    input.push_str(&format!("result = {}", expr));
 
-    let mut c = t.run(format!("result = {}", expr));
-    c = c.expect_var("result", exp_value.into());
+    let exp_value = exp_value.into();
+
+    let mut t = Tester::default();
+    let mut c = t.run(input);
+    c = c.expect_var("result", exp_value);
     for var in vars.into_iter() {
         c = c.expect_var(var.0, var.1.clone());
     }

@@ -1,85 +1,75 @@
 // EndBASIC
 // Copyright 2021 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Array-related functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType, VarRef};
-use endbasic_core::compiler::{
-    ArgSepSyntax, RequiredRefSyntax, RequiredValueSyntax, SingularArgSyntax,
-};
-use endbasic_core::exec::{Error, Machine, Result, Scope};
-use endbasic_core::syms::{
-    Array, Callable, CallableMetadata, CallableMetadataBuilder, Symbol, Symbols,
+use endbasic_core2::{
+    ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
+    CallableMetadataBuilder, ExprType, RequiredRefSyntax, RequiredValueSyntax, Scope,
+    SingularArgSyntax,
 };
 use std::borrow::Cow;
 use std::rc::Rc;
 
+use crate::MachineBuilder;
+
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Array functions";
 
-/// Extracts the array reference and the dimension number from the list of arguments passed to
-/// either `LBOUND` or `UBOUND`.
-#[allow(clippy::needless_lifetimes)]
-fn parse_bound_args<'a>(scope: &mut Scope<'_>, symbols: &'a Symbols) -> Result<(&'a Array, usize)> {
-    let (arrayname, arraytype, arraypos) = scope.pop_varref_with_pos();
+/// Extracts array dimensions and the dimension number from args passed to `LBOUND` or `UBOUND`.
+fn parse_bound_args(scope: &Scope<'_>) -> CallResult<(Vec<usize>, usize)> {
+    let array = scope.get_ref(0);
+    let dimensions = array.array_dimensions();
 
-    let arrayref = VarRef::new(arrayname.to_string(), Some(arraytype));
-    let array =
-        match symbols.get(&arrayref).map_err(|e| Error::SyntaxError(arraypos, format!("{}", e)))? {
-            Some(Symbol::Array(array)) => array,
-            _ => unreachable!(),
-        };
-
-    if scope.nargs() == 1 {
-        let (i, pos) = scope.pop_integer_with_pos();
+    if scope.nargs() == 2 {
+        let i = scope.get_integer(1);
 
         if i < 0 {
-            return Err(Error::SyntaxError(pos, format!("Dimension {} must be positive", i)));
+            return Err(CallError::Syntax(
+                scope.get_pos(1),
+                format!("Dimension {} must be positive", i),
+            ));
         }
         let i = i as usize;
 
-        if i > array.dimensions().len() {
-            return Err(Error::SyntaxError(
-                pos,
-                format!(
-                    "Array {} has only {} dimensions but asked for {}",
-                    arrayname,
-                    array.dimensions().len(),
-                    i,
-                ),
+        if i > dimensions.len() {
+            return Err(CallError::Syntax(
+                scope.get_pos(1),
+                format!("Array has only {} dimensions but asked for {}", dimensions.len(), i,),
             ));
         }
-        Ok((array, i))
+        Ok((dimensions.to_vec(), i))
     } else {
-        debug_assert_eq!(0, scope.nargs());
+        debug_assert_eq!(1, scope.nargs());
 
-        if array.dimensions().len() > 1 {
-            return Err(Error::SyntaxError(
-                arraypos,
+        if dimensions.len() > 1 {
+            return Err(CallError::Syntax(
+                scope.get_pos(0),
                 "Requires a dimension for multidimensional arrays".to_owned(),
             ));
         }
 
-        Ok((array, 1))
+        Ok((dimensions.to_vec(), 1))
     }
 }
 
 /// The `LBOUND` function.
 pub struct LboundFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl LboundFunction {
@@ -136,19 +126,19 @@ dimension% is a 1-indexed integer.",
 
 #[async_trait(?Send)]
 impl Callable for LboundFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
-        let (_array, _dim) = parse_bound_args(&mut scope, machine.get_symbols())?;
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        let (_dimensions, _dim) = parse_bound_args(&scope)?;
         scope.return_integer(0)
     }
 }
 
 /// The `UBOUND` function.
 pub struct UboundFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl UboundFunction {
@@ -205,18 +195,18 @@ dimension% is a 1-indexed integer.",
 
 #[async_trait(?Send)]
 impl Callable for UboundFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
-        let (array, dim) = parse_bound_args(&mut scope, machine.get_symbols())?;
-        scope.return_integer((array.dimensions()[dim - 1] - 1) as i32)
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        let (dimensions, dim) = parse_bound_args(&scope)?;
+        scope.return_integer((dimensions[dim - 1] - 1) as i32)
     }
 }
 
 /// Adds all symbols provided by this module to the given `machine`.
-pub fn add_all(machine: &mut Machine) {
+pub fn add_all(machine: &mut MachineBuilder) {
     machine.add_callable(LboundFunction::new());
     machine.add_callable(UboundFunction::new());
 }
@@ -257,17 +247,26 @@ mod tests {
 
         Tester::default()
             .run(format!("i = 0: result = {}(i)", func))
-            .expect_compilation_err("1:24: Requires a reference, not a value")
+            .expect_compilation_err(format!(
+                "1:24: {} expected <array> | <array, dimension%>",
+                func
+            ))
             .check();
 
         Tester::default()
             .run(format!("result = {}(3)", func))
-            .expect_compilation_err("1:17: Requires a reference, not a value")
+            .expect_compilation_err(format!(
+                "1:17: {} expected <array> | <array, dimension%>",
+                func
+            ))
             .check();
 
         Tester::default()
             .run(format!("i = 0: result = {}(i)", func))
-            .expect_compilation_err("1:24: Requires a reference, not a value")
+            .expect_compilation_err(format!(
+                "1:24: {} expected <array> | <array, dimension%>",
+                func
+            ))
             .check();
 
         Tester::default()
@@ -288,7 +287,7 @@ mod tests {
 
         Tester::default()
             .run(format!("DIM x(2, 3, 4): result = {}(x, 5)", func))
-            .expect_err("1:36: Array X has only 3 dimensions but asked for 5")
+            .expect_err("1:36: Array has only 3 dimensions but asked for 5")
             .expect_array("x", ExprType::Integer, &[2, 3, 4], vec![])
             .check();
     }

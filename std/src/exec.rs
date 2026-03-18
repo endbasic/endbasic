@@ -1,43 +1,47 @@
 // EndBASIC
 // Copyright 2021 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
-use endbasic_core::LineCol;
-use endbasic_core::ast::ExprType;
-use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Error, Machine, Result, Scope};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
+use endbasic_core2::{
+    ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
+    ExprType, RequiredValueSyntax, Scope, SingularArgSyntax,
+};
 use futures_lite::future::{BoxedLocal, FutureExt};
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
 use std::time::Duration;
+
+use crate::{MachineAction, MachineBuilder};
 
 /// Category description for all symbols provided by this module.
 pub(crate) const CATEGORY: &str = "Interpreter";
 
 /// The `CLEAR` command.
 pub struct ClearCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
+    actions: Rc<RefCell<Vec<MachineAction>>>,
 }
 
 impl ClearCommand {
     /// Creates a new `CLEAR` command that resets the state of the machine.
-    pub fn new() -> Rc<Self> {
+    pub fn new(actions: Rc<RefCell<Vec<MachineAction>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CLEAR")
                 .with_syntax(&[(&[], None)])
@@ -52,26 +56,26 @@ SAVE your program!).
 This command is for interactive use only.",
                 )
                 .build(),
+            actions,
         })
     }
 }
 
 #[async_trait(?Send)]
 impl Callable for ClearCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
-        debug_assert_eq!(0, scope.nargs());
-        machine.clear();
+    async fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+        self.actions.borrow_mut().push(MachineAction::Clear);
         Ok(())
     }
 }
 
 /// The `ERRMSG` function.
 pub struct ErrmsgFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl ErrmsgFunction {
@@ -95,25 +99,23 @@ returns the empty string.",
 
 #[async_trait(?Send)]
 impl Callable for ErrmsgFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
-        match machine.last_error() {
-            Some(message) => scope.return_string(message),
-            None => scope.return_string("".to_owned()),
-        }
+        let message = scope.last_error().unwrap_or_default().to_owned();
+        scope.return_string(message)
     }
 }
 
 /// Type of the sleep function used by the `SLEEP` command to actually suspend execution.
-pub type SleepFn = Box<dyn Fn(Duration, LineCol) -> BoxedLocal<Result<()>>>;
+pub type SleepFn = Box<dyn Fn(Duration) -> BoxedLocal<Result<(), String>>>;
 
 /// An implementation of a `SleepFn` that stops the current thread.
-fn system_sleep(d: Duration, _pos: LineCol) -> BoxedLocal<Result<()>> {
+fn system_sleep(d: Duration) -> BoxedLocal<Result<(), String>> {
     async move {
         thread::sleep(d);
         Ok(())
@@ -123,7 +125,7 @@ fn system_sleep(d: Duration, _pos: LineCol) -> BoxedLocal<Result<()>> {
 
 /// The `SLEEP` command.
 pub struct SleepCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     sleep_fn: SleepFn,
 }
 
@@ -156,19 +158,24 @@ integer or as a floating point number for finer precision.",
 
 #[async_trait(?Send)]
 impl Callable for SleepCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let (n, pos) = scope.pop_double_with_pos();
+        let n = scope.get_double(0);
 
         if n < 0.0 {
-            return Err(Error::SyntaxError(pos, "Sleep time must be positive".to_owned()));
+            return Err(CallError::Syntax(
+                scope.get_pos(0),
+                "Sleep time must be positive".to_owned(),
+            ));
         }
 
-        (self.sleep_fn)(Duration::from_secs_f64(n), pos).await
+        (self.sleep_fn)(Duration::from_secs_f64(n))
+            .await
+            .map_err(|e| CallError::Syntax(scope.get_pos(0), e))
     }
 }
 
@@ -176,20 +183,26 @@ impl Callable for SleepCommand {
 ///
 /// `sleep_fn` is an async function that implements a pause given a `Duration`.  If not provided,
 /// uses the `std::thread::sleep` function.
-pub fn add_scripting(machine: &mut Machine, sleep_fn: Option<SleepFn>) {
+pub fn add_scripting(machine: &mut MachineBuilder, sleep_fn: Option<SleepFn>) {
     machine.add_callable(ErrmsgFunction::new());
     machine.add_callable(SleepCommand::new(sleep_fn.unwrap_or_else(|| Box::from(system_sleep))));
 }
 
 /// Instantiates all REPL commands for the interactive machine and adds them to the `machine`.
-pub fn add_interactive(machine: &mut Machine) {
-    machine.add_callable(ClearCommand::new());
+pub fn add_interactive(machine: &mut MachineBuilder) {
+    machine.add_callable(ClearCommand::new(machine.actions()));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutils::*;
+    use crate::{Error, MachineBuilder, Signal};
+    use futures_lite::future::block_on;
+    use std::cell::RefCell;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::rc::Rc;
     use std::time::Instant;
 
     #[test]
@@ -198,6 +211,25 @@ mod tests {
         Tester::default()
             .run_n(&["DIM a(2): CLEAR", "DIM a(5) AS STRING: CLEAR"])
             .expect_clear()
+            .expect_clear()
+            .check();
+    }
+
+    #[test]
+    fn test_clear_inside_gosub_stops_execution() {
+        // TODO(jmmv): CLEAR should not stop execution; these assertions only
+        // document current behavior.
+        Tester::default().run("GOSUB @sub: END\n@sub:\nCLEAR").expect_clear().check();
+    }
+
+    #[test]
+    fn test_clear_inside_sub_stops_execution() {
+        // TODO(jmmv): CLEAR should not stop execution; PRINT 5 and the second
+        // foo call should also execute.  These assertions only document current
+        // behavior where CLEAR terminates the program.
+        Tester::default()
+            .run("SUB foo: PRINT 3: CLEAR: PRINT 5: END SUB: foo: foo")
+            .expect_prints([" 3"])
             .expect_clear()
             .check();
     }
@@ -228,31 +260,32 @@ mod tests {
 
     #[test]
     fn test_sleep_ok_int() {
-        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<Result<()>> {
-            async move { Err(Error::InternalError(pos, format!("Got {} ms", d.as_millis()))) }
-                .boxed_local()
+        let sleep_fake = |d: Duration| -> BoxedLocal<Result<(), String>> {
+            async move { Err(format!("Got {} ms", d.as_millis())) }.boxed_local()
         };
 
-        let mut t = Tester::empty().add_callable(SleepCommand::new(Box::from(sleep_fake)));
-        t.run("SLEEP 123").expect_err("1:7: Got 123000 ms").check();
+        let mut machine = MachineBuilder::default().with_sleep_fn(Box::from(sleep_fake)).build();
+        machine.compile(&mut "SLEEP 123".as_bytes()).unwrap();
+        assert_eq!("1:7: Got 123000 ms", format!("{}", block_on(machine.exec()).unwrap_err()));
     }
 
     #[test]
     fn test_sleep_ok_float() {
-        let sleep_fake = |d: Duration, pos: LineCol| -> BoxedLocal<Result<()>> {
+        let sleep_fake = |d: Duration| -> BoxedLocal<Result<(), String>> {
             async move {
                 let ms = d.as_millis();
                 if ms > 123095 && ms < 123105 {
-                    Err(Error::InternalError(pos, "Good".to_owned()))
+                    Err("Good".to_owned())
                 } else {
-                    Err(Error::InternalError(pos, format!("Bad {}", ms)))
+                    Err(format!("Bad {}", ms))
                 }
             }
             .boxed_local()
         };
 
-        let mut t = Tester::empty().add_callable(SleepCommand::new(Box::from(sleep_fake)));
-        t.run("SLEEP 123.1").expect_err("1:7: Good").check();
+        let mut machine = MachineBuilder::default().with_sleep_fn(Box::from(sleep_fake)).build();
+        machine.compile(&mut "SLEEP 123.1".as_bytes()).unwrap();
+        assert_eq!("1:7: Good", format!("{}", block_on(machine.exec()).unwrap_err()));
     }
 
     #[test]
@@ -270,5 +303,160 @@ mod tests {
         check_stmt_compilation_err("1:7: STRING is not a number", "SLEEP \"foo\"");
         check_stmt_err("1:7: Sleep time must be positive", "SLEEP -1");
         check_stmt_err("1:7: Sleep time must be positive", "SLEEP -0.001");
+    }
+
+    #[test]
+    fn test_break_stops_after_upcall() {
+        let (tx, rx) = async_channel::unbounded();
+        let break_tx = tx.clone();
+        let sleep_fake = move |_d: Duration| -> BoxedLocal<Result<(), String>> {
+            let break_tx = break_tx.clone();
+            async move {
+                break_tx.send(Signal::Break).await.unwrap();
+                Ok(())
+            }
+            .boxed_local()
+        };
+
+        let mut machine = MachineBuilder::default()
+            .with_signals_chan((tx.clone(), rx))
+            .with_sleep_fn(Box::from(sleep_fake))
+            .build();
+        machine.compile(&mut "DO: SLEEP 0: LOOP".as_bytes()).unwrap();
+
+        match block_on(machine.exec()) {
+            Err(Error::Break) => (),
+            r => panic!("Expected Break but got {:?}", r),
+        }
+        assert_eq!(0, tx.len());
+    }
+
+    #[test]
+    fn test_yield_now_fn_called_on_stop_reason_yield() {
+        let (tx, rx) = async_channel::unbounded();
+        let yield_count = Rc::from(RefCell::from(0));
+        let yield_count2 = yield_count.clone();
+        let yield_now = move || -> Pin<Box<dyn Future<Output = ()>>> {
+            let yield_count = yield_count2.clone();
+            Box::pin(async move {
+                *yield_count.borrow_mut() += 1;
+            })
+        };
+
+        let mut machine = MachineBuilder::default()
+            .with_signals_chan((tx.clone(), rx))
+            .with_yield_now_fn(Box::from(yield_now))
+            .build();
+
+        block_on(tx.send(Signal::Break)).unwrap();
+        machine.compile(&mut "@here: GOTO @here".as_bytes()).unwrap();
+        match block_on(machine.exec()) {
+            Err(Error::Break) => (),
+            r => panic!("Expected Break but got {:?}", r),
+        }
+
+        assert_eq!(1, *yield_count.borrow());
+    }
+
+    #[test]
+    fn test_drain_signals_ignores_pending_break() {
+        let (tx, rx) = async_channel::unbounded();
+        let mut machine = MachineBuilder::default().with_signals_chan((tx.clone(), rx)).build();
+
+        block_on(tx.send(Signal::Break)).unwrap();
+        machine.drain_signals();
+
+        machine.compile(&mut "a = 1".as_bytes()).unwrap();
+        match block_on(machine.exec()) {
+            Ok(None) => (),
+            r => panic!("Expected Ok(None) but got {:?}", r),
+        }
+        assert_eq!(0, tx.len());
+    }
+
+    fn do_no_check_stop_test(code: &str) {
+        let (tx, rx) = async_channel::unbounded();
+        let mut machine = MachineBuilder::default().with_signals_chan((tx.clone(), rx)).build();
+
+        block_on(tx.send(Signal::Break)).unwrap();
+
+        machine.compile(&mut code.as_bytes()).unwrap();
+        match block_on(machine.exec()) {
+            Ok(None) => (),
+            r => panic!("Expected Ok(None) but got {:?}", r),
+        }
+
+        assert_eq!(1, tx.len());
+    }
+
+    fn do_check_stop_test(code: &str) {
+        let (tx, rx) = async_channel::unbounded();
+        let mut machine = MachineBuilder::default().with_signals_chan((tx.clone(), rx)).build();
+
+        block_on(tx.send(Signal::Break)).unwrap();
+
+        machine.compile(&mut code.as_bytes()).unwrap();
+        match block_on(machine.exec()) {
+            Err(Error::Break) => (),
+            r => panic!("Expected Break but got {:?}", r),
+        }
+
+        assert_eq!(0, tx.len());
+    }
+
+    #[test]
+    fn test_goto_forward_does_not_check_stop() {
+        do_no_check_stop_test("GOTO @after: a = 1: @after");
+    }
+
+    #[test]
+    fn test_if_taken_does_not_check_stop() {
+        do_no_check_stop_test("a = 3: IF a = 3 THEN b = 0 ELSE b = 1: a = 7");
+    }
+
+    #[test]
+    fn test_if_not_taken_does_not_check_stop() {
+        do_no_check_stop_test("a = 3: IF a = 5 THEN b = 0 ELSE b = 1: a = 7");
+    }
+
+    #[test]
+    fn test_goto_checks_stop() {
+        do_check_stop_test("@here: GOTO @here");
+        do_check_stop_test("@before: a = 1: GOTO @before");
+    }
+
+    #[test]
+    fn test_gosub_checks_stop() {
+        do_check_stop_test("GOTO @skip: @sub: a = 1: RETURN: @skip: GOSUB @sub: a = 1");
+    }
+
+    #[test]
+    fn test_do_checks_stop() {
+        do_check_stop_test("DO: LOOP");
+        do_check_stop_test("DO: a = 1: LOOP");
+
+        do_check_stop_test("DO UNTIL FALSE: LOOP");
+        do_check_stop_test("DO UNTIL FALSE: a = 1: LOOP");
+
+        do_check_stop_test("DO WHILE TRUE: LOOP");
+        do_check_stop_test("DO WHILE TRUE: a = 1: LOOP");
+
+        do_check_stop_test("DO: LOOP UNTIL FALSE");
+        do_check_stop_test("DO: a = 1: LOOP UNTIL FALSE");
+
+        do_check_stop_test("DO: LOOP WHILE TRUE");
+        do_check_stop_test("DO: a = 1: LOOP WHILE TRUE");
+    }
+
+    #[test]
+    fn test_for_checks_stop() {
+        do_check_stop_test("FOR a = 1 TO 10: NEXT");
+        do_check_stop_test("FOR a = 1 TO 10: b = 2: NEXT");
+    }
+
+    #[test]
+    fn test_while_checks_stop() {
+        do_check_stop_test("WHILE TRUE: WEND");
+        do_check_stop_test("WHILE TRUE: a = 1: WEND");
     }
 }
