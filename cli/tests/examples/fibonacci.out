@@ -6,60 +6,62 @@
 
 fibonacci of 10 is: 55
 took 177 steps to calculate
-0000    DIMSV%      STEPS
-0001    PUSH%       10                          # 32:40
-0002    CALLA       0012
-0003    PUSH%       3                           # 32:30
-0004    PUSH%       1                           # 32:28
-0005    PUSH$       "fibonacci of 10 is:"       # 32:7
-0006    PUSH%       4                           # 32:7
-0007    CALLB       48 (PRINT), 5               # 32:1
-0008    PUSH$       "steps to calculate"        # 33:22
-0009    PUSH%       4                           # 33:22
-000a    PUSH%       1                           # 33:20
-000b    LOAD%       STEPS                       # 33:15
-000c    PUSH%       3                           # 33:15
-000d    PUSH%       1                           # 33:13
-000e    PUSH$       "took"                      # 33:7
-000f    PUSH%       4                           # 33:7
-0010    CALLB       48 (PRINT), 8               # 33:1
-0011    JMP         0037
-0012    ENTER
-0013    DIMV%       0RETURN_FIBONACCI
-0014    SETV        N
-0015    LOAD%       N                           # 24:17
-0016    SETV        0SELECT1
-0017    LOAD%       0SELECT1                    # 25:14
-0018    PUSH%       0                           # 25:14
-0019    CMPE%                                   # 25:14
-001a    JMPNT       001e
-001b    PUSH%       0                           # 25:29
-001c    SETV        0RETURN_FIBONACCI
-001d    JMP         002f
-001e    LOAD%       0SELECT1                    # 26:14
-001f    PUSH%       1                           # 26:14
-0020    CMPE%                                   # 26:14
-0021    JMPNT       0025
-0022    PUSH%       1                           # 26:29
-0023    SETV        0RETURN_FIBONACCI
-0024    JMP         002f
-0025    LOAD%       N                           # 27:42
-0026    PUSH%       1                           # 27:46
-0027    SUB%                                    # 27:44
-0028    CALLA       0012
-0029    LOAD%       N                           # 27:61
-002a    PUSH%       2                           # 27:65
-002b    SUB%                                    # 27:63
-002c    CALLA       0012
-002d    ADD%                                    # 27:49
-002e    SETV        0RETURN_FIBONACCI
-002f    UNSETV      0SELECT1                    # 28:5
-0030    LOAD%       STEPS                       # 29:13
-0031    PUSH%       1                           # 29:21
-0032    ADD%                                    # 29:19
-0033    SETV        STEPS
-0034    LOAD%       0RETURN_FIBONACCI           # 30:1
-0035    LEAVE
-0036    RET                                     # 30:1
+0000:   LOADI       R0, 0               ; 21:12
+0001:   JUMP        38                  ; 23:10
+
+;; FIBONACCI (BEGIN)
+0002:   LOADI       R64, 0              ; 23:10
+0003:   MOVE        R66, R65            ; 24:17
+0004:   MOVE        R67, R66            ; 25:14
+0005:   LOADI       R68, 0              ; 25:14
+0006:   CMPEQI      R69, R67, R68       ; 25:14
+0007:   JMPF        R69, 9              ; 25:14
+0008:   JUMP        18                  ; 25:14
+0009:   JUMP        10                  ; 28:5
+0010:   MOVE        R67, R66            ; 26:14
+0011:   LOADI       R68, 1              ; 26:14
+0012:   CMPEQI      R69, R67, R68       ; 26:14
+0013:   JMPF        R69, 15             ; 26:14
+0014:   JUMP        20                  ; 26:14
+0015:   JUMP        16                  ; 28:5
+0016:   JUMP        22                  ; 28:5
+0017:   JUMP        33                  ; 28:5
+0018:   LOADI       R64, 0              ; 25:29
+0019:   JUMP        33                  ; 28:5
+0020:   LOADI       R64, 1              ; 26:29
+0021:   JUMP        33                  ; 28:5
+0022:   MOVE        R67, R65            ; 27:42
+0023:   LOADI       R68, 1              ; 27:46
+0024:   SUBI        R67, R67, R68       ; 27:44
+0025:   CALL        R66, 2              ; 27:32, FIBONACCI
+0026:   MOVE        R64, R66            ; 27:32
+0027:   MOVE        R68, R65            ; 27:61
+0028:   LOADI       R69, 2              ; 27:65
+0029:   SUBI        R68, R68, R69       ; 27:63
+0030:   CALL        R67, 2              ; 27:51, FIBONACCI
+0031:   MOVE        R66, R67            ; 27:51
+0032:   ADDI        R64, R64, R66       ; 27:49
+0033:   MOVE        R66, R0             ; 29:13
+0034:   LOADI       R67, 1              ; 29:21
+0035:   ADDI        R66, R66, R67       ; 29:19
+0036:   MOVE        R0, R66             ; 29:5
+0037:   RETURN                          ; 30:1
+;; FIBONACCI (END)
+
+0038:   LOADI       R65, 0              ; 32:7
+0039:   LOADI       R64, 275            ; 32:7
+0040:   LOADI       R69, 10             ; 32:40
+0041:   CALL        R68, 2              ; 32:30, FIBONACCI
+0042:   MOVE        R67, R68            ; 32:30
+0043:   LOADI       R66, 258            ; 32:30
+0044:   UPCALL      0, R64              ; 32:1, PRINT
+0045:   LOADI       R65, 1              ; 33:7
+0046:   LOADI       R64, 275            ; 33:7
+0047:   MOVE        R67, R0             ; 33:15
+0048:   LOADI       R66, 274            ; 33:15
+0049:   LOADI       R69, 2              ; 33:22
+0050:   LOADI       R68, 259            ; 33:22
+0051:   UPCALL      0, R64              ; 33:1, PRINT
+0052:   EOF                             ; 0:0
 
 End of input by CTRL-D

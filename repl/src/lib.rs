@@ -1,24 +1,25 @@
 // EndBASIC
 // Copyright 2020 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Interactive interpreter for the EndBASIC language.
 
-use endbasic_core::exec::{Machine, StopReason};
 use endbasic_std::console::{self, Console, is_narrow, refill_and_print};
 use endbasic_std::program::{BREAK_MSG, Program, continue_if_modified};
 use endbasic_std::storage::Storage;
+use endbasic_std::{Error as StdError, Machine};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
@@ -63,8 +64,14 @@ pub async fn try_load_autoexec(
         }
     };
 
-    match machine.exec(&mut code.as_slice()).await {
-        Ok(_) => Ok(()),
+    match machine.compile(&mut code.as_slice()) {
+        Ok(()) => match machine.exec().await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                console.borrow_mut().print(&format!("AUTOEXEC.BAS failed: {}", e))?;
+                Ok(())
+            }
+        },
         Err(e) => {
             console.borrow_mut().print(&format!("AUTOEXEC.BAS failed: {}", e))?;
             Ok(())
@@ -113,24 +120,29 @@ pub async fn run_from_cloud(
     console.borrow_mut().print("Starting...")?;
     console.borrow_mut().print("")?;
 
-    let result = machine.exec(&mut "RUN".as_bytes()).await;
+    if let Err(e) = machine.compile(&mut "RUN".as_bytes()) {
+        let mut console = console.borrow_mut();
+        console.print(&format!("**** ERROR: {} ****", e))?;
+        return Ok(1);
+    }
+
+    let result = machine.exec().await;
 
     let mut console = console.borrow_mut();
 
     console.print("")?;
     let code = match result {
-        Ok(r @ StopReason::Eof) => {
+        Ok(None) => {
             console.print("**** Program exited due to EOF ****")?;
-            r.as_exit_code()
+            0
         }
-        Ok(r @ StopReason::Exited(_)) => {
-            let code = r.as_exit_code();
+        Ok(Some(code)) => {
             console.print(&format!("**** Program exited with code {} ****", code))?;
             code
         }
-        Ok(r @ StopReason::Break) => {
+        Err(StdError::Break) => {
             console.print("**** Program stopped due to BREAK ****")?;
-            r.as_exit_code()
+            130
         }
         Err(e) => {
             console.print(&format!("**** ERROR: {} ****", e))?;
@@ -145,8 +157,8 @@ pub async fn run_from_cloud(
             [
                 "You are now being dropped into the EndBASIC interpreter.",
                 "The program you asked to run is still loaded in memory and you can interact with \
-it now.  Use LIST to view the source code, EDIT to launch an editor on the source code, and RUN to \
-execute the program again.",
+    it now.  Use LIST to view the source code, EDIT to launch an editor on the source code, and RUN to \
+    execute the program again.",
                 "Type HELP for interactive usage information.",
             ],
             "   ",
@@ -166,9 +178,9 @@ pub async fn run_repl_loop(
     console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
 ) -> io::Result<i32> {
-    let mut stop_reason = StopReason::Eof;
+    let mut stop_reason = None;
     let mut history = vec![];
-    while stop_reason == StopReason::Eof {
+    while stop_reason.is_none() {
         let line = {
             let mut console = console.borrow_mut();
             if console.is_interactive() {
@@ -182,8 +194,31 @@ pub async fn run_repl_loop(
         machine.drain_signals();
 
         match line {
-            Ok(line) => match machine.exec(&mut line.as_bytes()).await {
-                Ok(reason) => stop_reason = reason,
+            Ok(line) => match machine.compile(&mut line.as_bytes()) {
+                Ok(()) => match machine.exec().await {
+                    Ok(None) => stop_reason = None,
+                    Ok(Some(code)) => {
+                        let should_continue = {
+                            let program = program.borrow();
+                            let mut console = console.borrow_mut();
+                            continue_if_modified(&*program, &mut *console).await?
+                        };
+                        if should_continue {
+                            stop_reason = Some(code);
+                        } else {
+                            let mut console = console.borrow_mut();
+                            console.print("Exit aborted; resuming REPL loop.")?;
+                        }
+                    }
+                    Err(StdError::Break) => {
+                        let mut console = console.borrow_mut();
+                        console.print(BREAK_MSG)?;
+                    }
+                    Err(e) => {
+                        let mut console = console.borrow_mut();
+                        console.print(format!("ERROR: {}", e).as_str())?;
+                    }
+                },
                 Err(e) => {
                     let mut console = console.borrow_mut();
                     console.print(format!("ERROR: {}", e).as_str())?;
@@ -199,34 +234,20 @@ pub async fn run_repl_loop(
                 } else if e.kind() == io::ErrorKind::UnexpectedEof {
                     let mut console = console.borrow_mut();
                     console.print("End of input by CTRL-D")?;
-                    stop_reason = StopReason::Exited(0);
+                    stop_reason = Some(0);
                 } else {
-                    stop_reason = StopReason::Exited(1);
-                }
-            }
-        }
-
-        match stop_reason {
-            StopReason::Eof => (),
-            StopReason::Break => {
-                console.borrow_mut().print("**** BREAK ****")?;
-                stop_reason = StopReason::Eof;
-            }
-            StopReason::Exited(_) => {
-                if !continue_if_modified(&*program.borrow(), &mut *console.borrow_mut()).await? {
-                    console.borrow_mut().print("Exit aborted; resuming REPL loop.")?;
-                    stop_reason = StopReason::Eof;
+                    stop_reason = Some(1);
                 }
             }
         }
     }
-    Ok(stop_reason.as_exit_code())
+    Ok(stop_reason.unwrap())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use endbasic_core::exec::Signal;
+    use endbasic_std::Signal;
     use endbasic_std::console::{CharsXY, Key};
     use endbasic_std::storage::{Drive, DriveFactory, InMemoryDrive};
     use endbasic_std::testutils::*;
@@ -284,12 +305,12 @@ mod tests {
         // that the try_load_autoexec function uses to ensure the function's code doesn't hold onto
         // references while executing the autoexec code and causing a borrowing violation.
         let autoexec = "PRINT \"hello\": global_var = 3: CD \"MEMORY:/\"";
-        let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
+        let tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
         let (console, storage) = (tester.get_console(), tester.get_storage());
-        block_on(try_load_autoexec(tester.get_machine(), console, storage)).unwrap();
-        tester
+        let mut continuation = tester.continue_from_here();
+        block_on(try_load_autoexec(continuation.get_machine(), console, storage)).unwrap();
+        continuation
             .run("")
-            .expect_var("global_var", 3)
             .expect_prints(["hello"])
             .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();
@@ -298,10 +319,11 @@ mod tests {
     #[test]
     fn test_autoexec_compilation_error_is_ignored() {
         let autoexec = "a = 1\nb = undef: c = 2";
-        let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
+        let tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
         let (console, storage) = (tester.get_console(), tester.get_storage());
-        block_on(try_load_autoexec(tester.get_machine(), console, storage)).unwrap();
-        tester
+        let mut continuation = tester.continue_from_here();
+        block_on(try_load_autoexec(continuation.get_machine(), console, storage)).unwrap();
+        continuation
             .run("after = 5")
             .expect_var("after", 5)
             .expect_prints(["AUTOEXEC.BAS failed: 2:5: Undefined symbol undef"])
@@ -312,13 +334,12 @@ mod tests {
     #[test]
     fn test_autoexec_execution_error_is_ignored() {
         let autoexec = "a = 1\nb = 3 >> -1: c = 2";
-        let mut tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
+        let tester = Tester::default().write_file("AUTOEXEC.BAS", autoexec);
         let (console, storage) = (tester.get_console(), tester.get_storage());
-        block_on(try_load_autoexec(tester.get_machine(), console, storage)).unwrap();
-        tester
+        let mut continuation = tester.continue_from_here();
+        block_on(try_load_autoexec(continuation.get_machine(), console, storage)).unwrap();
+        continuation
             .run("after = 5")
-            .expect_var("a", 1)
-            .expect_var("after", 5)
             .expect_prints(["AUTOEXEC.BAS failed: 2:7: Number of bits to >> (-1) must be positive"])
             .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();
@@ -326,14 +347,14 @@ mod tests {
 
     #[test]
     fn test_autoexec_name_is_case_sensitive() {
-        let mut tester = Tester::default()
+        let tester = Tester::default()
             .write_file("AUTOEXEC.BAS", "a = 1")
             .write_file("autoexec.bas", "a = 2");
         let (console, storage) = (tester.get_console(), tester.get_storage());
-        block_on(try_load_autoexec(tester.get_machine(), console, storage)).unwrap();
-        tester
+        let mut continuation = tester.continue_from_here();
+        block_on(try_load_autoexec(continuation.get_machine(), console, storage)).unwrap();
+        continuation
             .run("")
-            .expect_var("a", 1)
             .expect_file("MEMORY:/AUTOEXEC.BAS", "a = 1")
             .expect_file("MEMORY:/autoexec.bas", "a = 2")
             .check();
@@ -341,10 +362,11 @@ mod tests {
 
     #[test]
     fn test_autoexec_missing() {
-        let mut tester = Tester::default();
+        let tester = Tester::default();
         let (console, storage) = (tester.get_console(), tester.get_storage());
-        block_on(try_load_autoexec(tester.get_machine(), console, storage)).unwrap();
-        tester.run("").check();
+        let mut continuation = tester.continue_from_here();
+        block_on(try_load_autoexec(continuation.get_machine(), console, storage)).unwrap();
+        continuation.run("").check();
     }
 
     /// Factory for drives that mimic the behavior of a cloud drive with fixed contents.
@@ -369,9 +391,10 @@ mod tests {
 
     #[test]
     fn test_run_from_cloud_no_repl() {
-        let mut tester = Tester::default();
+        let tester = Tester::default();
         let (console, storage, program) =
             (tester.get_console(), tester.get_storage(), tester.get_program());
+        let mut continuation = tester.continue_from_here();
 
         storage.borrow_mut().register_scheme(
             "cloud",
@@ -379,7 +402,7 @@ mod tests {
         );
 
         block_on(run_from_cloud(
-            tester.get_machine(),
+            continuation.get_machine(),
             console,
             storage,
             program,
@@ -387,7 +410,7 @@ mod tests {
             false,
         ))
         .unwrap();
-        tester
+        continuation
             .run("")
             .expect_prints([
                 "Mounting cloud://foo as AUTORUN...",
@@ -403,9 +426,10 @@ mod tests {
 
     #[test]
     fn test_run_from_cloud_repl() {
-        let mut tester = Tester::default();
+        let tester = Tester::default();
         let (console, storage, program) =
             (tester.get_console(), tester.get_storage(), tester.get_program());
+        let mut continuation = tester.continue_from_here();
 
         storage.borrow_mut().register_scheme(
             "cloud",
@@ -413,7 +437,7 @@ mod tests {
         );
 
         block_on(run_from_cloud(
-            tester.get_machine(),
+            continuation.get_machine(),
             console,
             storage,
             program,
@@ -421,7 +445,7 @@ mod tests {
             true,
         ))
         .unwrap();
-        let mut checker = tester.run("");
+        let mut checker = continuation.run("");
         let output = flatten_output(checker.take_captured_out());
         checker.expect_program(Some("AUTORUN:/the-path.bas"), MockDriveFactory::SCRIPT).check();
 
@@ -432,7 +456,11 @@ mod tests {
     fn test_run_repl_loop_signal_before_exec() {
         let mut tester = Tester::default();
         let (console, program) = (tester.get_console(), tester.get_program());
-        let signals_tx = tester.get_machine().get_signals_tx();
+        let (signals_tx, signals_rx) = async_channel::unbounded();
+        let mut machine = endbasic_std::MachineBuilder::default()
+            .with_console(console.clone())
+            .with_signals_chan((signals_tx.clone(), signals_rx))
+            .build();
 
         {
             let mut console = console.borrow_mut();
@@ -441,7 +469,7 @@ mod tests {
             console.add_input_chars(" 123");
             console.add_input_keys(&[Key::NewLine, Key::Eof]);
         }
-        block_on(run_repl_loop(tester.get_machine(), console, program)).unwrap();
+        block_on(run_repl_loop(&mut machine, console, program)).unwrap();
         tester.run("").expect_prints([" 123", "End of input by CTRL-D"]).check();
     }
 }

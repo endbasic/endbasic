@@ -1,29 +1,29 @@
 // EndBASIC
 // Copyright 2021 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Commands to interact with the cloud service.
 
 use crate::*;
 use async_trait::async_trait;
-use endbasic_core::LineCol;
-use endbasic_core::ast::{ArgSep, ExprType};
-use endbasic_core::compiler::{
-    ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax, SingularArgSyntax,
+use endbasic_core2::{
+    ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
+    CallableMetadataBuilder, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax,
+    Scope, SingularArgSyntax,
 };
-use endbasic_core::exec::{Error, Machine, Result, Scope};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
+use endbasic_std::MachineBuilder;
 use endbasic_std::console::{Console, is_narrow, read_line, read_line_secure, refill_and_print};
 use endbasic_std::storage::{FileAcls, Storage};
 use endbasic_std::strings::parse_boolean;
@@ -49,7 +49,7 @@ please contact support@endbasic.dev.";
 
 /// The `LOGIN` command.
 pub struct LoginCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
@@ -136,32 +136,32 @@ To create an account, use the SIGNUP command.",
 
 #[async_trait(?Send)]
 impl Callable for LoginCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if self.service.borrow().is_logged_in() {
-            return Err(scope.internal_error("Cannot LOGIN again before LOGOUT"));
+            return Err(CallError::Other("Cannot LOGIN again before LOGOUT"));
         }
 
-        let username = scope.pop_string();
-        let password = if scope.nargs() == 0 {
+        let username = scope.get_string(0).to_owned();
+        let password = if scope.nargs() == 1 {
             read_line_secure(&mut *self.console.borrow_mut(), "Password: ")
                 .await
-                .map_err(|e| scope.io_error(e))?
+                .map_err(CallError::from)?
         } else {
-            debug_assert_eq!(1, scope.nargs());
-            scope.pop_string()
+            debug_assert_eq!(2, scope.nargs());
+            scope.get_string(1).to_owned()
         };
 
-        self.do_login(&username, &password).await.map_err(|e| scope.io_error(e))
+        self.do_login(&username, &password).await.map_err(CallError::from)
     }
 }
 
 /// The `LOGOUT` command.
 pub struct LogoutCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
@@ -193,43 +193,44 @@ LOGOUT from within the CLOUD drive will fail.",
 
 #[async_trait(?Send)]
 impl Callable for LogoutCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         if !self.service.borrow().is_logged_in() {
             // TODO(jmmv): Now that the access tokens are part of the service, we can easily allow
             // logging in more than once within a session.  Consider adding a LOGOUT command first
             // to make it easier to handle the CLOUD: drive on a second login.
-            return Err(scope.internal_error("Must LOGIN first"));
+            return Err(CallError::Other("Must LOGIN first"));
         }
 
         let unmounted = match self.storage.borrow_mut().unmount("CLOUD") {
             Ok(()) => true,
             Err(e) if e.kind() == io::ErrorKind::NotFound => false,
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                return Err(scope.internal_error("Cannot log out while the CLOUD drive is active"));
+                return Err(CallError::Other("Cannot log out while the CLOUD drive is active"));
             }
             Err(e) => {
-                return Err(
-                    scope.io_error(io::Error::new(e.kind(), format!("Cannot log out: {}", e)))
-                );
+                return Err(CallError::from(io::Error::new(
+                    e.kind(),
+                    format!("Cannot log out: {}", e),
+                )));
             }
         };
 
-        self.service.borrow_mut().logout().await.map_err(|e| scope.io_error(e))?;
+        self.service.borrow_mut().logout().await.map_err(CallError::from)?;
 
         {
             let mut console = self.console.borrow_mut();
-            console.print("").map_err(|e| scope.io_error(e))?;
+            console.print("").map_err(CallError::from)?;
             if unmounted {
-                console.print("    Unmounted CLOUD drive").map_err(|e| scope.io_error(e))?;
+                console.print("    Unmounted CLOUD drive").map_err(CallError::from)?;
             }
-            console.print("    Good bye!").map_err(|e| scope.io_error(e))?;
-            console.print("").map_err(|e| scope.io_error(e))?;
+            console.print("    Good bye!").map_err(CallError::from)?;
+            console.print("").map_err(CallError::from)?;
         }
 
         Ok(())
@@ -243,7 +244,7 @@ impl Callable for LogoutCommand {
 /// commands such as `DIR` are defined, but given that ACLs are primarily a cloud concept in our
 /// case, it makes sense to keep it here.
 pub struct ShareCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
@@ -300,12 +301,7 @@ among users of the EndBASIC service.",
 
 impl ShareCommand {
     /// Parses a textual ACL specification and adds it to `add` or `remove.
-    fn parse_acl(
-        mut acl: String,
-        acl_pos: LineCol,
-        add: &mut FileAcls,
-        remove: &mut FileAcls,
-    ) -> Result<()> {
+    fn parse_acl(mut acl: String, add: &mut FileAcls, remove: &mut FileAcls) -> Result<(), String> {
         let change = if acl.len() < 3 { String::new() } else { acl.split_off(acl.len() - 2) };
         let username = acl; // For clarity after splitting off the ACL change request.
         match (username, change.as_str()) {
@@ -314,12 +310,9 @@ impl ShareCommand {
             (username, "-r") if !username.is_empty() => remove.add_reader(username),
             (username, "-R") if !username.is_empty() => remove.add_reader(username),
             (username, change) => {
-                return Err(Error::SyntaxError(
-                    acl_pos,
-                    format!(
-                        "Invalid ACL '{}{}': must be of the form \"username+r\" or \"username-r\"",
-                        username, change
-                    ),
+                return Err(format!(
+                    "Invalid ACL '{}{}': must be of the form \"username+r\" or \"username-r\"",
+                    username, change
                 ));
             }
         }
@@ -356,30 +349,31 @@ impl ShareCommand {
 
 #[async_trait(?Send)]
 impl Callable for ShareCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_ne!(0, scope.nargs());
-        let filename = scope.pop_string();
+        let filename = scope.get_string(0).to_owned();
 
         let mut add = FileAcls::default();
         let mut remove = FileAcls::default();
-        while scope.nargs() > 0 {
-            let (t, pos) = scope.pop_string_with_pos();
-            ShareCommand::parse_acl(t, pos, &mut add, &mut remove)?;
+        for reg in 1..scope.nargs() as u8 {
+            let t = scope.get_string(reg).to_owned();
+            ShareCommand::parse_acl(t, &mut add, &mut remove)
+                .map_err(|e| CallError::Syntax(scope.get_pos(reg), e))?;
         }
 
         if add.is_empty() && remove.is_empty() {
-            return self.show_acls(&filename).await.map_err(|e| scope.io_error(e));
+            return self.show_acls(&filename).await.map_err(CallError::from);
         }
 
         self.storage
             .borrow_mut()
             .update_acls(&filename, &add, &remove)
             .await
-            .map_err(|e| scope.io_error(e))?;
+            .map_err(CallError::from)?;
 
         if Self::has_public_acl(&add) {
             let filename = match filename.split_once('/') {
@@ -388,7 +382,7 @@ impl Callable for ShareCommand {
             };
 
             let mut console = self.console.borrow_mut();
-            console.print("").map_err(|e| scope.io_error(e))?;
+            console.print("").map_err(CallError::from)?;
             refill_and_print(
                 &mut *console,
                 [
@@ -406,8 +400,8 @@ auto-run your public file by visiting:",
                 ],
                 "    ",
             )
-            .map_err(|e| scope.io_error(e))?;
-            console.print("").map_err(|e| scope.io_error(e))?;
+            .map_err(CallError::from)?;
+            console.print("").map_err(CallError::from)?;
         }
 
         Ok(())
@@ -415,7 +409,7 @@ auto-run your public file by visiting:",
 }
 
 /// Checks if a password is sufficiently complex and returns an error when it isn't.
-fn validate_password_complexity(password: &str) -> std::result::Result<(), &'static str> {
+fn validate_password_complexity(password: &str) -> Result<(), &'static str> {
     if password.len() < 8 {
         return Err("Must be at least 8 characters long");
     }
@@ -439,7 +433,7 @@ fn validate_password_complexity(password: &str) -> std::result::Result<(), &'sta
 
 /// The `SIGNUP` command.
 pub struct SignupCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
 }
@@ -503,29 +497,28 @@ cloud service.  You will be asked for confirmation before proceeding.",
 
 #[async_trait(?Send)]
 impl Callable for SignupCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let console = &mut *self.console.borrow_mut();
-        console.print("").map_err(|e| scope.io_error(e))?;
+        console.print("").map_err(CallError::from)?;
         refill_and_print(
             console,
             ["Let's gather some information to create your cloud account.",
 "You can abort this process at any time by hitting Ctrl+C and you will be given a chance to \
 review your inputs before creating the account."],
             "    ",
-        ).map_err(|e| scope.io_error(e))?;
-        console.print("").map_err(|e| scope.io_error(e))?;
+        ).map_err(CallError::from)?;
+        console.print("").map_err(CallError::from)?;
 
-        let username =
-            read_line(console, "Username: ", "", None).await.map_err(|e| scope.io_error(e))?;
-        let password = Self::read_password(console).await.map_err(|e| scope.io_error(e))?;
+        let username = read_line(console, "Username: ", "", None).await.map_err(CallError::from)?;
+        let password = Self::read_password(console).await.map_err(CallError::from)?;
 
-        console.print("").map_err(|e| scope.io_error(e))?;
+        console.print("").map_err(CallError::from)?;
         refill_and_print(
             console,
             [
@@ -537,33 +530,32 @@ have no adverse impact in the service you receive.",
             ],
             "    ",
         )
-        .map_err(|e| scope.io_error(e))?;
-        console.print("").map_err(|e| scope.io_error(e))?;
+        .map_err(CallError::from)?;
+        console.print("").map_err(CallError::from)?;
 
         let email =
-            read_line(console, "Email address: ", "", None).await.map_err(|e| scope.io_error(e))?;
+            read_line(console, "Email address: ", "", None).await.map_err(CallError::from)?;
         let promotional_email =
             Self::read_bool(console, "Receive promotional email (y/N)? ", false)
                 .await
-                .map_err(|e| scope.io_error(e))?;
+                .map_err(CallError::from)?;
 
-        console.print("").map_err(|e| scope.io_error(e))?;
+        console.print("").map_err(CallError::from)?;
         refill_and_print(
             console,
             ["We are ready to go. Please review your answers before proceeding."],
             "    ",
         )
-        .map_err(|e| scope.io_error(e))?;
-        console.print("").map_err(|e| scope.io_error(e))?;
+        .map_err(CallError::from)?;
+        console.print("").map_err(CallError::from)?;
 
-        console.print(&format!("Username: {}", username)).map_err(|e| scope.io_error(e))?;
-        console.print(&format!("Email address: {}", email)).map_err(|e| scope.io_error(e))?;
+        console.print(&format!("Username: {}", username)).map_err(CallError::from)?;
+        console.print(&format!("Email address: {}", email)).map_err(CallError::from)?;
         console
             .print(&format!("Promotional email: {}", if promotional_email { "yes" } else { "no" }))
-            .map_err(|e| scope.io_error(e))?;
-        let proceed = Self::read_bool(console, "Continue (y/N)? ", false)
-            .await
-            .map_err(|e| scope.io_error(e))?;
+            .map_err(CallError::from)?;
+        let proceed =
+            Self::read_bool(console, "Continue (y/N)? ", false).await.map_err(CallError::from)?;
         if !proceed {
             // TODO(jmmv): This should return an error of some form once we have error handling in
             // the language.
@@ -571,9 +563,9 @@ have no adverse impact in the service you receive.",
         }
 
         let request = SignupRequest { username, password, email, promotional_email };
-        self.service.borrow_mut().signup(&request).await.map_err(|e| scope.io_error(e))?;
+        self.service.borrow_mut().signup(&request).await.map_err(CallError::from)?;
 
-        console.print("").map_err(|e| scope.io_error(e))?;
+        console.print("").map_err(CallError::from)?;
         refill_and_print(
             console,
             ["Your account has been created and is pending activation.",
@@ -582,8 +574,8 @@ in it to activate your account.  Make sure to check your spam folder.",
 "Once your account is activated, come back here and use LOGIN to get started!",
 "If you encounter any problems, please contact support@endbasic.dev."],
             "    ",
-        ).map_err(|e| scope.io_error(e))?;
-        console.print("").map_err(|e| scope.io_error(e))?;
+        ).map_err(CallError::from)?;
+        console.print("").map_err(CallError::from)?;
 
         Ok(())
     }
@@ -592,7 +584,7 @@ in it to activate your account.  Make sure to check your spam folder.",
 /// Adds all remote manipulation commands for `service` to the `machine`, using `console` to
 /// display information and `storage` to manipulate the remote drives.
 pub fn add_all<S: Into<String>>(
-    machine: &mut Machine,
+    machine: &mut MachineBuilder,
     service: Rc<RefCell<dyn Service>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
@@ -856,12 +848,10 @@ mod tests {
         let mut add = FileAcls::default();
         let mut remove = FileAcls::default();
 
-        let lc = LineCol { line: 0, col: 0 };
-
-        ShareCommand::parse_acl("user1+r".to_owned(), lc, &mut add, &mut remove).unwrap();
-        ShareCommand::parse_acl("user2+R".to_owned(), lc, &mut add, &mut remove).unwrap();
-        ShareCommand::parse_acl("X-r".to_owned(), lc, &mut add, &mut remove).unwrap();
-        ShareCommand::parse_acl("Y-R".to_owned(), lc, &mut add, &mut remove).unwrap();
+        ShareCommand::parse_acl("user1+r".to_owned(), &mut add, &mut remove).unwrap();
+        ShareCommand::parse_acl("user2+R".to_owned(), &mut add, &mut remove).unwrap();
+        ShareCommand::parse_acl("X-r".to_owned(), &mut add, &mut remove).unwrap();
+        ShareCommand::parse_acl("Y-R".to_owned(), &mut add, &mut remove).unwrap();
         assert_eq!(&["user1".to_owned(), "user2".to_owned()], add.readers());
         assert_eq!(&["X".to_owned(), "Y".to_owned()], remove.readers());
     }
@@ -882,14 +872,8 @@ mod tests {
         let mut remove = FileAcls::default().with_readers(["before2".to_owned()]);
 
         for acl in &["", "r", "+r", "-r", "foo+", "bar-"] {
-            let err = ShareCommand::parse_acl(
-                acl.to_string(),
-                LineCol { line: 12, col: 34 },
-                &mut add,
-                &mut remove,
-            )
-            .unwrap_err();
-            let message = format!("12:34: {:?}", err);
+            let err = ShareCommand::parse_acl(acl.to_string(), &mut add, &mut remove).unwrap_err();
+            let message = err.to_string();
             assert!(message.contains("Invalid ACL"));
             assert!(message.contains(acl));
         }
@@ -963,7 +947,7 @@ mod tests {
             r#"SHARE "a", "b"; "c""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: SHARE expected filename$[, acl1$, .., aclN$]",
+            "1:12: SHARE expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a", , "b""#,
         );
         client_check_stmt_compilation_err(

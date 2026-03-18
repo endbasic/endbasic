@@ -1,26 +1,28 @@
 // EndBASIC
 // Copyright 2020 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Command-line interface for the EndBASIC language.
 
 use anyhow::{Result, anyhow};
 use async_channel::Sender;
-use endbasic_core::exec::Signal;
+use endbasic_client::CloudService;
+use endbasic_repl::demos::DemoDriveFactory;
 use endbasic_std::console::{Console, ConsoleSpec};
-use endbasic_std::gpio;
-use endbasic_std::storage::Storage;
+use endbasic_std::storage::{DirectoryDriveFactory, Storage};
+use endbasic_std::{Error as StdError, MachineBuilder, Signal, gpio};
 use getoptsargs::prelude::*;
 use std::cell::RefCell;
 use std::fs::File;
@@ -100,43 +102,16 @@ fn setup_gpio_pins(spec: Option<&str>) -> Result<Rc<RefCell<dyn gpio::Pins>>> {
 fn new_machine_builder(
     console_spec: Option<&str>,
     gpio_pins_spec: Option<&str>,
-) -> Result<endbasic_std::MachineBuilder> {
+) -> Result<MachineBuilder> {
     let signals_chan = async_channel::unbounded();
-    let mut builder = endbasic_std::MachineBuilder::default();
+    let mut builder = MachineBuilder::default();
     builder = builder.with_console(setup_console(console_spec, signals_chan.0.clone())?);
     builder = builder.with_signals_chan(signals_chan);
     builder = builder.with_gpio_pins(setup_gpio_pins(gpio_pins_spec)?);
     Ok(builder)
 }
 
-/// Turns a regular machine builder into an interactive builder ensuring common features for all
-/// callers.
-fn make_interactive(
-    builder: endbasic_std::MachineBuilder,
-) -> endbasic_std::InteractiveMachineBuilder {
-    builder
-        .make_interactive()
-        .with_program(Rc::from(RefCell::from(endbasic_repl::editor::Editor::default())))
-}
-
-/// Completes the build of an interactive machine by taking a partial builder and running post-build
-/// steps on it.
-///
-/// `service_url` is the base URL of the cloud service.
-fn finish_interactive_build(
-    mut builder: endbasic_std::InteractiveMachineBuilder,
-    service_url: &str,
-) -> Result<endbasic_core::exec::Machine> {
-    let console = builder.get_console();
-    let storage = builder.get_storage();
-
-    let mut machine = builder.build()?;
-
-    let service = Rc::from(RefCell::from(endbasic_client::CloudService::new(service_url)?));
-    endbasic_client::add_all(&mut machine, service, console, storage, "https://repl.endbasic.dev/");
-
-    Ok(machine)
-}
+const INTERRUPTED_EXIT_CODE: i32 = 130;
 
 /// Returns `flag` if present, or else returns the URI of the default `LOCAL` drive.
 fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
@@ -244,12 +219,9 @@ fn setup_console(
 /// This instantiates non-optional drives, such as `MEMORY:` and `DEMOS:`, maps `LOCAL` the
 /// location given in `local_drive_spec`.
 pub fn setup_storage(storage: &mut Storage, local_drive_spec: &str) -> io::Result<()> {
-    storage.register_scheme("demos", Box::from(endbasic_repl::demos::DemoDriveFactory::default()));
+    storage.register_scheme("demos", Box::from(DemoDriveFactory::default()));
     storage.mount("demos", "demos://").expect("Demos drive shouldn't fail to mount");
-    storage.register_scheme(
-        "file",
-        Box::from(endbasic_std::storage::DirectoryDriveFactory::default()),
-    );
+    storage.register_scheme("file", Box::from(DirectoryDriveFactory::default()));
     storage.mount("local", local_drive_spec)?;
     storage.cd("local:").expect("Local drive was just registered");
     Ok(())
@@ -265,15 +237,26 @@ async fn run_repl_loop(
     local_drive_spec: &str,
     service_url: &str,
 ) -> Result<i32> {
-    let mut builder = make_interactive(new_machine_builder(console_spec, gpio_pins_spec)?);
-
+    let mut builder = new_machine_builder(console_spec, gpio_pins_spec)?;
     let console = builder.get_console();
-    let program = builder.get_program();
-
-    let storage = builder.get_storage();
+    let program = Rc::from(RefCell::from(endbasic_repl::editor::Editor::default()));
+    let storage = Rc::from(RefCell::from(Storage::default()));
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
-    let mut machine = finish_interactive_build(builder, service_url)?;
+    let service = Rc::from(RefCell::from(CloudService::new(service_url)?));
+    endbasic_client::add_all(
+        &mut builder,
+        service,
+        console.clone(),
+        storage.clone(),
+        "https://repl.endbasic.dev/",
+    );
+
+    let mut machine = builder
+        .make_interactive()
+        .with_program(program.clone())
+        .with_storage(storage.clone())
+        .build();
     endbasic_repl::print_welcome(console.clone())?;
     endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await?;
     Ok(endbasic_repl::run_repl_loop(&mut machine, console, program).await?)
@@ -286,9 +269,16 @@ async fn run_script<P: AsRef<Path>>(
     gpio_pins_spec: Option<&str>,
 ) -> Result<i32> {
     let builder = new_machine_builder(console_spec, gpio_pins_spec)?;
-    let mut machine = builder.build()?;
+    let mut machine = builder.build();
     let mut input = File::open(path)?;
-    Ok(machine.exec(&mut input).await?.as_exit_code())
+
+    machine.compile(&mut input)?;
+    match machine.exec().await {
+        Ok(Some(code)) => Ok(code),
+        Ok(None) => Ok(0),
+        Err(StdError::Break) => Ok(INTERRUPTED_EXIT_CODE),
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// Executes the `path` program in a fresh machine allowing any interactive-only calls.
@@ -306,15 +296,26 @@ async fn run_interactive(
     local_drive_spec: &str,
     service_url: &str,
 ) -> Result<i32> {
-    let mut builder = make_interactive(new_machine_builder(console_spec, gpio_pins_spec)?);
-
+    let mut builder = new_machine_builder(console_spec, gpio_pins_spec)?;
     let console = builder.get_console();
-    let program = builder.get_program();
-
-    let storage = builder.get_storage();
+    let program = Rc::from(RefCell::from(endbasic_repl::editor::Editor::default()));
+    let storage = Rc::from(RefCell::from(Storage::default()));
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
-    let mut machine = finish_interactive_build(builder, service_url)?;
+    let service = Rc::from(RefCell::from(CloudService::new(service_url)?));
+    endbasic_client::add_all(
+        &mut builder,
+        service,
+        console.clone(),
+        storage.clone(),
+        "https://repl.endbasic.dev/",
+    );
+
+    let mut machine = builder
+        .make_interactive()
+        .with_program(program.clone())
+        .with_storage(storage.clone())
+        .build();
 
     match path.strip_prefix("cloud://") {
         Some(username_path) => {
@@ -331,7 +332,13 @@ async fn run_interactive(
         }
         None => {
             let mut input = File::open(path)?;
-            Ok(machine.exec(&mut input).await?.as_exit_code())
+            machine.compile(&mut input)?;
+            match machine.exec().await {
+                Ok(Some(code)) => Ok(code),
+                Ok(None) => Ok(0),
+                Err(StdError::Break) => Ok(INTERRUPTED_EXIT_CODE),
+                Err(e) => Err(e.into()),
+            }
         }
     }
 }
@@ -339,7 +346,7 @@ async fn run_interactive(
 fn app_build(builder: Builder) -> Builder {
     builder
         .copyright("Copyright 2020-2026 Julio Merino")
-        .license(License::Apache2)
+        .license(License::AGPL3OrLater)
         .homepage("https://www.endbasic.dev/")
         .bugs("https://github.com/endbasic/endbasic/issues")
         .optopt("", "console", "type and properties of the console to use", "CONSOLE-SPEC")

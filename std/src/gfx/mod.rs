@@ -1,31 +1,33 @@
 // EndBASIC
 // Copyright 2021 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Commands for graphical console interaction.
 
 use crate::console::{Console, PixelsXY};
 use async_trait::async_trait;
-use endbasic_core::LineCol;
-use endbasic_core::ast::{ArgSep, ExprType};
-use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Error, Machine, Result, Scope};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
+use endbasic_core2::{
+    ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
+    CallableMetadataBuilder, ExprType, RequiredValueSyntax, Scope, SingularArgSyntax,
+};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::rc::Rc;
+
+use crate::MachineBuilder;
 
 pub mod lcd;
 
@@ -37,30 +39,36 @@ the commands described in HELP \"CONSOLE\", and the pixel-based system, used by 
 described in this section.";
 
 /// Parses an expression that represents a single coordinate.
-fn parse_coordinate(i: i32, pos: LineCol) -> Result<i16> {
+fn parse_coordinate(scope: &Scope<'_>, narg: u8) -> CallResult<i16> {
+    let i = scope.get_integer(narg);
     match i16::try_from(i) {
         Ok(i) => Ok(i),
-        Err(_) => Err(Error::SyntaxError(pos, format!("Coordinate {} out of range", i))),
+        Err(_) => {
+            Err(CallError::Syntax(scope.get_pos(narg), format!("Coordinate {} out of range", i)))
+        }
     }
 }
 
 /// Parses a pair of expressions that represent an (x,y) coordinate pair.
-fn parse_coordinates(xvalue: i32, xpos: LineCol, yvalue: i32, ypos: LineCol) -> Result<PixelsXY> {
-    Ok(PixelsXY { x: parse_coordinate(xvalue, xpos)?, y: parse_coordinate(yvalue, ypos)? })
+fn parse_coordinates(scope: &Scope<'_>, xarg: u8, yarg: u8) -> CallResult<PixelsXY> {
+    Ok(PixelsXY { x: parse_coordinate(scope, xarg)?, y: parse_coordinate(scope, yarg)? })
 }
 
 /// Parses an expression that represents a radius.
-fn parse_radius(i: i32, pos: LineCol) -> Result<u16> {
+fn parse_radius(scope: &Scope<'_>, narg: u8) -> CallResult<u16> {
+    let i = scope.get_integer(narg);
     match u16::try_from(i) {
         Ok(i) => Ok(i),
-        Err(_) if i < 0 => Err(Error::SyntaxError(pos, format!("Radius {} must be positive", i))),
-        Err(_) => Err(Error::SyntaxError(pos, format!("Radius {} out of range", i))),
+        Err(_) if i < 0 => {
+            Err(CallError::Syntax(scope.get_pos(narg), format!("Radius {} must be positive", i)))
+        }
+        Err(_) => Err(CallError::Syntax(scope.get_pos(narg), format!("Radius {} out of range", i))),
     }
 }
 
 /// The `GFX_CIRCLE` command.
 pub struct GfxCircleCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -109,27 +117,23 @@ area of the circle is left untouched.",
 
 #[async_trait(?Send)]
 impl Callable for GfxCircleCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(3, scope.nargs());
-        let (xvalue, xpos) = scope.pop_integer_with_pos();
-        let (yvalue, ypos) = scope.pop_integer_with_pos();
-        let (rvalue, rpos) = scope.pop_integer_with_pos();
+        let xy = parse_coordinates(&scope, 0, 1)?;
+        let r = parse_radius(&scope, 2)?;
 
-        let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
-        let r = parse_radius(rvalue, rpos)?;
-
-        self.console.borrow_mut().draw_circle(xy, r).map_err(|e| scope.io_error(e))?;
+        self.console.borrow_mut().draw_circle(xy, r)?;
         Ok(())
     }
 }
 
 /// The `GFX_CIRCLEF` command.
 pub struct GfxCirclefCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -177,27 +181,23 @@ The outline and area of the circle are drawn using the foreground color as selec
 
 #[async_trait(?Send)]
 impl Callable for GfxCirclefCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(3, scope.nargs());
-        let (xvalue, xpos) = scope.pop_integer_with_pos();
-        let (yvalue, ypos) = scope.pop_integer_with_pos();
-        let (rvalue, rpos) = scope.pop_integer_with_pos();
+        let xy = parse_coordinates(&scope, 0, 1)?;
+        let r = parse_radius(&scope, 2)?;
 
-        let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
-        let r = parse_radius(rvalue, rpos)?;
-
-        self.console.borrow_mut().draw_circle_filled(xy, r).map_err(|e| scope.io_error(e))?;
+        self.console.borrow_mut().draw_circle_filled(xy, r)?;
         Ok(())
     }
 }
 
 /// The `GFX_HEIGHT` function.
 pub struct GfxHeightFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -221,20 +221,20 @@ See GFX_WIDTH to query the other dimension.",
 
 #[async_trait(?Send)]
 impl Callable for GfxHeightFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
-        let size = self.console.borrow().size_pixels().map_err(|e| scope.io_error(e))?;
+        let size = self.console.borrow().size_pixels()?;
         scope.return_integer(i32::from(size.height))
     }
 }
 
 /// The `GFX_LINE` command.
 pub struct GfxLineCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -289,28 +289,23 @@ The line is drawn using the foreground color as selected by COLOR.",
 
 #[async_trait(?Send)]
 impl Callable for GfxLineCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(4, scope.nargs());
-        let (x1value, x1pos) = scope.pop_integer_with_pos();
-        let (y1value, y1pos) = scope.pop_integer_with_pos();
-        let (x2value, x2pos) = scope.pop_integer_with_pos();
-        let (y2value, y2pos) = scope.pop_integer_with_pos();
+        let x1y1 = parse_coordinates(&scope, 0, 1)?;
+        let x2y2 = parse_coordinates(&scope, 2, 3)?;
 
-        let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
-        let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
-
-        self.console.borrow_mut().draw_line(x1y1, x2y2).map_err(|e| scope.io_error(e))?;
+        self.console.borrow_mut().draw_line(x1y1, x2y2)?;
         Ok(())
     }
 }
 
 /// The `GFX_PIXEL` command.
 pub struct GfxPixelCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -351,25 +346,22 @@ The pixel is drawn using the foreground color as selected by COLOR.",
 
 #[async_trait(?Send)]
 impl Callable for GfxPixelCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
-        let (xvalue, xpos) = scope.pop_integer_with_pos();
-        let (yvalue, ypos) = scope.pop_integer_with_pos();
+        let xy = parse_coordinates(&scope, 0, 1)?;
 
-        let xy = parse_coordinates(xvalue, xpos, yvalue, ypos)?;
-
-        self.console.borrow_mut().draw_pixel(xy).map_err(|e| scope.io_error(e))?;
+        self.console.borrow_mut().draw_pixel(xy)?;
         Ok(())
     }
 }
 
 /// The `GFX_RECT` command.
 pub struct GfxRectCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -425,28 +417,23 @@ area of the rectangle is left untouched.",
 
 #[async_trait(?Send)]
 impl Callable for GfxRectCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(4, scope.nargs());
-        let (x1value, x1pos) = scope.pop_integer_with_pos();
-        let (y1value, y1pos) = scope.pop_integer_with_pos();
-        let (x2value, x2pos) = scope.pop_integer_with_pos();
-        let (y2value, y2pos) = scope.pop_integer_with_pos();
+        let x1y1 = parse_coordinates(&scope, 0, 1)?;
+        let x2y2 = parse_coordinates(&scope, 2, 3)?;
 
-        let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
-        let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
-
-        self.console.borrow_mut().draw_rect(x1y1, x2y2).map_err(|e| scope.io_error(e))?;
+        self.console.borrow_mut().draw_rect(x1y1, x2y2)?;
         Ok(())
     }
 }
 
 /// The `GFX_RECTF` command.
 pub struct GfxRectfCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -501,28 +488,23 @@ The outline and area of the rectangle are drawn using the foreground color as se
 
 #[async_trait(?Send)]
 impl Callable for GfxRectfCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(4, scope.nargs());
-        let (x1value, x1pos) = scope.pop_integer_with_pos();
-        let (y1value, y1pos) = scope.pop_integer_with_pos();
-        let (x2value, x2pos) = scope.pop_integer_with_pos();
-        let (y2value, y2pos) = scope.pop_integer_with_pos();
+        let x1y1 = parse_coordinates(&scope, 0, 1)?;
+        let x2y2 = parse_coordinates(&scope, 2, 3)?;
 
-        let x1y1 = parse_coordinates(x1value, x1pos, y1value, y1pos)?;
-        let x2y2 = parse_coordinates(x2value, x2pos, y2value, y2pos)?;
-
-        self.console.borrow_mut().draw_rect_filled(x1y1, x2y2).map_err(|e| scope.io_error(e))?;
+        self.console.borrow_mut().draw_rect_filled(x1y1, x2y2)?;
         Ok(())
     }
 }
 
 /// The `GFX_SYNC` command.
 pub struct GfxSyncCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -569,25 +551,25 @@ be able to see what you are typing any longer until you reenable video syncing."
 
 #[async_trait(?Send)]
 impl Callable for GfxSyncCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if scope.nargs() == 0 {
-            self.console.borrow_mut().sync_now().map_err(|e| scope.io_error(e))?;
+            self.console.borrow_mut().sync_now()?;
             Ok(())
         } else {
             debug_assert_eq!(1, scope.nargs());
-            let enabled = scope.pop_boolean();
+            let enabled = scope.get_boolean(0);
 
             let mut console = self.console.borrow_mut();
             if enabled {
-                console.show_cursor().map_err(|e| scope.io_error(e))?;
+                console.show_cursor()?;
             } else {
-                console.hide_cursor().map_err(|e| scope.io_error(e))?;
+                console.hide_cursor()?;
             }
-            console.set_sync(enabled).map_err(|e| scope.io_error(e))?;
+            console.set_sync(enabled)?;
             Ok(())
         }
     }
@@ -595,7 +577,7 @@ impl Callable for GfxSyncCommand {
 
 /// The `GFX_WIDTH` function.
 pub struct GfxWidthFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
 }
 
@@ -619,19 +601,19 @@ See GFX_HEIGHT to query the other dimension.",
 
 #[async_trait(?Send)]
 impl Callable for GfxWidthFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
-        let size = self.console.borrow().size_pixels().map_err(|e| scope.io_error(e))?;
+        let size = self.console.borrow().size_pixels()?;
         scope.return_integer(i32::from(size.width))
     }
 }
 
 /// Adds all console-related commands for the given `console` to the `machine`.
-pub fn add_all(machine: &mut Machine, console: Rc<RefCell<dyn Console>>) {
+pub fn add_all(machine: &mut MachineBuilder, console: Rc<RefCell<dyn Console>>) {
     machine.add_callable(GfxCircleCommand::new(console.clone()));
     machine.add_callable(GfxCirclefCommand::new(console.clone()));
     machine.add_callable(GfxHeightFunction::new(console.clone()));

@@ -1,30 +1,33 @@
 // EndBASIC
 // Copyright 2021 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Stored program manipulation.
 
 use crate::console::{Console, Pager, read_line};
 use crate::storage::Storage;
 use crate::strings::parse_boolean;
+use crate::{MachineAction, MachineBuilder};
 use async_trait::async_trait;
-use endbasic_core::ast::ExprType;
-use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax, compile};
-use endbasic_core::exec::{Machine, Result, Scope, StopReason};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
+use endbasic_core2::{
+    ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
+    Compiler, ExprType, RequiredValueSyntax, Scope, SingularArgSyntax, SymbolKey,
+};
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io;
 use std::rc::Rc;
 use std::str;
@@ -127,14 +130,34 @@ pub async fn continue_if_modified(
 
 /// The `DISASM` command.
 pub struct DisasmCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
+    callables_metadata: Rc<RefCell<HashMap<SymbolKey, Rc<CallableMetadata>>>>,
     console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
 }
 
+struct MetadataCallable {
+    metadata: Rc<CallableMetadata>,
+}
+
+#[async_trait(?Send)]
+impl Callable for MetadataCallable {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    async fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+        Err(CallError::Other("MetadataCallable::exec must not be called"))
+    }
+}
+
 impl DisasmCommand {
     /// Creates a new `DISASM` command that dumps the disassembled version of the program.
-    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    pub fn new(
+        callables_metadata: Rc<RefCell<HashMap<SymbolKey, Rc<CallableMetadata>>>>,
+        console: Rc<RefCell<dyn Console>>,
+        program: Rc<RefCell<dyn Program>>,
+    ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DISASM")
                 .with_syntax(&[(&[], None)])
@@ -146,6 +169,7 @@ gets translated to the machine code of a fictitious stack-based machine.  Note, 
 assembly code cannot be reassembled nor modified at this point.",
                 )
                 .build(),
+            callables_metadata,
             console,
             program,
         })
@@ -154,40 +178,34 @@ assembly code cannot be reassembled nor modified at this point.",
 
 #[async_trait(?Send)]
 impl Callable for DisasmCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
-        // TODO(jmmv): We shouldn't have to parse and compile the stored program here.  The machine
-        // should hold a copy at all times.
         let image = {
-            let program = self.program.borrow_mut();
-            compile(&mut program.text().as_bytes(), machine.get_symbols())?
+            let metadata = self.callables_metadata.borrow();
+            let mut callables = HashMap::with_capacity(metadata.len());
+            for (name, metadata) in metadata.iter() {
+                let callable = Rc::from(MetadataCallable { metadata: metadata.clone() });
+                callables.insert(name.clone(), callable as Rc<dyn Callable>);
+            }
+
+            let compiler = Compiler::new(&callables, &[])
+                .map_err(|e| CallError::Syntax(e.pos(), e.message_without_pos()))?;
+            compiler
+                .compile(&mut self.program.borrow().text().as_bytes())
+                .map_err(|e| CallError::Syntax(e.pos(), e.message_without_pos()))?
         };
 
         let mut console = self.console.borrow_mut();
-        let mut pager = Pager::new(&mut *console).map_err(|e| scope.io_error(e))?;
-        for (addr, instr) in image.instrs.iter().enumerate() {
-            let (op, args) = instr.repr();
-            let mut line = format!("{:04x}    {}", addr, op);
-            if let Some(args) = args {
-                while line.len() < 20 {
-                    line.push(' ');
-                }
-                line += &args;
-            }
-            if let Some(pos) = instr.pos() {
-                while line.len() < 44 {
-                    line.push(' ');
-                }
-                line += &format!("    # {}", pos);
-            }
-            pager.print(&line).await.map_err(|e| scope.io_error(e))?;
+        let mut pager = Pager::new(&mut *console)?;
+        for line in image.disasm() {
+            pager.print(&line).await?;
         }
-        pager.print("").await.map_err(|e| scope.io_error(e))?;
+        pager.print("").await?;
 
         Ok(())
     }
@@ -195,7 +213,7 @@ impl Callable for DisasmCommand {
 
 /// The `EDIT` command.
 pub struct EditCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
 }
@@ -217,23 +235,23 @@ impl EditCommand {
 
 #[async_trait(?Send)]
 impl Callable for EditCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let mut console = self.console.borrow_mut();
         let mut program = self.program.borrow_mut();
-        program.edit(&mut *console).await.map_err(|e| scope.io_error(e))?;
+        program.edit(&mut *console).await?;
         Ok(())
     }
 }
 
 /// The `LIST` command.
 pub struct ListCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
 }
@@ -255,17 +273,17 @@ impl ListCommand {
 
 #[async_trait(?Send)]
 impl Callable for ListCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let mut console = self.console.borrow_mut();
-        let mut pager = Pager::new(&mut *console).map_err(|e| scope.io_error(e))?;
+        let mut pager = Pager::new(&mut *console)?;
         for line in self.program.borrow().text().lines() {
-            pager.print(line).await.map_err(|e| scope.io_error(e))?;
+            pager.print(line).await?;
         }
         Ok(())
     }
@@ -273,10 +291,11 @@ impl Callable for ListCommand {
 
 /// The `LOAD` command.
 pub struct LoadCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<dyn Program>>,
+    actions: Rc<RefCell<Vec<MachineAction>>>,
 }
 
 impl LoadCommand {
@@ -286,6 +305,7 @@ impl LoadCommand {
         console: Rc<RefCell<dyn Console>>,
         storage: Rc<RefCell<Storage>>,
         program: Rc<RefCell<dyn Program>>,
+        actions: Rc<RefCell<Vec<MachineAction>>>,
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOAD")
@@ -312,64 +332,67 @@ See the \"File system\" help topic for information on the path syntax.",
             console,
             storage,
             program,
+            actions,
         })
     }
 }
 
 #[async_trait(?Send)]
 impl Callable for LoadCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let pathname = scope.pop_string();
+        let pathname = scope.get_string(0);
 
-        if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut())
-            .await
-            .map_err(|e| scope.io_error(e))?
-        {
+        if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
             let (full_name, content) = {
                 let storage = self.storage.borrow();
-                let full_name = storage
-                    .make_canonical_with_extension(&pathname, DEFAULT_EXTENSION)
-                    .map_err(|e| scope.io_error(e))?;
-                let content = storage.get(&full_name).await.map_err(|e| scope.io_error(e))?;
+                let full_name =
+                    storage.make_canonical_with_extension(pathname, DEFAULT_EXTENSION)?;
+                let content = storage.get(&full_name).await?;
                 let content = match String::from_utf8(content) {
                     Ok(text) => text,
                     Err(e) => {
-                        return Err(scope.io_error(io::Error::new(
+                        return Err(io::Error::new(
                             io::ErrorKind::InvalidData,
                             format!("Invalid file content: {}", e),
-                        )));
+                        )
+                        .into());
                     }
                 };
                 (full_name, content)
             };
             self.program.borrow_mut().load(Some(&full_name), &content);
-            machine.clear();
+            self.actions.borrow_mut().push(MachineAction::Clear);
+            Ok(())
         } else {
             self.console
                 .borrow_mut()
-                .print("LOAD aborted; use SAVE to save your current changes.")
-                .map_err(|e| scope.io_error(e))?;
+                .print("LOAD aborted; use SAVE to save your current changes.")?;
+            Ok(())
         }
-        Ok(())
     }
 }
 
 /// The `NEW` command.
 pub struct NewCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
+    actions: Rc<RefCell<Vec<MachineAction>>>,
 }
 
 impl NewCommand {
     /// Creates a new `NEW` command that clears the contents of `program` and that uses `console`
     /// to communicate unsaved changes.
-    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    pub fn new(
+        console: Rc<RefCell<dyn Console>>,
+        program: Rc<RefCell<dyn Program>>,
+        actions: Rc<RefCell<Vec<MachineAction>>>,
+    ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("NEW")
                 .with_syntax(&[(&[], None)])
@@ -386,30 +409,27 @@ instead.",
                 .build(),
             console,
             program,
+            actions,
         })
     }
 }
 
 #[async_trait(?Send)]
 impl Callable for NewCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
-        if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut())
-            .await
-            .map_err(|e| scope.io_error(e))?
-        {
+        if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
             self.program.borrow_mut().load(None, "");
-            machine.clear();
+            self.actions.borrow_mut().push(MachineAction::Clear);
         } else {
             self.console
                 .borrow_mut()
-                .print("NEW aborted; use SAVE to save your current changes.")
-                .map_err(|e| scope.io_error(e))?;
+                .print("NEW aborted; use SAVE to save your current changes.")?;
         }
         Ok(())
     }
@@ -417,16 +437,17 @@ impl Callable for NewCommand {
 
 /// The `RUN` command.
 pub struct RunCommand {
-    metadata: CallableMetadata,
-    console: Rc<RefCell<dyn Console>>,
+    metadata: Rc<CallableMetadata>,
     program: Rc<RefCell<dyn Program>>,
+    actions: Rc<RefCell<Vec<MachineAction>>>,
 }
 
 impl RunCommand {
     /// Creates a new `RUN` command that executes the `program`.
-    ///
-    /// Reports any non-successful return codes from the program to the console.
-    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    pub fn new(
+        program: Rc<RefCell<dyn Program>>,
+        actions: Rc<RefCell<Vec<MachineAction>>>,
+    ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RUN")
                 .with_syntax(&[(&[], None)])
@@ -437,44 +458,30 @@ This issues a CLEAR operation before starting the program to prevent previous le
 from interfering with the new execution.",
                 )
                 .build(),
-            console,
             program,
+            actions,
         })
     }
 }
 
 #[async_trait(?Send)]
 impl Callable for RunCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
-        machine.clear();
         let program = self.program.borrow().text();
-        let stop_reason = machine.exec(&mut program.as_bytes()).await?;
-        match stop_reason {
-            StopReason::Break => {
-                self.console.borrow_mut().print(BREAK_MSG).map_err(|e| scope.io_error(e))?
-            }
-            stop_reason => {
-                if stop_reason.as_exit_code() != 0 {
-                    self.console
-                        .borrow_mut()
-                        .print(&format!("Program exited with code {}", stop_reason.as_exit_code()))
-                        .map_err(|e| scope.io_error(e))?;
-                }
-            }
-        }
+        self.actions.borrow_mut().push(MachineAction::Run(program));
         Ok(())
     }
 }
 
 /// The `SAVE` command.
 pub struct SaveCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<dyn Program>>,
@@ -521,40 +528,30 @@ See the \"File system\" help topic for information on the path syntax.",
 
 #[async_trait(?Send)]
 impl Callable for SaveCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let name = if scope.nargs() == 0 {
             match self.program.borrow().name() {
                 Some(name) => name.to_owned(),
                 None => {
-                    return Err(scope.internal_error("Unnamed program; please provide a filename"));
+                    return Err(CallError::Other("Unnamed program; please provide a filename"));
                 }
             }
         } else {
             debug_assert_eq!(1, scope.nargs());
-            scope.pop_string()
+            scope.get_string(0).to_owned()
         };
 
-        let full_name = self
-            .storage
-            .borrow()
-            .make_canonical_with_extension(&name, DEFAULT_EXTENSION)
-            .map_err(|e| scope.io_error(e))?;
+        let full_name =
+            self.storage.borrow().make_canonical_with_extension(&name, DEFAULT_EXTENSION)?;
         let content = self.program.borrow().text();
-        self.storage
-            .borrow_mut()
-            .put(&full_name, content.as_bytes())
-            .await
-            .map_err(|e| scope.io_error(e))?;
+        self.storage.borrow_mut().put(&full_name, content.as_bytes()).await?;
         self.program.borrow_mut().set_name(&full_name);
 
-        self.console
-            .borrow_mut()
-            .print(&format!("Saved as {}", full_name))
-            .map_err(|e| scope.io_error(e))?;
+        self.console.borrow_mut().print(&format!("Saved as {}", full_name))?;
 
         Ok(())
     }
@@ -563,17 +560,26 @@ impl Callable for SaveCommand {
 /// Adds all program editing commands against the stored `program` to the `machine`, using
 /// `console` for interactive editing and using `storage` as the on-disk storage for the programs.
 pub fn add_all(
-    machine: &mut Machine,
+    machine: &mut MachineBuilder,
     program: Rc<RefCell<dyn Program>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {
-    machine.add_callable(DisasmCommand::new(console.clone(), program.clone()));
+    machine.add_callable(DisasmCommand::new(
+        machine.callables_metadata(),
+        console.clone(),
+        program.clone(),
+    ));
     machine.add_callable(EditCommand::new(console.clone(), program.clone()));
     machine.add_callable(ListCommand::new(console.clone(), program.clone()));
-    machine.add_callable(LoadCommand::new(console.clone(), storage.clone(), program.clone()));
-    machine.add_callable(NewCommand::new(console.clone(), program.clone()));
-    machine.add_callable(RunCommand::new(console.clone(), program.clone()));
+    machine.add_callable(LoadCommand::new(
+        console.clone(),
+        storage.clone(),
+        program.clone(),
+        machine.actions(),
+    ));
+    machine.add_callable(NewCommand::new(console.clone(), program.clone(), machine.actions()));
+    machine.add_callable(RunCommand::new(program.clone(), machine.actions()));
     machine.add_callable(SaveCommand::new(console, storage, program));
 }
 
@@ -582,6 +588,9 @@ mod tests {
     use super::*;
     use crate::console::{CharsXY, Key};
     use crate::testutils::*;
+    use crate::{MachineBuilder, Signal};
+    use futures_lite::future::{FutureExt, block_on};
+    use std::time::Duration;
 
     const NO_ANSWERS: &[&str] =
         &["n\n", "N\n", "no\n", "NO\n", "false\n", "FALSE\n", "xyz\n", "\n", "1\n"];
@@ -590,7 +599,10 @@ mod tests {
 
     #[test]
     fn test_disasm_nothing() {
-        Tester::default().run("DISASM").expect_prints([""]).check();
+        Tester::default()
+            .run("DISASM")
+            .expect_prints(["0000:   EOF                             ; 0:0", ""])
+            .check();
     }
 
     #[test]
@@ -599,10 +611,10 @@ mod tests {
             .set_program(None, "A = 2 + 3")
             .run("DISASM")
             .expect_prints([
-                "0000    PUSH%       2                           # 1:5",
-                "0001    PUSH%       3                           # 1:9",
-                "0002    ADD%                                    # 1:7",
-                "0003    SETV        A",
+                "0000:   LOADI       R64, 2              ; 1:5",
+                "0001:   LOADI       R65, 3              ; 1:9",
+                "0002:   ADDI        R64, R64, R65       ; 1:7",
+                "0003:   EOF                             ; 0:0",
                 "",
             ])
             .expect_program(None as Option<&str>, "A = 2 + 3")
@@ -618,11 +630,11 @@ mod tests {
         t.set_program(None, "A = 2 + 3")
             .run("DISASM")
             .expect_prints([
-                "0000    PUSH%       2                           # 1:5",
-                "0001    PUSH%       3                           # 1:9",
-                "0002    ADD%                                    # 1:7",
+                "0000:   LOADI       R64, 2              ; 1:5",
+                "0001:   LOADI       R65, 3              ; 1:9",
+                "0002:   ADDI        R64, R64, R65       ; 1:7",
                 " << Press any key for more; ESC or Ctrl+C to stop >> ",
-                "0003    SETV        A",
+                "0003:   EOF                             ; 0:0",
                 "",
             ])
             .expect_program(None as Option<&str>, "A = 2 + 3")
@@ -937,11 +949,85 @@ mod tests {
         let program = "PRINT 5: END 1: PRINT 4";
         Tester::default()
             .set_program(Some("untouched.bas"), program)
-            .run(r#"RUN: PRINT "after""#)
+            .run(r#"RUN"#)
             .expect_clear()
-            .expect_prints([" 5", "Program exited with code 1", "after"])
+            .expect_prints([" 5", "Program exited with code 1"])
             .expect_program(Some("untouched.bas"), program)
             .check();
+    }
+
+    #[test]
+    fn test_run_something_that_exits_with_trailing_code() {
+        // TODO(jmmv): Versions of EndBASIC before the core2 rewrite would show the "after"
+        // message after an abrupt termination from the program.  core2 cannot do this because
+        // of how the whole line is compiled first and how RUN then replaces the full program
+        // memory.  We should fix this at some point.
+        let program = "PRINT 5: END 1: PRINT 4";
+        Tester::default()
+            .set_program(Some("untouched.bas"), program)
+            .run(r#"RUN: PRINT "after""#)
+            .expect_clear()
+            .expect_prints([" 5", "Program exited with code 1"])
+            .expect_program(Some("untouched.bas"), program)
+            .check();
+    }
+
+    #[test]
+    fn test_run_after_break_starts_from_beginning() {
+        let console = Rc::from(RefCell::from(MockConsole::default()));
+        let program = Rc::from(RefCell::from(RecordedProgram::default()));
+        program.borrow_mut().load(None, r#"PRINT "begin": SLEEP 0: PRINT "done""#);
+
+        let (signals_tx, signals_rx) = async_channel::unbounded();
+        let signal_sent = Rc::from(RefCell::from(false));
+        let sleep_tx = signals_tx.clone();
+        let sleep_signal_sent = signal_sent.clone();
+        let sleep_fake =
+            move |_d: Duration| -> futures_lite::future::BoxedLocal<Result<(), String>> {
+                let sleep_tx = sleep_tx.clone();
+                let sleep_signal_sent = sleep_signal_sent.clone();
+                async move {
+                    if !*sleep_signal_sent.borrow() {
+                        *sleep_signal_sent.borrow_mut() = true;
+                        sleep_tx.send(Signal::Break).await.unwrap();
+                    }
+                    Ok(())
+                }
+                .boxed_local()
+            };
+
+        let storage = Rc::from(RefCell::from(Storage::default()));
+        let mut machine = MachineBuilder::default()
+            .with_console(console.clone())
+            .with_signals_chan((signals_tx, signals_rx))
+            .with_sleep_fn(Box::from(sleep_fake))
+            .make_interactive()
+            .with_program(program)
+            .with_storage(storage)
+            .build();
+
+        machine.compile(&mut "RUN".as_bytes()).unwrap();
+        match block_on(machine.exec()) {
+            Err(crate::Error::Break) => (),
+            r => panic!("Expected Break but got {:?}", r),
+        }
+
+        machine.compile(&mut "RUN".as_bytes()).unwrap();
+        match block_on(machine.exec()) {
+            Ok(None) => (),
+            r => panic!("Expected successful completion but got {:?}", r),
+        }
+
+        let prints: Vec<String> = console
+            .borrow_mut()
+            .take_captured_out()
+            .into_iter()
+            .filter_map(|out| match out {
+                CapturedOut::Print(text) => Some(text),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(vec!["begin", "begin", "done"], prints);
     }
 
     #[test]

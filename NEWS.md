@@ -14,7 +14,28 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
-*   No changes recorded.
+*   Replaced the core interpreter with a brand-new rewrite that has been
+    designed, from the ground up, to target efficient bytecode compilation.
+    In some ad-hoc compute-heavy benchmarks, this shows a 7x performance
+    improvement.
+
+*   Added support for `DECLARE FUNCTION` and `DECLARE SUB`, which are now
+    needed by the compiler in client code to forward-declare user-defined
+    functions and subroutines.
+
+*   Running `RUN` in a multi-statement line no longer executes trailing
+    statements if the program aborts with `END` and a non-zero exit code.
+    This can be seen as a regression from the core rewrite, but it should
+    impact so few scenarios that it'll be fixed later.
+
+*   Calling `CLEAR` from within a `SUB` or `GOSUB` currently terminates
+    execution of the whole program instead of continuing after the clear.
+    This can be seen as a regression from the core rewrite, but it should
+    impact so few scenarios that it'll be fixed later and the behavior of
+    this scenario is to be determined.
+    
+*   Because the new core has been AGPLv3+ licensed, the rest of the project
+    has switched to this license as well.
 
 ## Changes in version 0.12.1
 

@@ -248,7 +248,7 @@ dependencies = [
  "async-channel",
  "dirs",
  "endbasic-client",
- "endbasic-core",
+ "endbasic-core2",
  "endbasic-repl",
  "endbasic-rpi",
  "endbasic-sdl",
@@ -269,7 +269,7 @@ dependencies = [
  "async-trait",
  "base64",
  "bytes",
- "endbasic-core",
+ "endbasic-core2",
  "endbasic-std",
  "rand",
  "reqwest",
@@ -307,8 +307,9 @@ dependencies = [
 name = "endbasic-repl"
 version = "0.12.99"
 dependencies = [
+ "async-channel",
  "async-trait",
- "endbasic-core",
+ "endbasic-core2",
  "endbasic-std",
  "futures-lite",
  "time",
@@ -328,7 +329,7 @@ version = "0.12.99"
 dependencies = [
  "async-channel",
  "async-trait",
- "endbasic-core",
+ "endbasic-core2",
  "endbasic-std",
  "flate2",
  "futures-lite",
@@ -343,7 +344,7 @@ version = "0.12.99"
 dependencies = [
  "async-channel",
  "async-trait",
- "endbasic-core",
+ "endbasic-core2",
  "endbasic-std",
  "tempfile",
  "tokio",
@@ -355,7 +356,7 @@ version = "0.12.99"
 dependencies = [
  "async-channel",
  "async-trait",
- "endbasic-core",
+ "endbasic-core2",
  "filetime",
  "flate2",
  "futures-lite",
@@ -375,7 +376,7 @@ dependencies = [
  "async-channel",
  "async-trait",
  "crossterm",
- "endbasic-core",
+ "endbasic-core2",
  "endbasic-std",
  "tokio",
 ]
@@ -388,7 +389,7 @@ dependencies = [
  "async-trait",
  "console_error_panic_hook",
  "endbasic-client",
- "endbasic-core",
+ "endbasic-core2",
  "endbasic-repl",
  "endbasic-std",
  "js-sys",
@@ -584,9 +585,9 @@ dependencies = [
 
 [[package]]
 name = "getoptsargs"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd9d7fcbabff1eb3a1799271a46ef5902ba2c342f48ed4cae981ceddc6a15f95"
+checksum = "bef060f9bf206eaada7ee03e1ac21e44c273c78cd91a31822abfc1da64d1d374"
 dependencies = [
  "anyhow",
  "getopts",

@@ -1,28 +1,30 @@
 // EndBASIC
 // Copyright 2021 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! File system interaction.
 
 use super::time_format_error_to_io_error;
+use crate::MachineBuilder;
 use crate::console::{Console, Pager, is_narrow};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core::ast::{ArgSep, ExprType};
-use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Machine, Result, Scope};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder};
+use endbasic_core2::{
+    ArgSep, ArgSepSyntax, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
+    ExprType, RequiredValueSyntax, Scope, SingularArgSyntax,
+};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp;
@@ -125,7 +127,7 @@ fn show_drives(storage: &Storage, console: &mut dyn Console) -> io::Result<()> {
 
 /// The `CD` command.
 pub struct CdCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     storage: Rc<RefCell<Storage>>,
 }
 
@@ -151,15 +153,15 @@ impl CdCommand {
 
 #[async_trait(?Send)]
 impl Callable for CdCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let target = scope.pop_string();
+        let target = scope.get_string(0);
 
-        self.storage.borrow_mut().cd(&target).map_err(|e| scope.io_error(e))?;
+        self.storage.borrow_mut().cd(target)?;
 
         Ok(())
     }
@@ -167,7 +169,7 @@ impl Callable for CdCommand {
 
 /// The `COPY` command.
 pub struct CopyCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     storage: Rc<RefCell<Storage>>,
 }
 
@@ -210,17 +212,17 @@ See the \"File system\" help topic for information on the path syntax.",
 
 #[async_trait(?Send)]
 impl Callable for CopyCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
-        let src = scope.pop_string();
-        let dest = scope.pop_string();
+        let src = scope.get_string(0).to_owned();
+        let dest = scope.get_string(1).to_owned();
 
         let mut storage = self.storage.borrow_mut();
-        storage.copy(&src, &dest).await.map_err(|e| scope.io_error(e))?;
+        storage.copy(&src, &dest).await?;
 
         Ok(())
     }
@@ -228,7 +230,7 @@ impl Callable for CopyCommand {
 
 /// The `DIR` command.
 pub struct DirCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 }
@@ -262,21 +264,19 @@ impl DirCommand {
 
 #[async_trait(?Send)]
 impl Callable for DirCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let path = if scope.nargs() == 0 {
-            "".to_owned()
+            ""
         } else {
             debug_assert_eq!(1, scope.nargs());
-            scope.pop_string()
+            scope.get_string(0)
         };
 
-        show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), &path)
-            .await
-            .map_err(|e| scope.io_error(e))?;
+        show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), path).await?;
 
         Ok(())
     }
@@ -284,7 +284,7 @@ impl Callable for DirCommand {
 
 /// The `KILL` command.
 pub struct KillCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     storage: Rc<RefCell<Storage>>,
 }
 
@@ -317,15 +317,15 @@ See the \"File system\" help topic for information on the path syntax.",
 
 #[async_trait(?Send)]
 impl Callable for KillCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let name = scope.pop_string();
+        let name = scope.get_string(0).to_owned();
 
-        self.storage.borrow_mut().delete(&name).await.map_err(|e| scope.io_error(e))?;
+        self.storage.borrow_mut().delete(&name).await?;
 
         Ok(())
     }
@@ -333,7 +333,7 @@ impl Callable for KillCommand {
 
 /// The `MOUNT` command.
 pub struct MountCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 }
@@ -381,21 +381,20 @@ without a colon at the end, and targets are given in the form of a URI.",
 
 #[async_trait(?Send)]
 impl Callable for MountCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if scope.nargs() == 0 {
-            show_drives(&self.storage.borrow_mut(), &mut *self.console.borrow_mut())
-                .map_err(|e| scope.io_error(e))?;
+            show_drives(&self.storage.borrow(), &mut *self.console.borrow_mut())?;
             Ok(())
         } else {
             debug_assert_eq!(2, scope.nargs());
-            let target = scope.pop_string();
-            let name = scope.pop_string();
+            let target = scope.get_string(0).to_owned();
+            let name = scope.get_string(1).to_owned();
 
-            self.storage.borrow_mut().mount(&name, &target).map_err(|e| scope.io_error(e))?;
+            self.storage.borrow_mut().mount(&name, &target)?;
             Ok(())
         }
     }
@@ -403,7 +402,7 @@ impl Callable for MountCommand {
 
 /// The `PWD` command.
 pub struct PwdCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 }
@@ -429,11 +428,11 @@ by the underlying operating system, displays such path as well.",
 
 #[async_trait(?Send)]
 impl Callable for PwdCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let storage = self.storage.borrow();
@@ -441,17 +440,13 @@ impl Callable for PwdCommand {
         let system_cwd = storage.system_path(&cwd).expect("cwd must return a valid path");
 
         let console = &mut *self.console.borrow_mut();
-        console.print("").map_err(|e| scope.io_error(e))?;
-        console.print(&format!("    Working directory: {}", cwd)).map_err(|e| scope.io_error(e))?;
+        console.print("")?;
+        console.print(&format!("    Working directory: {}", cwd))?;
         match system_cwd {
-            Some(path) => console
-                .print(&format!("    System location: {}", path.display()))
-                .map_err(|e| scope.io_error(e))?,
-            None => {
-                console.print("    No system location available").map_err(|e| scope.io_error(e))?
-            }
+            Some(path) => console.print(&format!("    System location: {}", path.display()))?,
+            None => console.print("    No system location available")?,
         }
-        console.print("").map_err(|e| scope.io_error(e))?;
+        console.print("")?;
 
         Ok(())
     }
@@ -459,7 +454,7 @@ impl Callable for PwdCommand {
 
 /// The `UNMOUNT` command.
 pub struct UnmountCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     storage: Rc<RefCell<Storage>>,
 }
 
@@ -491,15 +486,15 @@ Drive names are specified without a colon at the end.",
 
 #[async_trait(?Send)]
 impl Callable for UnmountCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let drive = scope.pop_string();
+        let drive = scope.get_string(0).to_owned();
 
-        self.storage.borrow_mut().unmount(&drive).map_err(|e| scope.io_error(e))?;
+        self.storage.borrow_mut().unmount(&drive)?;
 
         Ok(())
     }
@@ -508,7 +503,7 @@ impl Callable for UnmountCommand {
 /// Adds all file system manipulation commands for `storage` to the `machine`, using `console` to
 /// display information.
 pub fn add_all(
-    machine: &mut Machine,
+    machine: &mut MachineBuilder,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
 ) {

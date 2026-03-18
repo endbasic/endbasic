@@ -1,7 +1,7 @@
 [package]
 name = "endbasic"
 version = "0.12.99" # ENDBASIC-VERSION
-license = "Apache-2.0"
+license = "AGPL-3.0-or-later"
 authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
 keywords = ["basic", "interpreter", "learning", "programming"]
@@ -24,16 +24,16 @@ rpi = ["endbasic-rpi", "endbasic-st7735s"]
 anyhow = "1.0"
 async-channel = "2.2"
 dirs = "5.0"
-getoptsargs = "0.1"
+getoptsargs = "0.2"
 thiserror = "1.0"
 
 [dependencies.endbasic-client]
 version = "0.12.99" # ENDBASIC-VERSION
 path = "../client"
 
-[dependencies.endbasic-core]
+[dependencies.endbasic-core2]
 version = "0.12.99" # ENDBASIC-VERSION
-path = "../core"
+path = "../core2"
 
 [dependencies.endbasic-repl]
 version = "0.12.99" # ENDBASIC-VERSION

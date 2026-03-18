@@ -37,148 +37,148 @@ Button pressed! Blinking LED on pin 18 ...
  1
 Dumping GPIO trace...
 -1 -1 803 1804 811 811 810 1821 1820 1821 1820 1821 1820 1821 1820 1821 1820
-0000    PUSH%       8                           # 16:10
-0001    SETV        BUTTON
-0002    PUSH%       18                          # 17:7
-0003    SETV        LED
-0004    CALLB       6 (CLS), 0                  # 19:1
-0005    PUSH%       11                          # 20:7
-0006    CALLB       7 (COLOR), 1                # 20:1
-0007    CALLB       50 (PRINT), 0               # 21:1
-0008    PUSH$       " GPIO demo"                # 22:7
-0009    PUSH%       4                           # 22:7
-000a    CALLB       50 (PRINT), 2               # 22:1
-000b    PUSH$       "==========="               # 23:7
-000c    PUSH%       4                           # 23:7
-000d    CALLB       50 (PRINT), 2               # 23:1
-000e    CALLB       7 (COLOR), 0                # 24:1
-000f    CALLB       50 (PRINT), 0               # 25:1
-0010    PUSH$       "This demo showcases how to poll a hardware button attached to a GPIO"    # 26:7
-0011    PUSH%       4                           # 26:7
-0012    CALLB       50 (PRINT), 2               # 26:1
-0013    PUSH$       "pin and how to flash an LED attached to another one."    # 27:7
-0014    PUSH%       4                           # 27:7
-0015    CALLB       50 (PRINT), 2               # 27:1
-0016    CALLB       50 (PRINT), 0               # 28:1
-0017    PUSH%       2                           # 29:7
-0018    CALLB       7 (COLOR), 1                # 29:1
-0019    PUSH$       "To get started, follow these steps:"    # 30:7
-001a    PUSH%       4                           # 30:7
-001b    CALLB       50 (PRINT), 2               # 30:1
-001c    CALLB       7 (COLOR), 0                # 31:1
-001d    CALLB       50 (PRINT), 0               # 32:1
-001e    PUSH$       "and to ground; don't forget to add a"    # 33:40
-001f    PUSH%       4                           # 33:40
-0020    PUSH%       1                           # 33:38
-0021    LOAD%       LED                         # 33:35
-0022    PUSH%       3                           # 33:35
-0023    PUSH%       1                           # 33:33
-0024    PUSH$       "1. Connect an LED to pin"    # 33:7
-0025    PUSH%       4                           # 33:7
-0026    CALLB       50 (PRINT), 8               # 33:1
-0027    PUSH$       "   resistor inline."       # 34:7
-0028    PUSH%       4                           # 34:7
-0029    CALLB       50 (PRINT), 2               # 34:1
-002a    CALLB       50 (PRINT), 0               # 35:1
-002b    PUSH$       "and to ground.  We'll be"    # 36:50
-002c    PUSH%       4                           # 36:50
-002d    PUSH%       1                           # 36:48
-002e    LOAD%       BUTTON                      # 36:42
-002f    PUSH%       3                           # 36:42
-0030    PUSH%       1                           # 36:40
-0031    PUSH$       "2. Connect a push button to pin"    # 36:7
-0032    PUSH%       4                           # 36:7
-0033    CALLB       50 (PRINT), 8               # 36:1
-0034    PUSH$       "   using the built-in pull-up resistor for the input pin so there is"    # 37:7
-0035    PUSH%       4                           # 37:7
-0036    CALLB       50 (PRINT), 2               # 37:1
-0037    PUSH$       "   no need to do any extra wiring."    # 38:7
-0038    PUSH%       4                           # 38:7
-0039    CALLB       50 (PRINT), 2               # 38:1
-003a    CALLB       50 (PRINT), 0               # 39:1
-003b    PUSH%       1                           # 40:7
-003c    CALLB       7 (COLOR), 1                # 40:1
-003d    PUSH$       "This demo is only functional on the Raspberry Pi and assumes you have"    # 41:7
-003e    PUSH%       4                           # 41:7
-003f    CALLB       50 (PRINT), 2               # 41:1
-0040    PUSH$       "built EndBASIC with --features=rpi.  If these conditions are not met,"    # 42:7
-0041    PUSH%       4                           # 42:7
-0042    CALLB       50 (PRINT), 2               # 42:1
-0043    PUSH$       "the demo will fail to run."    # 43:7
-0044    PUSH%       4                           # 43:7
-0045    CALLB       50 (PRINT), 2               # 43:1
-0046    CALLB       7 (COLOR), 0                # 44:1
-0047    CALLB       50 (PRINT), 0               # 45:1
-0048    LOADR       DUMMY                       # 46:71
-0049    PUSH%       2                           # 46:69
-004a    PUSH$       "Press ENTER when you are ready or CTRL+C to exit the demo..."    # 46:7
-004b    PUSH%       1                           # 46:7
-004c    CALLB       32 (INPUT), 4               # 46:1
-004d    CALLB       6 (CLS), 0                  # 48:1
-004e    PUSH%       11                          # 49:7
-004f    CALLB       7 (COLOR), 1                # 49:1
-0050    CALLB       50 (PRINT), 0               # 50:1
-0051    PUSH$       " GPIO demo"                # 51:7
-0052    PUSH%       4                           # 51:7
-0053    CALLB       50 (PRINT), 2               # 51:1
-0054    PUSH$       "==========="               # 52:7
-0055    PUSH%       4                           # 52:7
-0056    CALLB       50 (PRINT), 2               # 52:1
-0057    CALLB       7 (COLOR), 0                # 53:1
-0058    CALLB       50 (PRINT), 0               # 54:1
-0059    PUSH$       "IN-PULL-UP"                # 57:20
-005a    LOAD%       BUTTON                      # 57:12
-005b    CALLB       28 (GPIO_SETUP), 2          # 57:1
-005c    PUSH$       "OUT"                       # 58:17
-005d    LOAD%       LED                         # 58:12
-005e    CALLB       28 (GPIO_SETUP), 2          # 58:1
-005f    PUSH$       "..."                       # 62:52
-0060    PUSH%       4                           # 62:52
-0061    PUSH%       1                           # 62:50
-0062    LOAD%       BUTTON                      # 62:44
-0063    PUSH%       3                           # 62:44
-0064    PUSH%       1                           # 62:42
-0065    PUSH$       "Waiting for a button press on pin"    # 62:7
-0066    PUSH%       4                           # 62:7
-0067    CALLB       50 (PRINT), 8               # 62:1
-0068    LOAD%       BUTTON                      # 63:17
-0069    CALLF?      27 (GPIO_READ), 1           # 63:7
-006a    JMPNT       006e
-006b    PUSH#       0.05                        # 64:11
-006c    CALLB       66 (SLEEP), 1               # 64:5
-006d    JMP         0068
-006e    PUSH$       "..."                       # 68:51
-006f    PUSH%       4                           # 68:51
-0070    PUSH%       1                           # 68:49
-0071    LOAD%       LED                         # 68:46
-0072    PUSH%       3                           # 68:46
-0073    PUSH%       1                           # 68:44
-0074    PUSH$       "Button pressed! Blinking LED on pin"    # 68:7
-0075    PUSH%       4                           # 68:7
-0076    CALLB       50 (PRINT), 8               # 68:1
-0077    PUSH%       5                           # 69:9
-0078    SETV        I
-0079    LOAD%       I                           # 69:5
-007a    PUSH%       1                           # 69:14
-007b    CMPGE%                                  # 69:11
-007c    JMPNT       008f
-007d    PUSH?       true                        # 70:21
-007e    LOAD%       LED                         # 70:16
-007f    CALLB       29 (GPIO_WRITE), 2          # 70:5
-0080    PUSH#       0.1                         # 71:11
-0081    CALLB       66 (SLEEP), 1               # 71:5
-0082    PUSH?       false                       # 72:21
-0083    LOAD%       LED                         # 72:16
-0084    CALLB       29 (GPIO_WRITE), 2          # 72:5
-0085    PUSH#       0.1                         # 73:11
-0086    CALLB       66 (SLEEP), 1               # 73:5
-0087    LOAD%       I                           # 74:11
-0088    PUSH%       3                           # 74:11
-0089    CALLB       50 (PRINT), 2               # 74:5
-008a    LOAD%       I                           # 69:5
-008b    PUSH%       -1                          # 69:22
-008c    ADD%                                    # 69:11
-008d    SETV        I
-008e    JMP         0079
+0000:   LOADI       R64, 8              ; 16:10
+0001:   LOADI       R65, 18             ; 17:7
+0002:   UPCALL      0, R66              ; 19:1, CLS
+0003:   LOADI       R66, 11             ; 20:7
+0004:   UPCALL      1, R66              ; 20:1, COLOR
+0005:   LOADI       R66, 0              ; 21:1
+0006:   UPCALL      2, R66              ; 21:1, PRINT
+0007:   LOADI       R67, 0              ; 22:7
+0008:   LOADI       R66, 259            ; 22:7
+0009:   UPCALL      2, R66              ; 22:1, PRINT
+0010:   LOADI       R67, 1              ; 23:7
+0011:   LOADI       R66, 259            ; 23:7
+0012:   UPCALL      2, R66              ; 23:1, PRINT
+0013:   UPCALL      1, R66              ; 24:1, COLOR
+0014:   LOADI       R66, 0              ; 25:1
+0015:   UPCALL      2, R66              ; 25:1, PRINT
+0016:   LOADI       R67, 2              ; 26:7
+0017:   LOADI       R66, 259            ; 26:7
+0018:   UPCALL      2, R66              ; 26:1, PRINT
+0019:   LOADI       R67, 3              ; 27:7
+0020:   LOADI       R66, 259            ; 27:7
+0021:   UPCALL      2, R66              ; 27:1, PRINT
+0022:   LOADI       R66, 0              ; 28:1
+0023:   UPCALL      2, R66              ; 28:1, PRINT
+0024:   LOADI       R66, 2              ; 29:7
+0025:   UPCALL      1, R66              ; 29:1, COLOR
+0026:   LOADI       R67, 4              ; 30:7
+0027:   LOADI       R66, 259            ; 30:7
+0028:   UPCALL      2, R66              ; 30:1, PRINT
+0029:   UPCALL      1, R66              ; 31:1, COLOR
+0030:   LOADI       R66, 0              ; 32:1
+0031:   UPCALL      2, R66              ; 32:1, PRINT
+0032:   LOADI       R67, 5              ; 33:7
+0033:   LOADI       R66, 275            ; 33:7
+0034:   MOVE        R69, R65            ; 33:35
+0035:   LOADI       R68, 274            ; 33:35
+0036:   LOADI       R71, 6              ; 33:40
+0037:   LOADI       R70, 259            ; 33:40
+0038:   UPCALL      2, R66              ; 33:1, PRINT
+0039:   LOADI       R67, 7              ; 34:7
+0040:   LOADI       R66, 259            ; 34:7
+0041:   UPCALL      2, R66              ; 34:1, PRINT
+0042:   LOADI       R66, 0              ; 35:1
+0043:   UPCALL      2, R66              ; 35:1, PRINT
+0044:   LOADI       R67, 8              ; 36:7
+0045:   LOADI       R66, 275            ; 36:7
+0046:   MOVE        R69, R64            ; 36:42
+0047:   LOADI       R68, 274            ; 36:42
+0048:   LOADI       R71, 9              ; 36:50
+0049:   LOADI       R70, 259            ; 36:50
+0050:   UPCALL      2, R66              ; 36:1, PRINT
+0051:   LOADI       R67, 10             ; 37:7
+0052:   LOADI       R66, 259            ; 37:7
+0053:   UPCALL      2, R66              ; 37:1, PRINT
+0054:   LOADI       R67, 11             ; 38:7
+0055:   LOADI       R66, 259            ; 38:7
+0056:   UPCALL      2, R66              ; 38:1, PRINT
+0057:   LOADI       R66, 0              ; 39:1
+0058:   UPCALL      2, R66              ; 39:1, PRINT
+0059:   LOADI       R66, 1              ; 40:7
+0060:   UPCALL      1, R66              ; 40:1, COLOR
+0061:   LOADI       R67, 12             ; 41:7
+0062:   LOADI       R66, 259            ; 41:7
+0063:   UPCALL      2, R66              ; 41:1, PRINT
+0064:   LOADI       R67, 13             ; 42:7
+0065:   LOADI       R66, 259            ; 42:7
+0066:   UPCALL      2, R66              ; 42:1, PRINT
+0067:   LOADI       R67, 14             ; 43:7
+0068:   LOADI       R66, 259            ; 43:7
+0069:   UPCALL      2, R66              ; 43:1, PRINT
+0070:   UPCALL      1, R66              ; 44:1, COLOR
+0071:   LOADI       R66, 0              ; 45:1
+0072:   UPCALL      2, R66              ; 45:1, PRINT
+0073:   ALLOC       R66, STRING         ; 46:71
+0074:   LOADI       R68, 15             ; 46:7
+0075:   LOADI       R67, 291            ; 46:7
+0076:   LOADRP      R69, STRING, R66    ; 46:71
+0077:   UPCALL      3, R67              ; 46:1, INPUT
+0078:   UPCALL      0, R67              ; 48:1, CLS
+0079:   LOADI       R67, 11             ; 49:7
+0080:   UPCALL      1, R67              ; 49:1, COLOR
+0081:   LOADI       R67, 0              ; 50:1
+0082:   UPCALL      2, R67              ; 50:1, PRINT
+0083:   LOADI       R68, 0              ; 51:7
+0084:   LOADI       R67, 259            ; 51:7
+0085:   UPCALL      2, R67              ; 51:1, PRINT
+0086:   LOADI       R68, 1              ; 52:7
+0087:   LOADI       R67, 259            ; 52:7
+0088:   UPCALL      2, R67              ; 52:1, PRINT
+0089:   UPCALL      1, R67              ; 53:1, COLOR
+0090:   LOADI       R67, 0              ; 54:1
+0091:   UPCALL      2, R67              ; 54:1, PRINT
+0092:   MOVE        R67, R64            ; 57:12
+0093:   LOADI       R68, 16             ; 57:20
+0094:   UPCALL      4, R67              ; 57:1, GPIO_SETUP
+0095:   MOVE        R67, R65            ; 58:12
+0096:   LOADI       R68, 17             ; 58:17
+0097:   UPCALL      4, R67              ; 58:1, GPIO_SETUP
+0098:   LOADI       R68, 18             ; 62:7
+0099:   LOADI       R67, 275            ; 62:7
+0100:   MOVE        R70, R64            ; 62:44
+0101:   LOADI       R69, 274            ; 62:44
+0102:   LOADI       R72, 19             ; 62:52
+0103:   LOADI       R71, 259            ; 62:52
+0104:   UPCALL      2, R67              ; 62:1, PRINT
+0105:   MOVE        R69, R64            ; 63:17
+0106:   UPCALL      5, R68              ; 63:7, GPIO_READ
+0107:   MOVE        R67, R68            ; 63:7
+0108:   JMPF        R67, 112            ; 63:7
+0109:   LOADC       R67, 20             ; 64:11
+0110:   UPCALL      6, R67              ; 64:5, SLEEP
+0111:   JUMP        105                 ; 63:7
+0112:   LOADI       R68, 21             ; 68:7
+0113:   LOADI       R67, 275            ; 68:7
+0114:   MOVE        R70, R65            ; 68:46
+0115:   LOADI       R69, 274            ; 68:46
+0116:   LOADI       R72, 19             ; 68:51
+0117:   LOADI       R71, 259            ; 68:51
+0118:   UPCALL      2, R67              ; 68:1, PRINT
+0119:   LOADI       R67, 5              ; 69:9
+0120:   MOVE        R68, R67            ; 69:5
+0121:   LOADI       R69, 1              ; 69:14
+0122:   CMPGEI      R68, R68, R69       ; 69:11
+0123:   JMPF        R68, 142            ; 69:5
+0124:   MOVE        R68, R65            ; 70:16
+0125:   LOADI       R69, 1              ; 70:21
+0126:   UPCALL      7, R68              ; 70:5, GPIO_WRITE
+0127:   LOADC       R68, 22             ; 71:11
+0128:   UPCALL      6, R68              ; 71:5, SLEEP
+0129:   MOVE        R68, R65            ; 72:16
+0130:   LOADI       R69, 0              ; 72:21
+0131:   UPCALL      7, R68              ; 72:5, GPIO_WRITE
+0132:   LOADC       R68, 22             ; 73:11
+0133:   UPCALL      6, R68              ; 73:5, SLEEP
+0134:   MOVE        R69, R67            ; 74:11
+0135:   LOADI       R68, 258            ; 74:11
+0136:   UPCALL      2, R68              ; 74:5, PRINT
+0137:   MOVE        R68, R67            ; 69:5
+0138:   LOADC       R69, 23             ; 69:22
+0139:   ADDI        R68, R68, R69       ; 69:11
+0140:   MOVE        R67, R68            ; 69:5
+0141:   JUMP        120                 ; 69:5
+0142:   EOF                             ; 0:0
 
 End of input by CTRL-D

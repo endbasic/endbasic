@@ -1,26 +1,26 @@
 // EndBASIC
 // Copyright 2021 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! GPIO access functions and commands for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core::LineCol;
-use endbasic_core::ast::{ArgSep, ExprType};
-use endbasic_core::compiler::{ArgSepSyntax, RequiredValueSyntax, SingularArgSyntax};
-use endbasic_core::exec::{Clearable, Error, Machine, Result, Scope};
-use endbasic_core::syms::{Callable, CallableMetadata, CallableMetadataBuilder, Symbols};
+use endbasic_core2::{
+    ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
+    CallableMetadataBuilder, ExprType, RequiredValueSyntax, Scope, SingularArgSyntax,
+};
 use std::any::Any;
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -29,6 +29,8 @@ use std::rc::Rc;
 
 mod fakes;
 pub use fakes::{MockPins, NoopPins};
+
+use crate::{Clearable, MachineBuilder};
 
 /// Category description for all symbols provided by this module.
 const CATEGORY: &str = "Hardware interface
@@ -42,12 +44,12 @@ pub struct Pin(pub u8);
 
 impl Pin {
     /// Creates a new pin number from an EndBASIC integer value.
-    fn from_i32(i: i32, pos: LineCol) -> Result<Self> {
+    fn from_i32(i: i32) -> Result<Self, String> {
         if i < 0 {
-            return Err(Error::SyntaxError(pos, format!("Pin number {} must be positive", i)));
+            return Err(format!("Pin number {} must be positive", i));
         }
         if i > u8::MAX as i32 {
-            return Err(Error::SyntaxError(pos, format!("Pin number {} is too large", i)));
+            return Err(format!("Pin number {} is too large", i));
         }
         Ok(Self(i as u8))
     }
@@ -71,15 +73,23 @@ pub enum PinMode {
 
 impl PinMode {
     /// Obtains a `PinMode` from a value.
-    fn parse(s: &str, pos: LineCol) -> Result<PinMode> {
+    fn parse(s: &str) -> Result<PinMode, String> {
         match s.to_ascii_uppercase().as_ref() {
             "IN" => Ok(PinMode::In),
             "IN-PULL-UP" => Ok(PinMode::InPullUp),
             "IN-PULL-DOWN" => Ok(PinMode::InPullDown),
             "OUT" => Ok(PinMode::Out),
-            s => Err(Error::SyntaxError(pos, format!("Unknown pin mode {}", s))),
+            s => Err(format!("Unknown pin mode {}", s)),
         }
     }
+}
+
+fn parse_pin(scope: &Scope<'_>, narg: u8) -> CallResult<Pin> {
+    Pin::from_i32(scope.get_integer(narg)).map_err(|e| CallError::Syntax(scope.get_pos(narg), e))
+}
+
+fn parse_pin_mode(scope: &Scope<'_>, narg: u8) -> CallResult<PinMode> {
+    PinMode::parse(scope.get_string(narg)).map_err(|e| CallError::Syntax(scope.get_pos(narg), e))
 }
 
 /// Generic abstraction over a GPIO chip to back all EndBASIC commands.
@@ -123,14 +133,14 @@ impl PinsClearable {
 }
 
 impl Clearable for PinsClearable {
-    fn reset_state(&self, _syms: &mut Symbols) {
+    fn reset_state(&self) {
         let _ = self.pins.borrow_mut().clear_all();
     }
 }
 
 /// The `GPIO_SETUP` command.
 pub struct GpioSetupCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     pins: Rc<RefCell<dyn Pins>>,
 }
 
@@ -177,29 +187,23 @@ It is OK to reconfigure an already configured pin without clearing its state fir
 
 #[async_trait(?Send)]
 impl Callable for GpioSetupCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
-        let pin = {
-            let (i, pos) = scope.pop_integer_with_pos();
-            Pin::from_i32(i, pos)?
-        };
-        let mode = {
-            let (t, pos) = scope.pop_string_with_pos();
-            PinMode::parse(&t, pos)?
-        };
+        let pin = parse_pin(&scope, 0)?;
+        let mode = parse_pin_mode(&scope, 1)?;
 
-        self.pins.borrow_mut().setup(pin, mode).map_err(|e| scope.io_error(e))?;
+        self.pins.borrow_mut().setup(pin, mode).map_err(CallError::from)?;
         Ok(())
     }
 }
 
 /// The `GPIO_CLEAR` command.
 pub struct GpioClearCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     pins: Rc<RefCell<dyn Pins>>,
 }
 
@@ -236,21 +240,18 @@ before.",
 
 #[async_trait(?Send)]
 impl Callable for GpioClearCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if scope.nargs() == 0 {
-            self.pins.borrow_mut().clear_all().map_err(|e| scope.io_error(e))?;
+            self.pins.borrow_mut().clear_all().map_err(CallError::from)?;
         } else {
             debug_assert_eq!(1, scope.nargs());
-            let pin = {
-                let (i, pos) = scope.pop_integer_with_pos();
-                Pin::from_i32(i, pos)?
-            };
+            let pin = parse_pin(&scope, 0)?;
 
-            self.pins.borrow_mut().clear(pin).map_err(|e| scope.io_error(e))?;
+            self.pins.borrow_mut().clear(pin).map_err(CallError::from)?;
         }
 
         Ok(())
@@ -259,7 +260,7 @@ impl Callable for GpioClearCommand {
 
 /// The `GPIO_READ` function.
 pub struct GpioReadFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     pins: Rc<RefCell<dyn Pins>>,
 }
 
@@ -292,25 +293,22 @@ Returns FALSE to represent a low value, and TRUE to represent a high value.",
 
 #[async_trait(?Send)]
 impl Callable for GpioReadFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
-        let pin = {
-            let (i, pos) = scope.pop_integer_with_pos();
-            Pin::from_i32(i, pos)?
-        };
+        let pin = parse_pin(&scope, 0)?;
 
-        let value = self.pins.borrow_mut().read(pin).map_err(|e| scope.io_error(e))?;
+        let value = self.pins.borrow_mut().read(pin).map_err(CallError::from)?;
         scope.return_boolean(value)
     }
 }
 
 /// The `GPIO_WRITE` command.
 pub struct GpioWriteCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     pins: Rc<RefCell<dyn Pins>>,
 }
 
@@ -351,26 +349,23 @@ A FALSE value? sets the pin to low, and a TRUE value? sets the pin to high.",
 
 #[async_trait(?Send)]
 impl Callable for GpioWriteCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
-        let pin = {
-            let (i, pos) = scope.pop_integer_with_pos();
-            Pin::from_i32(i, pos)?
-        };
-        let value = scope.pop_boolean();
+        let pin = parse_pin(&scope, 0)?;
+        let value = scope.get_boolean(1);
 
-        self.pins.borrow_mut().write(pin, value).map_err(|e| scope.io_error(e))?;
+        self.pins.borrow_mut().write(pin, value).map_err(CallError::from)?;
         Ok(())
     }
 }
 
 /// The `GPIO_MOCK_INJECT` command.
 pub struct GpioMockInjectCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     pins: Rc<RefCell<dyn Pins>>,
 }
 
@@ -412,17 +407,14 @@ the next GPIO_READ call for the given pin% to return the given high? value.",
 
 #[async_trait(?Send)]
 impl Callable for GpioMockInjectCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
-        let pin = {
-            let (i, pos) = scope.pop_integer_with_pos();
-            Pin::from_i32(i, pos)?
-        };
-        let high = scope.pop_boolean();
+        let pin = parse_pin(&scope, 0)?;
+        let high = scope.get_boolean(1);
 
         self.pins
             .borrow_mut()
@@ -436,7 +428,7 @@ impl Callable for GpioMockInjectCommand {
 
 /// The `GPIO_MOCK_TRACE` function.
 pub struct GpioMockTraceFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     pins: Rc<RefCell<dyn Pins>>,
 }
 
@@ -462,11 +454,11 @@ performed since the last reset.",
 
 #[async_trait(?Send)]
 impl Callable for GpioMockTraceFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>, _machine: &mut Machine) -> Result<()> {
+    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         let pins = self.pins.borrow();
         let mock =
@@ -477,7 +469,7 @@ impl Callable for GpioMockTraceFunction {
 }
 
 /// Adds all symbols provided by this module to the given `machine`.
-pub fn add_all(machine: &mut Machine, pins: Rc<RefCell<dyn Pins>>) {
+pub fn add_all(machine: &mut MachineBuilder, pins: Rc<RefCell<dyn Pins>>) {
     if pins.borrow().as_any().downcast_ref::<MockPins>().is_some() {
         machine.add_callable(GpioMockInjectCommand::new(pins.clone()));
         machine.add_callable(GpioMockTraceFunction::new(pins.clone()));
@@ -518,13 +510,13 @@ mod tests {
 
     /// Creates a machine backed by `MockPins` pre-seeded with `reads` and returns both the machine
     /// and a handle to inspect the trace afterwards.
-    fn make_mock_machine(reads: &[(u8, bool)]) -> (Machine, Rc<RefCell<MockPins>>) {
+    fn make_mock_machine(reads: &[(u8, bool)]) -> (crate::Machine, Rc<RefCell<MockPins>>) {
         let mock_pins = Rc::new(RefCell::new(MockPins::default()));
         for &(pin, high) in reads {
             mock_pins.borrow_mut().inject_read(Pin(pin), high);
         }
         let pins: Rc<RefCell<dyn Pins>> = mock_pins.clone();
-        let machine = crate::MachineBuilder::default().with_gpio_pins(pins).build().unwrap();
+        let machine = MachineBuilder::default().with_gpio_pins(pins).build();
         (machine, mock_pins)
     }
 
@@ -532,7 +524,8 @@ mod tests {
     /// resulting trace equals `expected_trace`.
     fn do_mock_test(code: &str, reads: &[(u8, bool)], expected_trace: &[i32]) {
         let (mut machine, mock_pins) = make_mock_machine(reads);
-        let _ = block_on(machine.exec(&mut code.as_bytes())).unwrap();
+        machine.compile(&mut code.as_bytes()).unwrap();
+        let _ = block_on(machine.exec()).unwrap();
         assert_eq!(expected_trace, mock_pins.borrow().trace());
     }
 
@@ -577,7 +570,7 @@ mod tests {
     fn test_gpio_setup_errors() {
         check_stmt_compilation_err("1:1: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP"#);
         check_stmt_compilation_err("1:1: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP 1"#);
-        check_stmt_compilation_err("1:15: Expected STRING but found INTEGER", r#"GPIO_SETUP 1; 2"#);
+        check_stmt_compilation_err("1:13: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP 1; 2"#);
         check_stmt_compilation_err("1:1: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP 1, 2, 3"#);
 
         check_pin_validation("1:12: ", "1:12: ", r#"GPIO_SETUP _PIN_, "IN""#);

@@ -1,7 +1,7 @@
 [package]
 name = "endbasic-st7735s"
 version = "0.12.99" # ENDBASIC-VERSION
-license = "Apache-2.0"
+license = "AGPL-3.0-or-later"
 authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
 keywords = ["basic", "interpreter", "learning", "programming"]
@@ -19,9 +19,9 @@ async-channel = "2.2"
 async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
 
-[dependencies.endbasic-core]
+[dependencies.endbasic-core2]
 version = "0.12.99" # ENDBASIC-VERSION
-path = "../core"
+path = "../core2"
 
 [dependencies.endbasic-std]
 version = "0.12.99" # ENDBASIC-VERSION
