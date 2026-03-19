@@ -12,8 +12,7 @@ END
 0000:   ENTER       1                   # 0:0
 0001:   LOADI       R64, 0              # 1:1
 0002:   END         R64                 # 1:1
-0003:   LOADI       R64, 0              # 0:0
-0004:   END         R64                 # 0:0
+0003:   EOF                             # 0:0
 ```
 
 # Test: Exit code is an integer immediate
@@ -30,8 +29,7 @@ END 42
 0000:   ENTER       1                   # 0:0
 0001:   LOADI       R64, 42             # 1:5
 0002:   END         R64                 # 1:1
-0003:   LOADI       R64, 0              # 0:0
-0004:   END         R64                 # 0:0
+0003:   EOF                             # 0:0
 ```
 
 ## Exit code
@@ -55,8 +53,7 @@ END 43.98
 0001:   LOADC       R64, 0              # 1:5
 0002:   DTOI        R64                 # 1:5
 0003:   END         R64                 # 1:1
-0004:   LOADI       R64, 0              # 0:0
-0005:   END         R64                 # 0:0
+0004:   EOF                             # 0:0
 ```
 
 ## Exit code
@@ -83,8 +80,7 @@ END i
 0002:   LOADI       R0, 5               # 2:5
 0003:   MOVE        R64, R0             # 3:5
 0004:   END         R64                 # 3:1
-0005:   LOADI       R64, 0              # 0:0
-0006:   END         R64                 # 0:0
+0005:   EOF                             # 0:0
 ```
 
 ## Exit code
@@ -109,8 +105,7 @@ END i
 0001:   LOADI       R64, 3              # 1:5
 0002:   MOVE        R65, R64            # 2:5
 0003:   END         R65                 # 2:1
-0004:   LOADI       R65, 0              # 0:0
-0005:   END         R65                 # 0:0
+0004:   EOF                             # 0:0
 ```
 
 ## Exit code
@@ -178,8 +173,7 @@ END i
 0002:   NEGI        R64                 # 1:5
 0003:   MOVE        R65, R64            # 2:5
 0004:   END         R65                 # 2:1
-0005:   LOADI       R65, 0              # 0:0
-0006:   END         R65                 # 0:0
+0005:   EOF                             # 0:0
 ```
 
 ## Runtime errors
@@ -204,8 +198,7 @@ END i
 0001:   LOADI       R64, 128            # 1:5
 0002:   MOVE        R65, R64            # 2:5
 0003:   END         R65                 # 2:1
-0004:   LOADI       R65, 0              # 0:0
-0005:   END         R65                 # 0:0
+0004:   EOF                             # 0:0
 ```
 
 ## Runtime errors
@@ -243,8 +236,7 @@ NEXT
 0013:   LOADI       R65, 1              # 1:16
 0014:   ADDI        R64, R64, R65       # 1:11
 0015:   JUMP        2                   # 1:5
-0016:   LOADI       R65, 0              # 0:0
-0017:   END         R65                 # 0:0
+0016:   EOF                             # 0:0
 ```
 
 ## Exit code

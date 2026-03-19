@@ -19,8 +19,7 @@ OUT bool_1, bool_2
 0005:   MOVE        R69, R65            # 3:13
 0006:   LOADI       R68, 256            # 3:13
 0007:   UPCALL      0, R66              # 3:1, OUT
-0008:   LOADI       R66, 0              # 0:0
-0009:   END         R66                 # 0:0
+0008:   EOF                             # 0:0
 ```
 
 ## Output
@@ -58,8 +57,7 @@ OUT zero_double, small_double, large_double, tiny_double
 0011:   MOVE        R75, R67            # 5:46
 0012:   LOADI       R74, 257            # 5:46
 0013:   UPCALL      0, R68              # 5:1, OUT
-0014:   LOADI       R68, 0              # 0:0
-0015:   END         R68                 # 0:0
+0014:   EOF                             # 0:0
 ```
 
 ## Output
@@ -85,8 +83,7 @@ OUT small_int
 0002:   MOVE        R66, R64            # 2:5
 0003:   LOADI       R65, 258            # 2:5
 0004:   UPCALL      0, R65              # 2:1, OUT
-0005:   LOADI       R65, 0              # 0:0
-0006:   END         R65                 # 0:0
+0005:   EOF                             # 0:0
 ```
 
 ## Output
@@ -112,8 +109,7 @@ OUT large_int
 0002:   MOVE        R66, R64            # 2:5
 0003:   LOADI       R65, 258            # 2:5
 0004:   UPCALL      0, R65              # 2:1, OUT
-0005:   LOADI       R65, 0              # 0:0
-0006:   END         R65                 # 0:0
+0005:   EOF                             # 0:0
 ```
 
 ## Output
@@ -139,8 +135,7 @@ OUT text
 0002:   MOVE        R66, R64            # 2:5
 0003:   LOADI       R65, 259            # 2:5
 0004:   UPCALL      0, R65              # 2:1, OUT
-0005:   LOADI       R65, 0              # 0:0
-0006:   END         R65                 # 0:0
+0005:   EOF                             # 0:0
 ```
 
 ## Output

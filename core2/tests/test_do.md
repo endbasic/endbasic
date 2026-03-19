@@ -22,8 +22,7 @@ LOOP
 0006:   LOADI       R64, 259            # 4:9
 0007:   UPCALL      0, R64              # 4:5, OUT
 0008:   JUMP        1                   # 0:0
-0009:   LOADI       R64, 0              # 0:0
-0010:   END         R64                 # 0:0
+0009:   EOF                             # 0:0
 ```
 
 ## Output
@@ -61,8 +60,7 @@ LOOP
 0011:   LOADI       R65, 1              # 4:13
 0012:   SUBI        R64, R64, R65       # 4:11
 0013:   JUMP        2                   # 2:10
-0014:   LOADI       R65, 0              # 0:0
-0015:   END         R65                 # 0:0
+0014:   EOF                             # 0:0
 ```
 
 # Test: Pre UNTIL DO loop with iterations
@@ -94,8 +92,7 @@ LOOP
 0011:   LOADI       R65, 1              # 4:13
 0012:   SUBI        R64, R64, R65       # 4:11
 0013:   JUMP        2                   # 2:10
-0014:   LOADI       R65, 0              # 0:0
-0015:   END         R65                 # 0:0
+0014:   EOF                             # 0:0
 ```
 
 ## Output
@@ -134,8 +131,7 @@ LOOP
 0010:   LOADI       R65, 1              # 4:13
 0011:   SUBI        R64, R64, R65       # 4:11
 0012:   JUMP        2                   # 2:10
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 # Test: Pre WHILE DO loop with iterations
@@ -166,8 +162,7 @@ LOOP
 0010:   LOADI       R65, 1              # 4:13
 0011:   SUBI        R64, R64, R65       # 4:11
 0012:   JUMP        2                   # 2:10
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -205,8 +200,7 @@ LOOP UNTIL n = 0
 0009:   LOADI       R66, 0              # 5:16
 0010:   CMPEQI      R65, R65, R66       # 5:14
 0011:   JMPF        R65, 2              # 5:12
-0012:   LOADI       R65, 0              # 0:0
-0013:   END         R65                 # 0:0
+0012:   EOF                             # 0:0
 ```
 
 ## Output
@@ -242,8 +236,7 @@ LOOP UNTIL n = 0
 0009:   LOADI       R66, 0              # 5:16
 0010:   CMPEQI      R65, R65, R66       # 5:14
 0011:   JMPF        R65, 2              # 5:12
-0012:   LOADI       R65, 0              # 0:0
-0013:   END         R65                 # 0:0
+0012:   EOF                             # 0:0
 ```
 
 ## Output
@@ -282,8 +275,7 @@ LOOP WHILE n > 0
 0010:   CMPGTI      R65, R65, R66       # 5:14
 0011:   JMPF        R65, 13             # 5:12
 0012:   JUMP        2                   # 5:12
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -320,8 +312,7 @@ LOOP WHILE n > 0
 0010:   CMPGTI      R65, R65, R66       # 5:14
 0011:   JMPF        R65, 13             # 5:12
 0012:   JUMP        2                   # 5:12
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -392,8 +383,7 @@ LOOP
 0036:   LOADI       R66, 1              # 10:13
 0037:   SUBI        R64, R64, R66       # 10:11
 0038:   JUMP        2                   # 2:10
-0039:   LOADI       R66, 0              # 0:0
-0040:   END         R66                 # 0:0
+0039:   EOF                             # 0:0
 ```
 
 ## Output
@@ -457,8 +447,7 @@ LOOP
 0027:   LOADI       R66, 1              # 10:13
 0028:   SUBI        R64, R64, R66       # 10:11
 0029:   JUMP        2                   # 2:10
-0030:   LOADI       R66, 0              # 0:0
-0031:   END         R66                 # 0:0
+0030:   EOF                             # 0:0
 ```
 
 ## Output
@@ -523,8 +512,7 @@ LOOP
 0029:   LOADI       R66, 1              # 10:13
 0030:   SUBI        R64, R64, R66       # 10:11
 0031:   JUMP        2                   # 2:10
-0032:   LOADI       R66, 0              # 0:0
-0033:   END         R66                 # 0:0
+0032:   EOF                             # 0:0
 ```
 
 ## Output
@@ -578,8 +566,7 @@ LOOP
 0021:   LOADI       R66, 1              # 9:13
 0022:   SUBI        R64, R64, R66       # 9:11
 0023:   JUMP        2                   # 2:10
-0024:   LOADI       R66, 0              # 0:0
-0025:   END         R66                 # 0:0
+0024:   EOF                             # 0:0
 ```
 
 ## Output
@@ -626,8 +613,7 @@ LOOP
 0015:   LOADI       R66, 1              # 8:13
 0016:   SUBI        R64, R64, R66       # 8:11
 0017:   JUMP        2                   # 2:10
-0018:   LOADI       R66, 0              # 0:0
-0019:   END         R66                 # 0:0
+0018:   EOF                             # 0:0
 ```
 
 ## Output
@@ -684,8 +670,7 @@ LOOP
 0027:   LOADI       R66, 1              # 6:13
 0028:   SUBI        R64, R64, R66       # 6:11
 0029:   JUMP        2                   # 2:10
-0030:   LOADI       R66, 0              # 0:0
-0031:   END         R66                 # 0:0
+0030:   EOF                             # 0:0
 ```
 
 ## Output
@@ -747,8 +732,7 @@ LOOP
 0026:   LOADI       R65, 1              # 10:13
 0027:   SUBI        R64, R64, R65       # 10:11
 0028:   JUMP        16                  # 8:10
-0029:   LOADI       R65, 0              # 0:0
-0030:   END         R65                 # 0:0
+0029:   EOF                             # 0:0
 ```
 
 ## Output
@@ -828,8 +812,7 @@ RETURN
 0039:   SUBI        R65, R65, R66       # 13:11
 0040:   JUMP        18                  # 10:10
 0041:   RETURN                          # 15:1
-0042:   LOADI       R66, 0              # 0:0
-0043:   END         R66                 # 0:0
+0042:   EOF                             # 0:0
 ```
 
 ## Output

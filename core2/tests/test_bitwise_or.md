@@ -15,8 +15,7 @@ OUT 12 OR 10
 0003:   OR          R65, R65, R66       # 1:8
 0004:   LOADI       R64, 258            # 1:5
 0005:   UPCALL      0, R64              # 1:1, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -76,8 +75,7 @@ OUT FALSE OR FALSE
 0008:   OR          R65, R65, R66       # 2:11
 0009:   LOADI       R64, 256            # 2:5
 0010:   UPCALL      0, R64              # 2:1, OUT
-0011:   LOADI       R64, 0              # 0:0
-0012:   END         R64                 # 0:0
+0011:   EOF                             # 0:0
 ```
 
 ## Output

@@ -26,8 +26,7 @@ WEND
 0010:   LOADI       R65, 1              # 4:13
 0011:   SUBI        R64, R64, R65       # 4:11
 0012:   JUMP        2                   # 2:7
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -58,8 +57,7 @@ WEND
 0004:   LOADI       R64, 258            # 2:9
 0005:   UPCALL      0, R64              # 2:5, OUT
 0006:   JUMP        1                   # 1:7
-0007:   LOADI       R64, 0              # 0:0
-0008:   END         R64                 # 0:0
+0007:   EOF                             # 0:0
 ```
 
 # Test: WHILE guard must be boolean
@@ -163,8 +161,7 @@ OUT 9
 0017:   LOADI       R66, 9              # 9:5
 0018:   LOADI       R65, 258            # 9:5
 0019:   UPCALL      0, R65              # 9:1, OUT
-0020:   LOADI       R65, 0              # 0:0
-0021:   END         R65                 # 0:0
+0020:   EOF                             # 0:0
 ```
 
 ## Output

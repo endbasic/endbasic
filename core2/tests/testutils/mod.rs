@@ -348,6 +348,7 @@ async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()
         while stop.is_none() {
             match vm.exec() {
                 StopReason::End(code) => stop = Some(Ok(code.to_i32())),
+                StopReason::Eof => stop = Some(Ok(0)),
                 StopReason::Upcall(handle) => {
                     if let Err(e) = handle.invoke().await {
                         stop = Some(Err(e.to_string()));

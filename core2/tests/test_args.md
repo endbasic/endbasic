@@ -40,8 +40,7 @@ OUT_REQUIRED_VALUE 4
 0000:   ENTER       1                   # 0:0
 0001:   LOADI       R64, 4              # 1:20
 0002:   UPCALL      0, R64              # 1:1, OUT_REQUIRED_VALUE
-0003:   LOADI       R64, 0              # 0:0
-0004:   END         R64                 # 0:0
+0003:   EOF                             # 0:0
 ```
 
 ## Output
@@ -65,8 +64,7 @@ OUT_REQUIRED_VALUE 7.8
 0001:   LOADC       R64, 0              # 1:20
 0002:   DTOI        R64                 # 1:20
 0003:   UPCALL      0, R64              # 1:1, OUT_REQUIRED_VALUE
-0004:   LOADI       R64, 0              # 0:0
-0005:   END         R64                 # 0:0
+0004:   EOF                             # 0:0
 ```
 
 ## Output
@@ -89,8 +87,7 @@ OUT_OPTIONAL
 0000:   ENTER       1                   # 0:0
 0001:   LOADI       R64, 0              # 1:1
 0002:   UPCALL      0, R64              # 1:1, OUT_OPTIONAL
-0003:   LOADI       R64, 0              # 0:0
-0004:   END         R64                 # 0:0
+0003:   EOF                             # 0:0
 ```
 
 ## Output
@@ -114,8 +111,7 @@ OUT_OPTIONAL "Foo"
 0001:   LOADI       R65, 0              # 1:14
 0002:   LOADI       R64, 259            # 1:14
 0003:   UPCALL      0, R64              # 1:1, OUT_OPTIONAL
-0004:   LOADI       R64, 0              # 0:0
-0005:   END         R64                 # 0:0
+0004:   EOF                             # 0:0
 ```
 
 ## Output
@@ -157,8 +153,7 @@ OUT_ANY_VALUE "Text"
 0004:   LOADI       R65, 0              # 2:15
 0005:   LOADI       R64, 259            # 2:15
 0006:   UPCALL      0, R64              # 2:1, OUT_ANY_VALUE
-0007:   LOADI       R64, 0              # 0:0
-0008:   END         R64                 # 0:0
+0007:   EOF                             # 0:0
 ```
 
 ## Output
@@ -204,8 +199,7 @@ OUT_ANY_VALUE_OPTIONAL "Text"
 0006:   LOADI       R65, 0              # 3:24
 0007:   LOADI       R64, 259            # 3:24
 0008:   UPCALL      0, R64              # 3:1, OUT_ANY_VALUE_OPTIONAL
-0009:   LOADI       R64, 0              # 0:0
-0010:   END         R64                 # 0:0
+0009:   EOF                             # 0:0
 ```
 
 ## Output
@@ -262,8 +256,7 @@ OUT_POSITIONAL ; 0 AS 8.2
 0016:   LOADC       R67, 3              # 3:23
 0017:   LOADI       R66, 257            # 3:23
 0018:   UPCALL      0, R64              # 3:1, OUT_POSITIONAL
-0019:   LOADI       R64, 0              # 0:0
-0020:   END         R64                 # 0:0
+0019:   EOF                             # 0:0
 ```
 
 ## Output
@@ -306,9 +299,9 @@ OUT
 
 ```asm
 0000:   ENTER       1                   # 0:0
-0001:   UPCALL      0, R64              # 1:1, OUT
-0002:   LOADI       R64, 0              # 0:0
-0003:   END         R64                 # 0:0
+0001:   LOADI       R64, 0              # 1:1
+0002:   UPCALL      0, R64              # 1:1, OUT
+0003:   EOF                             # 0:0
 ```
 
 ## Output
@@ -336,8 +329,7 @@ OUT 100, 200, 300
 0005:   LOADI       R69, 300            # 1:15
 0006:   LOADI       R68, 258            # 1:15
 0007:   UPCALL      0, R64              # 1:1, OUT
-0008:   LOADI       R64, 0              # 0:0
-0009:   END         R64                 # 0:0
+0008:   EOF                             # 0:0
 ```
 
 ## Output
@@ -365,8 +357,7 @@ OUT 100, , 300,
 0005:   LOADI       R67, 290            # 1:12
 0006:   LOADI       R69, 0              # 1:16
 0007:   UPCALL      0, R64              # 1:1, OUT
-0008:   LOADI       R64, 0              # 0:0
-0009:   END         R64                 # 0:0
+0008:   EOF                             # 0:0
 ```
 
 ## Output
@@ -396,8 +387,7 @@ OUT 100; 200 AS 300; 400
 0007:   LOADI       R71, 400            # 1:22
 0008:   LOADI       R70, 258            # 1:22
 0009:   UPCALL      0, R64              # 1:1, OUT
-0010:   LOADI       R64, 0              # 0:0
-0011:   END         R64                 # 0:0
+0010:   EOF                             # 0:0
 ```
 
 ## Output
@@ -423,8 +413,7 @@ OUT 100, "Foo"
 0003:   LOADI       R67, 0              # 1:10
 0004:   LOADI       R66, 259            # 1:10
 0005:   UPCALL      0, R64              # 1:1, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -483,8 +472,7 @@ OUT i
 0005:   MOVE        R65, R0             # 4:5
 0006:   LOADI       R64, 258            # 4:5
 0007:   UPCALL      1, R64              # 4:1, OUT
-0008:   LOADI       R64, 0              # 0:0
-0009:   END         R64                 # 0:0
+0008:   EOF                             # 0:0
 ```
 
 ## Output
@@ -513,8 +501,7 @@ OUT i
 0004:   MOVE        R66, R64            # 3:5
 0005:   LOADI       R65, 258            # 3:5
 0006:   UPCALL      1, R65              # 3:1, OUT
-0007:   LOADI       R65, 0              # 0:0
-0008:   END         R65                 # 0:0
+0007:   EOF                             # 0:0
 ```
 
 ## Output
@@ -566,8 +553,7 @@ OUT i
 0010:   MOVE        R66, R64            # 5:5
 0011:   LOADI       R65, 258            # 5:5
 0012:   UPCALL      1, R65              # 5:1, OUT
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -605,8 +591,7 @@ OUT t
 0010:   MOVE        R66, R64            # 5:5
 0011:   LOADI       R65, 259            # 5:5
 0012:   UPCALL      1, R65              # 5:1, OUT
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -672,8 +657,7 @@ OUT b, d, i, s
 0038:   MOVE        R75, R67            # 5:14
 0039:   LOADI       R74, 259            # 5:14
 0040:   UPCALL      1, R68              # 5:1, OUT
-0041:   LOADI       R68, 0              # 0:0
-0042:   END         R68                 # 0:0
+0041:   EOF                             # 0:0
 ```
 
 ## Output
@@ -776,8 +760,7 @@ OUT b
 0005:   MOVE        R66, R64            # 3:5
 0006:   LOADI       R65, 256            # 3:5
 0007:   UPCALL      1, R65              # 3:1, OUT
-0008:   LOADI       R65, 0              # 0:0
-0009:   END         R65                 # 0:0
+0008:   EOF                             # 0:0
 ```
 
 ## Output

@@ -93,6 +93,7 @@ fn main() {
                 eprintln!("Script exited with code {}", code.to_i32());
             }
         }
+        StopReason::Eof => (),
         StopReason::Exception(pos, msg) => {
             eprintln!("Script raised an exception at {}: {}", pos, msg);
             std::process::exit(1);

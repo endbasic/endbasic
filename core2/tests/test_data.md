@@ -11,10 +11,9 @@ GETDATA
 ## Disassembly
 
 ```asm
-0000:   ENTER       1                   # 0:0
+0000:   ENTER       0                   # 0:0
 0001:   UPCALL      0, R64              # 3:1, GETDATA
-0002:   LOADI       R64, 0              # 0:0
-0003:   END         R64                 # 0:0
+0002:   EOF                             # 0:0
 ```
 
 ## Output
@@ -64,8 +63,7 @@ GETDATA
 0016:   ADDI        R64, R64, R65       # 9:11
 0017:   JUMP        10                  # 9:5
 0018:   UPCALL      0, R65              # 12:1, GETDATA
-0019:   LOADI       R65, 0              # 0:0
-0020:   END         R65                 # 0:0
+0019:   EOF                             # 0:0
 ```
 
 ## Output
@@ -88,11 +86,10 @@ GETDATA
 ## Disassembly
 
 ```asm
-0000:   ENTER       1                   # 0:0
+0000:   ENTER       0                   # 0:0
 0001:   UPCALL      0, R64              # 1:1, GETDATA
 0002:   UPCALL      0, R64              # 4:1, GETDATA
-0003:   LOADI       R64, 0              # 0:0
-0004:   END         R64                 # 0:0
+0003:   EOF                             # 0:0
 ```
 
 ## Output

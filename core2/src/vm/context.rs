@@ -34,6 +34,9 @@ pub(super) enum InternalStopReason {
     /// Execution terminated due to an `END` instruction.
     End(ExitCode),
 
+    /// Execution terminated due to natural fallthrough.
+    Eof,
+
     /// Execution stopped due to an instruction-level exception.
     Exception(Address, String),
 
@@ -331,6 +334,7 @@ impl Context {
                 Opcode::EqualText => self.do_equal_text(instr, &image.constants, heap),
                 Opcode::End => self.do_end(instr),
                 Opcode::Enter => self.do_enter(instr),
+                Opcode::Eof => self.do_eof(instr),
                 Opcode::Gosub => self.do_gosub(instr),
                 Opcode::GreaterDouble => self.do_greater_double(instr),
                 Opcode::GreaterEqualDouble => self.do_greater_equal_double(instr),
@@ -669,6 +673,12 @@ impl Context {
         let nlocals = bytecode::parse_enter(instr);
         self.regs.resize(self.regs.len() + usize::from(nlocals), 0);
         self.pc += 1;
+    }
+
+    /// Implements the `Eof` opcode.
+    pub(super) fn do_eof(&mut self, instr: u32) {
+        bytecode::parse_eof(instr);
+        self.stop = Some(InternalStopReason::Eof);
     }
 
     /// Implements the `Gosub` opcode.

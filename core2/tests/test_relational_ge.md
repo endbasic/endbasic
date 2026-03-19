@@ -15,8 +15,7 @@ OUT 3 >= 2
 0003:   CMPGEI      R65, R65, R66       # 1:7
 0004:   LOADI       R64, 256            # 1:5
 0005:   UPCALL      0, R64              # 1:1, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -42,8 +41,7 @@ OUT 2.5 >= 2.0
 0003:   CMPGED      R65, R65, R66       # 1:9
 0004:   LOADI       R64, 256            # 1:5
 0005:   UPCALL      0, R64              # 1:1, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -70,8 +68,7 @@ OUT 2 >= 2.5
 0004:   CMPGED      R65, R65, R66       # 1:7
 0005:   LOADI       R64, 256            # 1:5
 0006:   UPCALL      0, R64              # 1:1, OUT
-0007:   LOADI       R64, 0              # 0:0
-0008:   END         R64                 # 0:0
+0007:   EOF                             # 0:0
 ```
 
 ## Output
@@ -97,8 +94,7 @@ OUT "foo" >= "bar"
 0003:   CMPGES      R65, R65, R66       # 1:11
 0004:   LOADI       R64, 256            # 1:5
 0005:   UPCALL      0, R64              # 1:1, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output

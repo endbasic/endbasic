@@ -8,7 +8,6 @@
 ## Disassembly
 
 ```asm
-0000:   ENTER       1                   # 0:0
-0001:   LOADI       R64, 0              # 0:0
-0002:   END         R64                 # 0:0
+0000:   ENTER       0                   # 0:0
+0001:   EOF                             # 0:0
 ```
