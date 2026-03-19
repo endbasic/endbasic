@@ -18,8 +18,7 @@ OUT a
 0003:   MOVE        R66, R64            # 4:5
 0004:   LOADI       R65, 258            # 4:5
 0005:   UPCALL      0, R65              # 4:1, OUT
-0006:   LOADI       R65, 0              # 0:0
-0007:   END         R65                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -52,8 +51,7 @@ OUT a
 0006:   MOVE        R66, R64            # 5:5
 0007:   LOADI       R65, 259            # 5:5
 0008:   UPCALL      0, R65              # 5:1, OUT
-0009:   LOADI       R65, 0              # 0:0
-0010:   END         R65                 # 0:0
+0009:   EOF                             # 0:0
 ```
 
 ## Output
@@ -87,8 +85,7 @@ OUT a
 0006:   MOVE        R66, R64            # 5:5
 0007:   LOADI       R65, 259            # 5:5
 0008:   UPCALL      0, R65              # 5:1, OUT
-0009:   LOADI       R65, 0              # 0:0
-0010:   END         R65                 # 0:0
+0009:   EOF                             # 0:0
 ```
 
 ## Output
@@ -160,8 +157,7 @@ OUT d
 0003:   MOVE        R66, R64            # 2:5
 0004:   LOADI       R65, 257            # 2:5
 0005:   UPCALL      0, R65              # 2:1, OUT
-0006:   LOADI       R65, 0              # 0:0
-0007:   END         R65                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -199,8 +195,7 @@ OUT i1, i2
 0009:   MOVE        R69, R65            # 7:9
 0010:   LOADI       R68, 258            # 7:9
 0011:   UPCALL      0, R66              # 7:1, OUT
-0012:   LOADI       R66, 0              # 0:0
-0013:   END         R66                 # 0:0
+0012:   EOF                             # 0:0
 ```
 
 ## Output

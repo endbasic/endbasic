@@ -15,8 +15,7 @@ OUT 3 << 2
 0003:   SHL         R65, R65, R66       # 1:7
 0004:   LOADI       R64, 258            # 1:5
 0005:   UPCALL      0, R64              # 1:1, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -42,8 +41,7 @@ OUT 7 << 0
 0003:   SHL         R65, R65, R66       # 1:7
 0004:   LOADI       R64, 258            # 1:5
 0005:   UPCALL      0, R64              # 1:1, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -69,8 +67,7 @@ OUT 1 << 32
 0003:   SHL         R65, R65, R66       # 1:7
 0004:   LOADI       R64, 258            # 1:5
 0005:   UPCALL      0, R64              # 1:1, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -111,8 +108,7 @@ OUT 1 << -1
 0004:   SHL         R65, R65, R66       # 1:7
 0005:   LOADI       R64, 258            # 1:5
 0006:   UPCALL      0, R64              # 1:1, OUT
-0007:   LOADI       R64, 0              # 0:0
-0008:   END         R64                 # 0:0
+0007:   EOF                             # 0:0
 ```
 
 ## Runtime errors

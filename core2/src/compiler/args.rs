@@ -376,6 +376,13 @@ pub(super) fn compile_args(
             return Err(Error::CallableSyntax(key_pos, md));
         }
 
+        if arg_iter.peek().is_none() {
+            let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, key_pos))?;
+            arg_linecols.push(key_pos);
+            let tag = bytecode::VarArgTag::Missing(ArgSep::End);
+            codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), key_pos);
+        }
+
         while arg_iter.peek().is_some() {
             let ArgSpan { expr, sep, sep_pos } =
                 arg_iter.next().expect("Args and their syntax must advance in unison");
@@ -440,4 +447,70 @@ pub(super) fn compile_args(
 
     let first_reg = scope.first().map_err(|e| Error::from_syms(e, key_pos))?;
     Ok((first_reg, arg_linecols))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::CallableMetadataBuilder;
+    use crate::callable::RepeatedSyntax;
+    use crate::compiler::codegen::Fixup;
+    use crate::compiler::syms::GlobalSymtable;
+    use std::borrow::Cow;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_compile_args_materializes_missing_repeated_tag() -> Result<()> {
+        let pos = LineCol { line: 1, col: 1 };
+        let md = CallableMetadataBuilder::new("OUT")
+            .with_syntax(&[(
+                &[],
+                Some(&RepeatedSyntax {
+                    name: Cow::Borrowed("arg"),
+                    type_syn: RepeatedTypeSyntax::AnyValue,
+                    sep: ArgSepSyntax::Exactly(ArgSep::Short),
+                    require_one: false,
+                    allow_missing: false,
+                }),
+            )])
+            .test_build();
+
+        let mut codegen = Codegen::default();
+        let enter = codegen.emit(bytecode::make_nop(), LineCol { line: 0, col: 0 });
+
+        let upcalls = HashMap::default();
+        let mut global = GlobalSymtable::new(&upcalls);
+        let mut local = global.enter_scope();
+        let (first_reg, arg_linecols) = {
+            let mut symtable = local.frozen();
+            compile_args(
+                CallSpan { vref: VarRef::new("OUT", None), vref_pos: pos, args: vec![] },
+                md,
+                &mut symtable,
+                &mut codegen,
+            )?
+        };
+        assert_eq!(Register::local(0).unwrap(), first_reg);
+        assert_eq!(vec![pos], arg_linecols);
+
+        let upcall = codegen.get_upcall(SymbolKey::from("OUT"), None, pos)?;
+        let addr = codegen.emit(bytecode::make_upcall(upcall, first_reg), pos);
+        codegen.set_arg_linecols(addr, arg_linecols);
+        codegen.emit(bytecode::make_eof(), LineCol { line: 0, col: 0 });
+
+        let nlocals = local.leave_scope().map_err(|e| Error::from_syms(e, pos))?;
+        codegen.add_fixup(enter, Fixup::Enter(nlocals));
+
+        let image = codegen.build_image(HashMap::default(), vec![])?;
+        assert_eq!(
+            vec![
+                "0000:   ENTER       1                   # 0:0".to_owned(),
+                "0001:   LOADI       R64, 0              # 1:1".to_owned(),
+                "0002:   UPCALL      0, R64              # 1:1, OUT".to_owned(),
+                "0003:   EOF                             # 0:0".to_owned(),
+            ],
+            image.disasm()
+        );
+        Ok(())
+    }
 }

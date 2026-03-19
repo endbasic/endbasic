@@ -17,7 +17,7 @@
 //! Entry point to the compilation, handling top-level definitions.
 
 use crate::ast::{
-    ArgSep, AssignmentSpan, CallableSpan, CaseGuardSpan, CaseRelOp, DoGuard, DoSpan, EndSpan, Expr,
+    ArgSep, AssignmentSpan, CallableSpan, CaseGuardSpan, CaseRelOp, DoGuard, DoSpan, Expr,
     ExprType, ForSpan, IfSpan, OnErrorSpan, SelectSpan, Statement, VarRef, WhileSpan,
 };
 use crate::bytecode::{self, ErrorHandlerMode, PackedArrayType, Register, RegisterScope};
@@ -1262,8 +1262,8 @@ pub fn compile_with_globals(
 
     prepare_globals(&mut ctx, &mut symtable, global_defs)?;
 
-    let program_end = Statement::End(EndSpan { code: None, pos: LineCol { line: 0, col: 0 } });
-    compile_scope(&mut ctx, symtable.enter_scope(), parser::parse(input).chain([Ok(program_end)]))?;
+    compile_scope(&mut ctx, symtable.enter_scope(), parser::parse(input))?;
+    ctx.codegen.emit(bytecode::make_eof(), LineCol { line: 0, col: 0 });
 
     compile_user_callables(&mut ctx, &mut symtable)?;
 
@@ -1305,6 +1305,7 @@ mod tests {
         match vm.exec() {
             StopReason::End(code) if code.is_success() => {}
             StopReason::End(code) => panic!("unexpected exit code: {}", code.to_i32()),
+            StopReason::Eof => {}
             StopReason::Exception(pos, msg) => panic!("exception at {pos}: {msg}"),
             StopReason::Upcall(_) => panic!("unexpected upcall"),
         }

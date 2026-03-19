@@ -113,8 +113,7 @@ END SELECT
 0089:   LOADI       R66, 4              # 12:13
 0090:   LOADI       R65, 259            # 12:13
 0091:   UPCALL      0, R65              # 12:9, OUT
-0092:   LOADI       R65, 0              # 0:0
-0093:   END         R65                 # 0:0
+0092:   EOF                             # 0:0
 ```
 
 ## Output
@@ -158,8 +157,7 @@ END SELECT
 0015:   LOADI       R66, 1              # 6:13
 0016:   LOADI       R65, 259            # 6:13
 0017:   UPCALL      0, R65              # 6:9, OUT
-0018:   LOADI       R65, 0              # 0:0
-0019:   END         R65                 # 0:0
+0018:   EOF                             # 0:0
 ```
 
 ## Output
@@ -208,8 +206,7 @@ END SELECT
 0021:   LOADI       R65, 1              # 5:13
 0022:   LOADI       R64, 259            # 5:13
 0023:   UPCALL      1, R64              # 5:9, OUT
-0024:   LOADI       R64, 0              # 0:0
-0025:   END         R64                 # 0:0
+0024:   EOF                             # 0:0
 ```
 
 ## Output
@@ -235,8 +232,7 @@ END SELECT
 0002:   LOADI       R65, 1              # 1:31
 0003:   ADDI        R64, R64, R65       # 1:29
 0004:   JUMP        5                   # 2:1
-0005:   LOADI       R64, 0              # 0:0
-0006:   END         R64                 # 0:0
+0005:   EOF                             # 0:0
 ```
 
 # Test: CASE IS and TO with strings
@@ -295,8 +291,7 @@ END SELECT
 0034:   LOADI       R66, 6              # 8:13
 0035:   LOADI       R65, 259            # 8:13
 0036:   UPCALL      0, R65              # 8:9, OUT
-0037:   LOADI       R65, 0              # 0:0
-0038:   END         R65                 # 0:0
+0037:   EOF                             # 0:0
 ```
 
 ## Output
@@ -347,8 +342,7 @@ END SELECT
 0022:   LOADI       R66, 2              # 6:13
 0023:   LOADI       R65, 259            # 6:13
 0024:   UPCALL      0, R65              # 6:9, OUT
-0025:   LOADI       R65, 0              # 0:0
-0026:   END         R65                 # 0:0
+0025:   EOF                             # 0:0
 ```
 
 ## Output
@@ -424,8 +418,7 @@ END SELECT
 0045:   LOADI       R66, 6              # 8:13
 0046:   LOADI       R65, 259            # 8:13
 0047:   UPCALL      0, R65              # 8:9, OUT
-0048:   LOADI       R65, 0              # 0:0
-0049:   END         R65                 # 0:0
+0048:   EOF                             # 0:0
 ```
 
 ## Output
@@ -491,8 +484,7 @@ END SELECT
 0032:   LOADI       R66, 2              # 11:13
 0033:   LOADI       R65, 259            # 11:13
 0034:   UPCALL      0, R65              # 11:9, OUT
-0035:   LOADI       R65, 0              # 0:0
-0036:   END         R65                 # 0:0
+0035:   EOF                             # 0:0
 ```
 
 ## Output
@@ -567,8 +559,7 @@ RETURN
 0035:   LOADI       R65, 259            # 14:13
 0036:   UPCALL      0, R65              # 14:9, OUT
 0037:   RETURN                          # 16:1
-0038:   LOADI       R65, 0              # 0:0
-0039:   END         R65                 # 0:0
+0038:   EOF                             # 0:0
 ```
 
 ## Output
@@ -632,8 +623,7 @@ OUT "done"
 0019:   LOADI       R65, 1              # 6:5
 0020:   LOADI       R64, 259            # 6:5
 0021:   UPCALL      0, R64              # 6:1, OUT
-0022:   LOADI       R64, 0              # 0:0
-0023:   END         R64                 # 0:0
+0022:   EOF                             # 0:0
 ```
 
 ## Output

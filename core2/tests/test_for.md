@@ -24,8 +24,7 @@ NEXT
 0010:   LOADI       R65, 1              # 1:15
 0011:   ADDI        R64, R64, R65       # 1:11
 0012:   JUMP        2                   # 1:5
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -63,8 +62,7 @@ NEXT
 0010:   LOADI       R65, 3              # 1:22
 0011:   ADDI        R64, R64, R65       # 1:11
 0012:   JUMP        2                   # 1:5
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -102,8 +100,7 @@ NEXT
 0010:   LOADC       R65, 0              # 1:23
 0011:   ADDI        R64, R64, R65       # 1:12
 0012:   JUMP        2                   # 1:5
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -142,8 +139,7 @@ NEXT
 0010:   LOADI       R65, 1              # 1:16
 0011:   ADDI        R64, R64, R65       # 1:12
 0012:   JUMP        2                   # 1:5
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 # Test: FOR loop with invalid direction has zero iterations
@@ -172,8 +168,7 @@ NEXT
 0010:   LOADC       R65, 0              # 1:23
 0011:   ADDI        R64, R64, R65       # 1:11
 0012:   JUMP        2                   # 1:5
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 # Test: FOR iterator is visible after NEXT
@@ -202,8 +197,7 @@ OUT something
 0010:   MOVE        R66, R64            # 3:5
 0011:   LOADI       R65, 258            # 3:5
 0012:   UPCALL      0, R65              # 3:1, OUT
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -242,8 +236,7 @@ NEXT
 0013:   LOADI       R65, 1              # 1:23
 0014:   ADDI        R64, R64, R65       # 1:19
 0015:   JUMP        2                   # 1:5
-0016:   LOADI       R65, 0              # 0:0
-0017:   END         R65                 # 0:0
+0016:   EOF                             # 0:0
 ```
 
 ## Output
@@ -287,8 +280,7 @@ NEXT
 0016:   ITOD        R66                 # 1:19
 0017:   ADDD        R64, R64, R66       # 1:13
 0018:   JUMP        2                   # 1:5
-0019:   LOADI       R66, 0              # 0:0
-0020:   END         R66                 # 0:0
+0019:   EOF                             # 0:0
 ```
 
 ## Output
@@ -346,8 +338,7 @@ OUT i; b
 0028:   MOVE        R70, R66            # 7:8
 0029:   LOADI       R69, 258            # 7:8
 0030:   UPCALL      0, R67              # 7:1, OUT
-0031:   LOADI       R67, 0              # 0:0
-0032:   END         R67                 # 0:0
+0031:   EOF                             # 0:0
 ```
 
 ## Output
@@ -403,8 +394,7 @@ OUT i
 0024:   MOVE        R67, R64            # 10:5
 0025:   LOADI       R66, 258            # 10:5
 0026:   UPCALL      0, R66              # 10:1, OUT
-0027:   LOADI       R66, 0              # 0:0
-0028:   END         R66                 # 0:0
+0027:   EOF                             # 0:0
 ```
 
 ## Output
@@ -445,8 +435,7 @@ NEXT
 0015:   LOADI       R65, 1              # 1:16
 0016:   ADDI        R64, R64, R65       # 1:11
 0017:   JUMP        2                   # 1:5
-0018:   LOADI       R65, 0              # 0:0
-0019:   END         R65                 # 0:0
+0018:   EOF                             # 0:0
 ```
 
 ## Output
@@ -511,8 +500,7 @@ NEXT
 0031:   LOADI       R66, 1              # 1:16
 0032:   ADDI        R64, R64, R66       # 1:11
 0033:   JUMP        2                   # 1:5
-0034:   LOADI       R66, 0              # 0:0
-0035:   END         R66                 # 0:0
+0034:   EOF                             # 0:0
 ```
 
 ## Output

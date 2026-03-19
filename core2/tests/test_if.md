@@ -17,8 +17,7 @@ END IF
 0003:   LOADI       R65, 0              # 2:9
 0004:   LOADI       R64, 259            # 2:9
 0005:   UPCALL      0, R64              # 2:5, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -50,8 +49,7 @@ OUT "after"
 0006:   LOADI       R65, 1              # 4:5
 0007:   LOADI       R64, 259            # 4:5
 0008:   UPCALL      0, R64              # 4:1, OUT
-0009:   LOADI       R64, 0              # 0:0
-0010:   END         R64                 # 0:0
+0009:   EOF                             # 0:0
 ```
 
 ## Output
@@ -99,8 +97,7 @@ END IF
 0017:   LOADI       R67, 2              # 8:9
 0018:   LOADI       R66, 259            # 8:9
 0019:   UPCALL      0, R66              # 8:5, OUT
-0020:   LOADI       R66, 0              # 0:0
-0021:   END         R66                 # 0:0
+0020:   EOF                             # 0:0
 ```
 
 ## Output
@@ -140,8 +137,7 @@ END IF
 0011:   LOADI       R67, 1              # 6:9
 0012:   LOADI       R66, 259            # 6:9
 0013:   UPCALL      0, R66              # 6:5, OUT
-0014:   LOADI       R66, 0              # 0:0
-0015:   END         R66                 # 0:0
+0014:   EOF                             # 0:0
 ```
 
 ## Output
@@ -179,8 +175,7 @@ END IF
 0010:   LOADI       R66, 1              # 5:9
 0011:   LOADI       R65, 259            # 5:9
 0012:   UPCALL      0, R65              # 5:5, OUT
-0013:   LOADI       R65, 0              # 0:0
-0014:   END         R65                 # 0:0
+0013:   EOF                             # 0:0
 ```
 
 ## Output
@@ -216,8 +211,7 @@ END IF
 0007:   LOADI       R67, 0              # 5:13
 0008:   LOADI       R66, 259            # 5:13
 0009:   UPCALL      0, R66              # 5:9, OUT
-0010:   LOADI       R66, 0              # 0:0
-0011:   END         R66                 # 0:0
+0010:   EOF                             # 0:0
 ```
 
 ## Output
@@ -261,8 +255,7 @@ END IF
 0013:   LOADI       R67, 1              # 7:13
 0014:   LOADI       R66, 259            # 7:13
 0015:   UPCALL      0, R66              # 7:9, OUT
-0016:   LOADI       R66, 0              # 0:0
-0017:   END         R66                 # 0:0
+0016:   EOF                             # 0:0
 ```
 
 ## Output
@@ -304,8 +297,7 @@ END IF
 0013:   LOADI       R66, 1              # 6:9
 0014:   LOADI       R65, 259            # 6:9
 0015:   UPCALL      0, R65              # 6:5, OUT
-0016:   LOADI       R65, 0              # 0:0
-0017:   END         R65                 # 0:0
+0016:   EOF                             # 0:0
 ```
 
 ## Output
@@ -347,8 +339,7 @@ END IF
 0013:   LOADI       R66, 1              # 6:9
 0014:   LOADI       R65, 259            # 6:9
 0015:   UPCALL      0, R65              # 6:5, OUT
-0016:   LOADI       R65, 0              # 0:0
-0017:   END         R65                 # 0:0
+0016:   EOF                             # 0:0
 ```
 
 ## Output
@@ -408,8 +399,7 @@ END IF
 0028:   LOADI       R66, 3              # 9:9
 0029:   LOADI       R65, 259            # 9:9
 0030:   UPCALL      0, R65              # 9:5, OUT
-0031:   LOADI       R65, 0              # 0:0
-0032:   END         R65                 # 0:0
+0031:   EOF                             # 0:0
 ```
 
 ## Output
@@ -469,8 +459,7 @@ END IF
 0028:   LOADI       R66, 3              # 9:9
 0029:   LOADI       R65, 259            # 9:9
 0030:   UPCALL      0, R65              # 9:5, OUT
-0031:   LOADI       R65, 0              # 0:0
-0032:   END         R65                 # 0:0
+0031:   EOF                             # 0:0
 ```
 
 ## Output

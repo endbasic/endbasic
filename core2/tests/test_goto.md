@@ -24,8 +24,7 @@ OUT "c"
 0008:   LOADI       R65, 2              # 5:5
 0009:   LOADI       R64, 259            # 5:5
 0010:   UPCALL      0, R64              # 5:1, OUT
-0011:   LOADI       R64, 0              # 0:0
-0012:   END         R64                 # 0:0
+0011:   EOF                             # 0:0
 ```
 
 ## Output
@@ -53,8 +52,7 @@ OUT "a"
 0002:   LOADI       R65, 0              # 2:5
 0003:   LOADI       R64, 259            # 2:5
 0004:   UPCALL      0, R64              # 2:1, OUT
-0005:   LOADI       R64, 0              # 0:0
-0006:   END         R64                 # 0:0
+0005:   EOF                             # 0:0
 ```
 
 # Test: GOTO target requires backwards jump
@@ -85,8 +83,7 @@ GOTO @print_it
 0007:   UPCALL      0, R64              # 4:1, OUT
 0008:   JUMP        10                  # 5:6
 0009:   JUMP        5                   # 7:6
-0010:   LOADI       R64, 0              # 0:0
-0011:   END         R64                 # 0:0
+0010:   EOF                             # 0:0
 ```
 
 ## Output
@@ -116,8 +113,7 @@ OUT "skipped"
 0005:   LOADI       R65, 1              # 3:8
 0006:   LOADI       R64, 259            # 3:8
 0007:   UPCALL      0, R64              # 3:4, OUT
-0008:   LOADI       R64, 0              # 0:0
-0009:   END         R64                 # 0:0
+0008:   EOF                             # 0:0
 ```
 
 ## Output
@@ -146,8 +142,7 @@ OUT "skipped": 20 OUT "target"
 0005:   LOADI       R65, 1              # 2:23
 0006:   LOADI       R64, 259            # 2:23
 0007:   UPCALL      0, R64              # 2:19, OUT
-0008:   LOADI       R64, 0              # 0:0
-0009:   END         R64                 # 0:0
+0008:   EOF                             # 0:0
 ```
 
 ## Output
@@ -249,8 +244,7 @@ GOTO @again
 0009:   LOADI       R65, 1              # 4:9
 0010:   ADDI        R64, R64, R65       # 4:7
 0011:   JUMP        2                   # 5:6
-0012:   LOADI       R65, 0              # 0:0
-0013:   END         R65                 # 0:0
+0012:   EOF                             # 0:0
 ```
 
 ## Exit code

@@ -32,8 +32,7 @@ OUT b1, d1, i1, i2, s1
 0014:   MOVE        R73, R4             # 7:21
 0015:   LOADI       R72, 259            # 7:21
 0016:   UPCALL      0, R64              # 7:1, OUT
-0017:   LOADI       R64, 0              # 0:0
-0018:   END         R64                 # 0:0
+0017:   EOF                             # 0:0
 ```
 
 ## Output
@@ -86,8 +85,7 @@ OUT b1, d1, i1, i2, s1
 0019:   MOVE        R73, R4             # 12:21
 0020:   LOADI       R72, 259            # 12:21
 0021:   UPCALL      0, R64              # 12:1, OUT
-0022:   LOADI       R64, 0              # 0:0
-0023:   END         R64                 # 0:0
+0022:   EOF                             # 0:0
 ```
 
 ## Output
@@ -124,7 +122,7 @@ OUT "After", i1
 0005:   MOVE        R67, R0             # 8:15
 0006:   LOADI       R66, 258            # 8:15
 0007:   UPCALL      0, R64              # 8:1, OUT
-0008:   CALL        R65, 18             # 9:5, MODIFY_GLOBAL
+0008:   CALL        R65, 17             # 9:5, MODIFY_GLOBAL
 0009:   LOADI       R64, 258            # 9:5
 0010:   UPCALL      0, R64              # 9:1, OUT
 0011:   LOADI       R65, 1              # 10:5
@@ -132,19 +130,18 @@ OUT "After", i1
 0013:   MOVE        R67, R0             # 10:14
 0014:   LOADI       R66, 258            # 10:14
 0015:   UPCALL      0, R64              # 10:1, OUT
-0016:   LOADI       R64, 0              # 0:0
-0017:   END         R64                 # 0:0
+0016:   EOF                             # 0:0
 
 -- MODIFY_GLOBAL 
-0018:   LOADI       R64, 0              # 1:10
-0019:   ENTER       5                   # 0:0
-0020:   LOADI       R0, 3               # 2:10
-0021:   LOADI       R66, 2              # 3:9
-0022:   LOADI       R65, 291            # 3:9
-0023:   MOVE        R68, R0             # 3:25
-0024:   LOADI       R67, 258            # 3:25
-0025:   UPCALL      0, R65              # 3:5, OUT
-0026:   RETURN                          # 4:1
+0017:   LOADI       R64, 0              # 1:10
+0018:   ENTER       5                   # 0:0
+0019:   LOADI       R0, 3               # 2:10
+0020:   LOADI       R66, 2              # 3:9
+0021:   LOADI       R65, 291            # 3:9
+0022:   MOVE        R68, R0             # 3:25
+0023:   LOADI       R67, 258            # 3:25
+0024:   UPCALL      0, R65              # 3:5, OUT
+0025:   RETURN                          # 4:1
 ```
 
 ## Output
@@ -184,24 +181,23 @@ OUT "After", i1
 0005:   MOVE        R67, R0             # 8:15
 0006:   LOADI       R66, 258            # 8:15
 0007:   UPCALL      0, R64              # 8:1, OUT
-0008:   CALL        R64, 16             # 9:1, MODIFY_GLOBAL
+0008:   CALL        R64, 15             # 9:1, MODIFY_GLOBAL
 0009:   LOADI       R65, 1              # 10:5
 0010:   LOADI       R64, 291            # 10:5
 0011:   MOVE        R67, R0             # 10:14
 0012:   LOADI       R66, 258            # 10:14
 0013:   UPCALL      0, R64              # 10:1, OUT
-0014:   LOADI       R64, 0              # 0:0
-0015:   END         R64                 # 0:0
+0014:   EOF                             # 0:0
 
 -- MODIFY_GLOBAL 
-0016:   ENTER       4                   # 0:0
-0017:   LOADI       R0, 3               # 2:10
-0018:   LOADI       R65, 2              # 3:9
-0019:   LOADI       R64, 291            # 3:9
-0020:   MOVE        R67, R0             # 3:25
-0021:   LOADI       R66, 258            # 3:25
-0022:   UPCALL      0, R64              # 3:5, OUT
-0023:   RETURN                          # 4:1
+0015:   ENTER       4                   # 0:0
+0016:   LOADI       R0, 3               # 2:10
+0017:   LOADI       R65, 2              # 3:9
+0018:   LOADI       R64, 291            # 3:9
+0019:   MOVE        R67, R0             # 3:25
+0020:   LOADI       R66, 258            # 3:25
+0021:   UPCALL      0, R64              # 3:5, OUT
+0022:   RETURN                          # 4:1
 ```
 
 ## Output
@@ -232,8 +228,7 @@ OUT d
 0004:   MOVE        R65, R0             # 3:5
 0005:   LOADI       R64, 257            # 3:5
 0006:   UPCALL      0, R64              # 3:1, OUT
-0007:   LOADI       R64, 0              # 0:0
-0008:   END         R64                 # 0:0
+0007:   EOF                             # 0:0
 ```
 
 ## Output
@@ -269,8 +264,7 @@ OUT i1, i2
 0009:   MOVE        R67, R1             # 5:9
 0010:   LOADI       R66, 258            # 5:9
 0011:   UPCALL      0, R64              # 5:1, OUT
-0012:   LOADI       R64, 0              # 0:0
-0013:   END         R64                 # 0:0
+0012:   EOF                             # 0:0
 ```
 
 ## Output
@@ -327,21 +321,20 @@ OUT foo
 
 ```asm
 0000:   ENTER       2                   # 0:0
-0001:   CALL        R65, 6              # 7:5, FOO
+0001:   CALL        R65, 5              # 7:5, FOO
 0002:   LOADI       R64, 258            # 7:5
 0003:   UPCALL      0, R64              # 7:1, OUT
-0004:   LOADI       R64, 0              # 0:0
-0005:   END         R64                 # 0:0
+0004:   EOF                             # 0:0
 
 -- FOO 
-0006:   LOADI       R64, 0              # 1:10
-0007:   ENTER       4                   # 0:0
-0008:   LOADI       R65, 5              # 2:9
-0009:   LOADI       R0, 0               # 3:16
-0010:   MOVE        R67, R65            # 4:9
-0011:   LOADI       R66, 258            # 4:9
-0012:   UPCALL      0, R66              # 4:5, OUT
-0013:   RETURN                          # 5:1
+0005:   LOADI       R64, 0              # 1:10
+0006:   ENTER       4                   # 0:0
+0007:   LOADI       R65, 5              # 2:9
+0008:   LOADI       R0, 0               # 3:16
+0009:   MOVE        R67, R65            # 4:9
+0010:   LOADI       R66, 258            # 4:9
+0011:   UPCALL      0, R66              # 4:5, OUT
+0012:   RETURN                          # 5:1
 ```
 
 ## Output

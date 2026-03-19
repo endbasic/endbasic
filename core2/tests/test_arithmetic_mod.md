@@ -15,8 +15,7 @@ OUT 10.0 MOD 3.0
 0003:   MODD        R65, R65, R66       # 1:10
 0004:   LOADI       R64, 257            # 1:5
 0005:   UPCALL      0, R64              # 1:1, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -42,8 +41,7 @@ OUT 10 MOD 3
 0003:   MODI        R65, R65, R66       # 1:8
 0004:   LOADI       R64, 258            # 1:5
 0005:   UPCALL      0, R64              # 1:1, OUT
-0006:   LOADI       R64, 0              # 0:0
-0007:   END         R64                 # 0:0
+0006:   EOF                             # 0:0
 ```
 
 ## Output
@@ -70,8 +68,7 @@ OUT 3 MOD 2.5
 0004:   MODD        R65, R65, R66       # 1:7
 0005:   LOADI       R64, 257            # 1:5
 0006:   UPCALL      0, R64              # 1:1, OUT
-0007:   LOADI       R64, 0              # 0:0
-0008:   END         R64                 # 0:0
+0007:   EOF                             # 0:0
 ```
 
 ## Output
@@ -98,8 +95,7 @@ OUT 10.5 MOD 3
 0004:   MODD        R65, R65, R66       # 1:10
 0005:   LOADI       R64, 257            # 1:5
 0006:   UPCALL      0, R64              # 1:1, OUT
-0007:   LOADI       R64, 0              # 0:0
-0008:   END         R64                 # 0:0
+0007:   EOF                             # 0:0
 ```
 
 ## Output
@@ -127,8 +123,7 @@ a = (-2147483647 - 1) MOD -1
 0005:   LOADI       R65, 1              # 1:28
 0006:   NEGI        R65                 # 1:27
 0007:   MODI        R64, R64, R65       # 1:23
-0008:   LOADI       R65, 0              # 0:0
-0009:   END         R65                 # 0:0
+0008:   EOF                             # 0:0
 ```
 
 ## Runtime errors
@@ -152,8 +147,7 @@ a = 5 MOD 0
 0001:   LOADI       R64, 5              # 1:5
 0002:   LOADI       R65, 0              # 1:11
 0003:   MODI        R64, R64, R65       # 1:7
-0004:   LOADI       R65, 0              # 0:0
-0005:   END         R65                 # 0:0
+0004:   EOF                             # 0:0
 ```
 
 ## Runtime errors

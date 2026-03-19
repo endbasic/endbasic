@@ -39,8 +39,7 @@ OUT c4
 0018:   MOVE        R69, R67            # 10:5
 0019:   LOADI       R68, 259            # 10:5
 0020:   UPCALL      0, R68              # 10:1, OUT
-0021:   LOADI       R68, 0              # 0:0
-0022:   END         R68                 # 0:0
+0021:   EOF                             # 0:0
 ```
 
 ## Output

@@ -628,12 +628,15 @@ pub(crate) enum Opcode {
     /// Subtracts two integers and stores the result into a third one.
     SubtractInteger,
 
+    /// Terminates execution with an explicit exit code.
+    End,
+
     /// Requests the execution of an upcall, stopping VM execution.
     Upcall,
 
-    /// Terminates execution.
+    /// Terminates execution due to natural fallthrough.
     // KEEP THIS LAST.
-    End,
+    Eof,
 }
 
 #[rustfmt::skip]
@@ -795,6 +798,12 @@ instr!(
     Opcode::Enter, "ENTER",
     make_enter, parse_enter, format_enter,
     u8, 0x000000ff, 0,  // Number of local registers to allocate.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Eof, "EOF",
+    make_eof, parse_eof, format_eof,
 );
 
 #[rustfmt::skip]
@@ -1169,7 +1178,7 @@ pub(crate) fn opcode_of(instr: u32) -> Opcode {
     #[allow(unsafe_code)]
     unsafe {
         let num = unchecked_u32_as_u8(instr >> 24);
-        debug_assert!(num <= Opcode::End as u8);
+        debug_assert!(num <= Opcode::Eof as u8);
         std::mem::transmute::<u8, Opcode>(num)
     }
 }
@@ -1420,6 +1429,8 @@ mod tests {
     test_instr!(test_end, make_end, parse_end, Register::local(1).unwrap());
 
     test_instr!(test_enter, make_enter, parse_enter, 10);
+
+    test_instr!(test_eof, make_eof, parse_eof);
 
     test_instr!(test_gosub, make_gosub, parse_gosub, 12345);
 

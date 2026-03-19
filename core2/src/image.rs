@@ -17,7 +17,7 @@
 //! Compiled program representation.
 
 use crate::ast::ExprType;
-use crate::bytecode::{self, Opcode, Register, opcode_of};
+use crate::bytecode::{self, Opcode, opcode_of};
 use crate::compiler::SymbolKey;
 use crate::mem::ConstantDatum;
 use crate::reader::LineCol;
@@ -45,6 +45,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::EqualDouble => bytecode::format_equal_double(instr),
         Opcode::EqualInteger => bytecode::format_equal_integer(instr),
         Opcode::EqualText => bytecode::format_equal_text(instr),
+        Opcode::Eof => bytecode::format_eof(instr),
         Opcode::End => bytecode::format_end(instr),
         Opcode::Enter => bytecode::format_enter(instr),
         Opcode::Gosub => bytecode::format_gosub(instr),
@@ -164,10 +165,9 @@ impl Default for Image {
     fn default() -> Self {
         Self::new(
             vec![
-                // The minimum valid program requires an explicit `END` so that the VM knows to
-                // exit.  We can directly reference register 0 because all registers would have
-                // been cleared and accessing them would result in their default values.
-                bytecode::make_end(Register::global(0).expect("Global 0 register be valid")),
+                // The minimum valid program requires an explicit terminator so that the VM knows
+                // to exit.
+                bytecode::make_eof(),
             ],
             vec![],
             vec![],

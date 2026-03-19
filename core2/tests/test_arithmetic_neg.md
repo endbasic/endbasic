@@ -14,8 +14,7 @@ OUT -3.5
 0002:   NEGD        R65                 # 1:5
 0003:   LOADI       R64, 257            # 1:5
 0004:   UPCALL      0, R64              # 1:1, OUT
-0005:   LOADI       R64, 0              # 0:0
-0006:   END         R64                 # 0:0
+0005:   EOF                             # 0:0
 ```
 
 ## Output
@@ -40,8 +39,7 @@ OUT -7
 0002:   NEGI        R65                 # 1:5
 0003:   LOADI       R64, 258            # 1:5
 0004:   UPCALL      0, R64              # 1:1, OUT
-0005:   LOADI       R64, 0              # 0:0
-0006:   END         R64                 # 0:0
+0005:   EOF                             # 0:0
 ```
 
 ## Output
@@ -66,8 +64,7 @@ OUT -0
 0002:   NEGI        R65                 # 1:5
 0003:   LOADI       R64, 258            # 1:5
 0004:   UPCALL      0, R64              # 1:1, OUT
-0005:   LOADI       R64, 0              # 0:0
-0006:   END         R64                 # 0:0
+0005:   EOF                             # 0:0
 ```
 
 ## Output
@@ -101,11 +98,10 @@ a = -(&x80000000)
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
+0000:   ENTER       1                   # 0:0
 0001:   LOADC       R64, 0              # 1:7
 0002:   NEGI        R64                 # 1:5
-0003:   LOADI       R65, 0              # 0:0
-0004:   END         R65                 # 0:0
+0003:   EOF                             # 0:0
 ```
 
 ## Runtime errors
