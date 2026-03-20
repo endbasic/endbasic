@@ -21,9 +21,7 @@
 //! the scripted code cannot call back into Rust land, so the script's execution is guaranteed to
 //! not have side-effects.
 
-use endbasic_core2::{
-    ConstantDatum, ExprType, GlobalDef, GlobalDefKind, StopReason, Vm, compile, only_metadata,
-};
+use endbasic_core2::{Compiler, ConstantDatum, ExprType, GlobalDef, GlobalDefKind, StopReason, Vm};
 use std::collections::HashMap;
 
 /// Sample configuration file to parse.
@@ -79,8 +77,8 @@ fn main() {
 
     // Compile the script, making the pre-defined globals visible to it.
     let upcalls = HashMap::default();
-    let image = compile(&mut SCRIPT.as_bytes(), only_metadata(&upcalls), &global_defs)
-        .expect("Compilation failed");
+    let compiler = Compiler::new(&upcalls, &global_defs).expect("Globals initialization failed");
+    let image = compiler.compile(&mut SCRIPT.as_bytes()).expect("Compilation failed");
 
     // Load and execute the compiled image.
     let mut vm = Vm::new(upcalls);

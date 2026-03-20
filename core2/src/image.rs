@@ -107,6 +107,7 @@ pub(crate) struct GlobalVarInfo {
 }
 
 /// Per-instruction metadata stored in `DebugInfo`.
+#[derive(Clone)]
 pub(crate) struct InstrMetadata {
     /// Source location that generated this instruction.
     pub(crate) linecol: LineCol,

@@ -336,12 +336,13 @@ impl Vm {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Compiler;
     use crate::ast::{ArgSep, ExprType};
     use crate::callable::{
         ArgSepSyntax, CallResult, CallableMetadata, CallableMetadataBuilder, RequiredValueSyntax,
         SingularArgSyntax,
     };
-    use crate::compiler::{SymbolKey, compile, only_metadata};
+    use crate::compiler::SymbolKey;
     use crate::image::Image;
     use crate::reader::LineCol;
     use crate::testutils::OutCommand;
@@ -437,7 +438,8 @@ mod tests {
     #[test]
     fn test_exec_empty_compilation_is_eof() {
         let mut vm = Vm::new(HashMap::default());
-        let image = compile(&mut b"".as_slice(), HashMap::default(), &[]).unwrap();
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image = compiler.compile(&mut b"".as_slice()).unwrap();
         vm.load(image);
         match vm.exec() {
             StopReason::Eof => (),
@@ -451,9 +453,8 @@ mod tests {
         let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
         upcalls_by_name.insert(SymbolKey::from("OUT"), OutCommand::new(data.clone()));
 
-        let image =
-            compile(&mut b"OUT 30: OUT 20".as_slice(), only_metadata(&upcalls_by_name), &[])
-                .unwrap();
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"OUT 30: OUT 20".as_slice()).unwrap();
 
         let mut vm = Vm::new(upcalls_by_name);
         vm.load(image);
@@ -486,7 +487,8 @@ mod tests {
     #[tokio::test]
     async fn test_exec_end_code_default() {
         let mut vm = Vm::new(HashMap::default());
-        let image = compile(&mut b"END".as_slice(), HashMap::default(), &[]).unwrap();
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image = compiler.compile(&mut b"END".as_slice()).unwrap();
         vm.load(image);
         match vm.exec() {
             StopReason::End(code) if code.is_success() => (),
@@ -497,7 +499,8 @@ mod tests {
     #[tokio::test]
     async fn test_exec_end_code_explicit() {
         let mut vm = Vm::new(HashMap::default());
-        let image = compile(&mut b"END 3".as_slice(), HashMap::default(), &[]).unwrap();
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image = compiler.compile(&mut b"END 3".as_slice()).unwrap();
         vm.load(image);
         match vm.exec() {
             StopReason::End(code) if code.to_i32() == 3 => (),
@@ -512,8 +515,8 @@ mod tests {
         let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
         upcalls_by_name.insert(SymbolKey::from("POS_CAPTURE"), cmd);
 
-        let image =
-            compile(&mut b"POS_CAPTURE".as_slice(), only_metadata(&upcalls_by_name), &[]).unwrap();
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"POS_CAPTURE".as_slice()).unwrap();
         let mut vm = Vm::new(upcalls_by_name);
         vm.load(image);
         run_to_end(&mut vm).await;
@@ -529,9 +532,8 @@ mod tests {
         let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
         upcalls_by_name.insert(SymbolKey::from("POS_CAPTURE"), cmd);
 
-        let image =
-            compile(&mut b"POS_CAPTURE 42".as_slice(), only_metadata(&upcalls_by_name), &[])
-                .unwrap();
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"POS_CAPTURE 42".as_slice()).unwrap();
         let mut vm = Vm::new(upcalls_by_name);
         vm.load(image);
         run_to_end(&mut vm).await;
@@ -547,9 +549,8 @@ mod tests {
         let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
         upcalls_by_name.insert(SymbolKey::from("POS_CAPTURE"), cmd);
 
-        let image =
-            compile(&mut b"POS_CAPTURE 1, 2, 3".as_slice(), only_metadata(&upcalls_by_name), &[])
-                .unwrap();
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"POS_CAPTURE 1, 2, 3".as_slice()).unwrap();
         let mut vm = Vm::new(upcalls_by_name);
         vm.load(image);
         run_to_end(&mut vm).await;
@@ -572,9 +573,8 @@ mod tests {
         let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
         upcalls_by_name.insert(SymbolKey::from("POS_CAPTURE"), cmd);
 
-        let image =
-            compile(&mut b"POS_CAPTURE 1 + 2".as_slice(), only_metadata(&upcalls_by_name), &[])
-                .unwrap();
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"POS_CAPTURE 1 + 2".as_slice()).unwrap();
         let mut vm = Vm::new(upcalls_by_name);
         vm.load(image);
         run_to_end(&mut vm).await;

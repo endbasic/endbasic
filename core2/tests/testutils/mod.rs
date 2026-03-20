@@ -322,7 +322,10 @@ async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()
         let console = Rc::from(RefCell::from(String::new()));
         let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::default();
         callables::register_all(&mut upcalls_by_name, console.clone());
-        let image = { compile(&mut source.as_bytes(), only_metadata(&upcalls_by_name), &[]) };
+        let image = {
+            let compiler = Compiler::new(&upcalls_by_name, &[]).expect("Cannot fail");
+            compiler.compile(&mut source.as_bytes())
+        };
 
         let image = match image {
             Ok(image) => image,
