@@ -80,9 +80,8 @@ fn main() {
 
     // Compile the script, making the pre-defined globals visible to it.
     let upcalls = HashMap::default();
-    let image =
-        compile_with_globals(&mut SCRIPT.as_bytes(), &only_metadata(&upcalls), &global_defs)
-            .expect("Compilation failed");
+    let image = compile_with_globals(&mut SCRIPT.as_bytes(), only_metadata(&upcalls), &global_defs)
+        .expect("Compilation failed");
 
     // Load and execute the compiled image.
     let mut vm = Vm::new(upcalls);

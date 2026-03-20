@@ -147,25 +147,25 @@ where
 /// Representation of the symbol table for global symbols.
 ///
 /// Globals are variables and callables that are visible from any scope.
-pub(crate) struct GlobalSymtable<'uref> {
+pub(crate) struct GlobalSymtable {
     /// Map of global variable names to their prototypes and assigned registers.
     globals: HashMapWithIds<SymbolKey, SymbolPrototype, u8>,
 
     /// Reference to the built-in callable metadata provided by the runtime.
-    upcalls: &'uref HashMap<SymbolKey, Rc<CallableMetadata>>,
+    upcalls: HashMap<SymbolKey, Rc<CallableMetadata>>,
 
     /// Map of user-defined callable names to their metadata.
     user_callables: HashMap<SymbolKey, Rc<CallableMetadata>>,
 }
 
-impl<'uref> GlobalSymtable<'uref> {
+impl GlobalSymtable {
     /// Creates a new global symbol table that knows about the given `upcalls`.
-    pub(crate) fn new(upcalls: &'uref HashMap<SymbolKey, Rc<CallableMetadata>>) -> Self {
+    pub(crate) fn new(upcalls: HashMap<SymbolKey, Rc<CallableMetadata>>) -> Self {
         Self { globals: HashMapWithIds::default(), upcalls, user_callables: HashMap::default() }
     }
 
     /// Enters a new local scope.
-    pub(crate) fn enter_scope(&mut self) -> LocalSymtable<'uref, '_> {
+    pub(crate) fn enter_scope(&mut self) -> LocalSymtable<'_> {
         LocalSymtable::new(self)
     }
 
@@ -219,9 +219,9 @@ impl<'uref> GlobalSymtable<'uref> {
 ///
 /// A local scope can see all global symbols and defines its own symbols, which can shadow the
 /// global ones.
-pub(crate) struct LocalSymtable<'uref, 'a> {
+pub(crate) struct LocalSymtable<'a> {
     /// Reference to the parent global symbol table.
-    symtable: &'a mut GlobalSymtable<'uref>,
+    symtable: &'a mut GlobalSymtable,
 
     /// Map of local variable names to their prototypes and assigned registers.
     locals: HashMapWithIds<SymbolKey, SymbolPrototype, u8>,
@@ -235,9 +235,9 @@ pub(crate) struct LocalSymtable<'uref, 'a> {
     active_temps: Rc<Cell<u8>>,
 }
 
-impl<'uref, 'a> LocalSymtable<'uref, 'a> {
+impl<'a> LocalSymtable<'a> {
     /// Creates a new local symbol table within the context of a global `symtable`.
-    fn new(symtable: &'a mut GlobalSymtable<'uref>) -> Self {
+    fn new(symtable: &'a mut GlobalSymtable) -> Self {
         Self {
             symtable,
             locals: HashMapWithIds::default(),
@@ -265,7 +265,7 @@ impl<'uref, 'a> LocalSymtable<'uref, 'a> {
     }
 
     /// Freezes this table to get a `TempSymtable` that can be used to compile expressions.
-    pub(crate) fn frozen(&mut self) -> TempSymtable<'uref, '_, 'a> {
+    pub(crate) fn frozen(&mut self) -> TempSymtable<'_, 'a> {
         TempSymtable::new(self)
     }
 
@@ -277,7 +277,7 @@ impl<'uref, 'a> LocalSymtable<'uref, 'a> {
     ) -> std::result::Result<T, E>
     where
         ME: Fn(Error) -> E,
-        F: FnOnce(Register, &mut TempSymtable<'uref, '_, 'a>) -> std::result::Result<T, E>,
+        F: FnOnce(Register, &mut TempSymtable<'_, 'a>) -> std::result::Result<T, E>,
     {
         struct TempReservationGuard {
             active_temps: Rc<Cell<u8>>,
@@ -374,9 +374,9 @@ impl<'uref, 'a> LocalSymtable<'uref, 'a> {
 /// to forbid mutations to local variables.  We need to be able to pass a `TempSymtable`
 /// across recursive function calls (for expression evaluation), but at the same time we
 /// need each call site to have its own `TempScope` for temporary register cleanup.
-pub(crate) struct TempSymtable<'uref, 'temp, 'local> {
+pub(crate) struct TempSymtable<'temp, 'local> {
     /// Reference to the underlying local symbol table.
-    symtable: &'temp mut LocalSymtable<'uref, 'local>,
+    symtable: &'temp mut LocalSymtable<'local>,
 
     /// Number of temporary registers that were already reserved on creation.
     base_temp: u8,
@@ -388,16 +388,16 @@ pub(crate) struct TempSymtable<'uref, 'temp, 'local> {
     count_temps: Rc<RefCell<u8>>,
 }
 
-impl<'uref, 'temp, 'local> Drop for TempSymtable<'uref, 'temp, 'local> {
+impl<'temp, 'local> Drop for TempSymtable<'temp, 'local> {
     fn drop(&mut self) {
         debug_assert_eq!(self.base_temp, *self.next_temp.borrow(), "Unbalanced temp drops");
         self.symtable.count_temps = max(self.symtable.count_temps, *self.count_temps.borrow());
     }
 }
 
-impl<'uref, 'temp, 'local> TempSymtable<'uref, 'temp, 'local> {
+impl<'temp, 'local> TempSymtable<'temp, 'local> {
     /// Creates a new temporary symbol table from a `local` table.
-    fn new(symtable: &'temp mut LocalSymtable<'uref, 'local>) -> Self {
+    fn new(symtable: &'temp mut LocalSymtable<'local>) -> Self {
         let base_temp = symtable.active_temps.get();
         Self {
             symtable,
@@ -515,7 +515,7 @@ mod tests {
     #[test]
     fn test_global_put_and_get() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
 
         let reg =
             global.put_global(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Integer))?;
@@ -541,7 +541,7 @@ mod tests {
     #[test]
     fn test_global_get_case_insensitive() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         global.put_global(SymbolKey::from("MyVar"), SymbolPrototype::Scalar(ExprType::Double))?;
 
         let (reg, proto) = global.get_global(&VarRef::new("myvar", None))?;
@@ -556,7 +556,7 @@ mod tests {
     #[test]
     fn test_global_get_incompatible_type() {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         global
             .put_global(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Integer))
             .unwrap();
@@ -568,7 +568,7 @@ mod tests {
     #[test]
     fn test_global_get_undefined() {
         let upcalls = HashMap::default();
-        let global = GlobalSymtable::new(&upcalls);
+        let global = GlobalSymtable::new(upcalls);
 
         let err = global.get_global(&VarRef::new("x", None)).unwrap_err();
         assert_eq!("Undefined global symbol x", err.to_string());
@@ -577,7 +577,7 @@ mod tests {
     #[test]
     fn test_local_put_and_get() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
 
         let reg =
@@ -598,7 +598,7 @@ mod tests {
     #[test]
     fn test_local_shadows_global() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         global.put_global(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Integer))?;
 
         let mut local = global.enter_scope();
@@ -614,7 +614,7 @@ mod tests {
     #[test]
     fn test_local_falls_through_to_global() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         global.put_global(SymbolKey::from("g"), SymbolPrototype::Scalar(ExprType::Integer))?;
 
         let local = global.enter_scope();
@@ -628,7 +628,7 @@ mod tests {
     #[test]
     fn test_local_get_undefined() {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let local = global.enter_scope();
 
         let err = local.get_local_or_global(&VarRef::new("nope", None)).unwrap_err();
@@ -638,7 +638,7 @@ mod tests {
     #[test]
     fn test_local_put_global_through_local() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
 
         let reg =
@@ -656,7 +656,7 @@ mod tests {
     #[test]
     fn test_fixup_local_type() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
 
         local.put_local(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Integer))?;
@@ -671,7 +671,7 @@ mod tests {
     #[test]
     fn test_fixup_local_type_undefined() {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
 
         let err =
@@ -682,7 +682,7 @@ mod tests {
     #[test]
     fn test_leave_scope_counts_locals_only() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
         local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
         local.put_local(SymbolKey::from("b"), SymbolPrototype::Scalar(ExprType::Integer))?;
@@ -693,7 +693,7 @@ mod tests {
     #[test]
     fn test_leave_scope_counts_locals_and_temps() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
         local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
         {
@@ -709,7 +709,7 @@ mod tests {
     #[test]
     fn test_leave_scope_empty() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let local = global.enter_scope();
         assert_eq!(0, local.leave_scope()?);
         Ok(())
@@ -718,7 +718,7 @@ mod tests {
     #[test]
     fn test_define_and_get_user_callable() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
 
         let md = CallableMetadataBuilder::new("MY_FUNC")
             .with_return_type(ExprType::Integer)
@@ -735,7 +735,7 @@ mod tests {
     #[test]
     fn test_define_user_callable_already_defined() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
 
         let md = CallableMetadataBuilder::new("DUP").test_build();
         global.define_user_callable(&VarRef::new("dup", None), md)?;
@@ -750,7 +750,7 @@ mod tests {
     #[test]
     fn test_define_user_callable_via_local() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
 
         let md = CallableMetadataBuilder::new("SUB1").test_build();
@@ -769,7 +769,7 @@ mod tests {
         let mut upcalls_map = HashMap::new();
         upcalls_map.insert(key, md);
 
-        let global = GlobalSymtable::new(&upcalls_map);
+        let global = GlobalSymtable::new(upcalls_map);
         let found = global.get_callable(&SymbolKey::from("builtin"));
         assert!(found.is_some());
         assert_eq!("BUILTIN", found.unwrap().name());
@@ -783,7 +783,7 @@ mod tests {
         let mut upcalls_map = HashMap::new();
         upcalls_map.insert(key, builtin_md);
 
-        let mut global = GlobalSymtable::new(&upcalls_map);
+        let mut global = GlobalSymtable::new(upcalls_map);
         let user_md =
             CallableMetadataBuilder::new("SHARED").with_return_type(ExprType::Integer).test_build();
         global.define_user_callable(&VarRef::new("shared", None), user_md).unwrap();
@@ -795,14 +795,14 @@ mod tests {
     #[test]
     fn test_get_callable_not_found() {
         let upcalls = HashMap::default();
-        let global = GlobalSymtable::new(&upcalls);
+        let global = GlobalSymtable::new(upcalls);
         assert!(global.get_callable(&SymbolKey::from("nope")).is_none());
     }
 
     #[test]
     fn test_temp_scope_first() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
         local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
         local.put_local(SymbolKey::from("b"), SymbolPrototype::Scalar(ExprType::Integer))?;
@@ -817,7 +817,7 @@ mod tests {
     #[test]
     fn test_temp_scope_first_no_locals() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
         {
             let temp = local.frozen();
@@ -830,7 +830,7 @@ mod tests {
     #[test]
     fn test_temp_scope_first_with_outer_allocation() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
         local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
         {
@@ -847,7 +847,7 @@ mod tests {
     #[test]
     fn test_temp_scope() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
         assert_eq!(
             Register::local(0).unwrap(),
@@ -886,7 +886,7 @@ mod tests {
     #[test]
     fn test_with_reserved_temp_register_index() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
         local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
         local.put_local(SymbolKey::from("b"), SymbolPrototype::Scalar(ExprType::Integer))?;
@@ -906,7 +906,7 @@ mod tests {
     #[test]
     fn test_with_reserved_temp_shifts_temp_scope_base() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
         local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
 
@@ -927,7 +927,7 @@ mod tests {
     #[test]
     fn test_with_reserved_temp_released_after_error() {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
 
         let err = local
@@ -952,7 +952,7 @@ mod tests {
     #[test]
     fn test_temp_scope_lookup_vars() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         global.put_global(SymbolKey::from("g"), SymbolPrototype::Scalar(ExprType::Integer))?;
         let mut local = global.enter_scope();
         local.put_local(SymbolKey::from("l"), SymbolPrototype::Scalar(ExprType::Text))?;
@@ -975,7 +975,7 @@ mod tests {
     #[test]
     fn test_temp_scope_lookup_callable() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let md = CallableMetadataBuilder::new("FOO").test_build();
         global.define_user_callable(&VarRef::new("foo", None), md)?;
 
@@ -992,7 +992,7 @@ mod tests {
     #[test]
     fn test_multiple_scopes_independent_locals() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
 
         {
             let mut local = global.enter_scope();
@@ -1018,7 +1018,7 @@ mod tests {
     #[test]
     fn test_global_put_and_get_array() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
 
         let reg = global.put_global(
             SymbolKey::from("arr"),
@@ -1038,7 +1038,7 @@ mod tests {
     #[test]
     fn test_local_put_and_get_array() -> Result<()> {
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
 
         let reg = local.put_local(
