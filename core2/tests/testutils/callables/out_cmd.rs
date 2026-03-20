@@ -25,7 +25,7 @@ use std::rc::Rc;
 
 /// A command that prints its arguments to a virtual console.
 pub(super) struct OutCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     output: Rc<RefCell<String>>,
 }
 
@@ -51,8 +51,8 @@ impl OutCommand {
 
 #[async_trait(?Send)]
 impl Callable for OutCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 /// A command that increments the argument passed in as a reference.
 pub(super) struct IncrementRequiredIntCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl IncrementRequiredIntCommand {
@@ -48,8 +48,8 @@ impl IncrementRequiredIntCommand {
 
 #[async_trait(?Send)]
 impl Callable for IncrementRequiredIntCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {

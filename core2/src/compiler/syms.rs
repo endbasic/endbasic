@@ -147,25 +147,25 @@ where
 /// Representation of the symbol table for global symbols.
 ///
 /// Globals are variables and callables that are visible from any scope.
-pub(crate) struct GlobalSymtable<'uref, 'ukey, 'umd> {
+pub(crate) struct GlobalSymtable<'uref, 'ukey> {
     /// Map of global variable names to their prototypes and assigned registers.
     globals: HashMapWithIds<SymbolKey, SymbolPrototype, u8>,
 
     /// Reference to the built-in callable metadata provided by the runtime.
-    upcalls: &'uref HashMap<&'ukey SymbolKey, &'umd CallableMetadata>,
+    upcalls: &'uref HashMap<&'ukey SymbolKey, Rc<CallableMetadata>>,
 
     /// Map of user-defined callable names to their metadata.
-    user_callables: HashMap<SymbolKey, CallableMetadata>,
+    user_callables: HashMap<SymbolKey, Rc<CallableMetadata>>,
 }
 
-impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
+impl<'uref, 'ukey> GlobalSymtable<'uref, 'ukey> {
     /// Creates a new global symbol table that knows about the given `upcalls`.
-    pub(crate) fn new(upcalls: &'uref HashMap<&'ukey SymbolKey, &'umd CallableMetadata>) -> Self {
+    pub(crate) fn new(upcalls: &'uref HashMap<&'ukey SymbolKey, Rc<CallableMetadata>>) -> Self {
         Self { globals: HashMapWithIds::default(), upcalls, user_callables: HashMap::default() }
     }
 
     /// Enters a new local scope.
-    pub(crate) fn enter_scope(&mut self) -> LocalSymtable<'uref, 'ukey, 'umd, '_> {
+    pub(crate) fn enter_scope(&mut self) -> LocalSymtable<'uref, 'ukey, '_> {
         LocalSymtable::new(self)
     }
 
@@ -199,7 +199,7 @@ impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
     pub(crate) fn define_user_callable(
         &mut self,
         vref: &VarRef,
-        md: CallableMetadata,
+        md: Rc<CallableMetadata>,
     ) -> Result<()> {
         let key = SymbolKey::from(&vref.name);
         if self.globals.get(&key).is_some() {
@@ -210,8 +210,8 @@ impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
     }
 
     /// Gets a callable by its name `key`.
-    pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<&CallableMetadata> {
-        self.user_callables.get(key).or(self.upcalls.get(key).copied())
+    pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<Rc<CallableMetadata>> {
+        self.user_callables.get(key).or(self.upcalls.get(key)).cloned()
     }
 }
 
@@ -219,9 +219,9 @@ impl<'uref, 'ukey, 'umd> GlobalSymtable<'uref, 'ukey, 'umd> {
 ///
 /// A local scope can see all global symbols and defines its own symbols, which can shadow the
 /// global ones.
-pub(crate) struct LocalSymtable<'uref, 'ukey, 'umd, 'a> {
+pub(crate) struct LocalSymtable<'uref, 'ukey, 'a> {
     /// Reference to the parent global symbol table.
-    symtable: &'a mut GlobalSymtable<'uref, 'ukey, 'umd>,
+    symtable: &'a mut GlobalSymtable<'uref, 'ukey>,
 
     /// Map of local variable names to their prototypes and assigned registers.
     locals: HashMapWithIds<SymbolKey, SymbolPrototype, u8>,
@@ -235,9 +235,9 @@ pub(crate) struct LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     active_temps: Rc<Cell<u8>>,
 }
 
-impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
+impl<'uref, 'ukey, 'a> LocalSymtable<'uref, 'ukey, 'a> {
     /// Creates a new local symbol table within the context of a global `symtable`.
-    fn new(symtable: &'a mut GlobalSymtable<'uref, 'ukey, 'umd>) -> Self {
+    fn new(symtable: &'a mut GlobalSymtable<'uref, 'ukey>) -> Self {
         Self {
             symtable,
             locals: HashMapWithIds::default(),
@@ -259,13 +259,13 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     pub(crate) fn define_user_callable(
         &mut self,
         vref: &VarRef,
-        md: CallableMetadata,
+        md: Rc<CallableMetadata>,
     ) -> Result<()> {
         self.symtable.define_user_callable(vref, md)
     }
 
     /// Freezes this table to get a `TempSymtable` that can be used to compile expressions.
-    pub(crate) fn frozen(&mut self) -> TempSymtable<'uref, 'ukey, 'umd, '_, 'a> {
+    pub(crate) fn frozen(&mut self) -> TempSymtable<'uref, 'ukey, '_, 'a> {
         TempSymtable::new(self)
     }
 
@@ -277,10 +277,7 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     ) -> std::result::Result<T, E>
     where
         ME: Fn(Error) -> E,
-        F: FnOnce(
-            Register,
-            &mut TempSymtable<'uref, 'ukey, 'umd, '_, 'a>,
-        ) -> std::result::Result<T, E>,
+        F: FnOnce(Register, &mut TempSymtable<'uref, 'ukey, '_, 'a>) -> std::result::Result<T, E>,
     {
         struct TempReservationGuard {
             active_temps: Rc<Cell<u8>>,
@@ -332,7 +329,7 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
     }
 
     /// Gets a callable by its name `key`.
-    pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<&CallableMetadata> {
+    pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<Rc<CallableMetadata>> {
         self.symtable.get_callable(key)
     }
 
@@ -377,9 +374,9 @@ impl<'uref, 'ukey, 'umd, 'a> LocalSymtable<'uref, 'ukey, 'umd, 'a> {
 /// to forbid mutations to local variables.  We need to be able to pass a `TempSymtable`
 /// across recursive function calls (for expression evaluation), but at the same time we
 /// need each call site to have its own `TempScope` for temporary register cleanup.
-pub(crate) struct TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
+pub(crate) struct TempSymtable<'uref, 'ukey, 'temp, 'local> {
     /// Reference to the underlying local symbol table.
-    symtable: &'temp mut LocalSymtable<'uref, 'ukey, 'umd, 'local>,
+    symtable: &'temp mut LocalSymtable<'uref, 'ukey, 'local>,
 
     /// Number of temporary registers that were already reserved on creation.
     base_temp: u8,
@@ -391,16 +388,16 @@ pub(crate) struct TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
     count_temps: Rc<RefCell<u8>>,
 }
 
-impl<'uref, 'ukey, 'umd, 'temp, 'local> Drop for TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
+impl<'uref, 'ukey, 'temp, 'local> Drop for TempSymtable<'uref, 'ukey, 'temp, 'local> {
     fn drop(&mut self) {
         debug_assert_eq!(self.base_temp, *self.next_temp.borrow(), "Unbalanced temp drops");
         self.symtable.count_temps = max(self.symtable.count_temps, *self.count_temps.borrow());
     }
 }
 
-impl<'uref, 'ukey, 'umd, 'temp, 'local> TempSymtable<'uref, 'ukey, 'umd, 'temp, 'local> {
+impl<'uref, 'ukey, 'temp, 'local> TempSymtable<'uref, 'ukey, 'temp, 'local> {
     /// Creates a new temporary symbol table from a `local` table.
-    fn new(symtable: &'temp mut LocalSymtable<'uref, 'ukey, 'umd, 'local>) -> Self {
+    fn new(symtable: &'temp mut LocalSymtable<'uref, 'ukey, 'local>) -> Self {
         let base_temp = symtable.active_temps.get();
         Self {
             symtable,
@@ -416,7 +413,7 @@ impl<'uref, 'ukey, 'umd, 'temp, 'local> TempSymtable<'uref, 'ukey, 'umd, 'temp, 
     }
 
     /// Gets a callable by its name `key`.
-    pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<&CallableMetadata> {
+    pub(crate) fn get_callable(&self, key: &SymbolKey) -> Option<Rc<CallableMetadata>> {
         self.symtable.get_callable(key)
     }
 
@@ -770,7 +767,7 @@ mod tests {
         let key = SymbolKey::from("BUILTIN");
         let md = CallableMetadataBuilder::new("BUILTIN").test_build();
         let mut upcalls_map = HashMap::new();
-        upcalls_map.insert(&key, &md);
+        upcalls_map.insert(&key, md);
 
         let global = GlobalSymtable::new(&upcalls_map);
         let found = global.get_callable(&SymbolKey::from("builtin"));
@@ -784,7 +781,7 @@ mod tests {
         let builtin_md =
             CallableMetadataBuilder::new("SHARED").with_return_type(ExprType::Boolean).test_build();
         let mut upcalls_map = HashMap::new();
-        upcalls_map.insert(&key, &builtin_md);
+        upcalls_map.insert(&key, builtin_md);
 
         let mut global = GlobalSymtable::new(&upcalls_map);
         let user_md =

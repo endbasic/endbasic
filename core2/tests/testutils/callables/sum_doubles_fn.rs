@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 /// A function that adds all of its arguments.
 pub(super) struct SumDoublesFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl SumDoublesFunction {
@@ -48,8 +48,8 @@ impl SumDoublesFunction {
 
 #[async_trait(?Send)]
 impl Callable for SumDoublesFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 /// A command that raises an error based on a string argument.
 pub(super) struct RaiseCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl RaiseCommand {
@@ -44,8 +44,8 @@ impl RaiseCommand {
 
 #[async_trait(?Send)]
 impl Callable for RaiseCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

@@ -16,76 +16,18 @@
 
 //! Common compilers for callable arguments.
 
+use super::SymbolKey;
+use super::syms::LocalSymtable;
 use crate::ast::{ArgSpan, CallSpan, Expr, VarRef};
 use crate::bytecode::{self, Register};
-use crate::callable::{CallableMetadata, CallableSyntax};
+use crate::callable::CallableMetadata;
 use crate::compiler::codegen::Codegen;
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
 use crate::compiler::syms::{self, SymbolPrototype, TempSymtable};
 use crate::compiler::{Error, Result};
 use crate::reader::LineCol;
 use crate::{ArgSep, ArgSepSyntax, ExprType, RepeatedTypeSyntax, SingularArgSyntax};
-
-use super::SymbolKey;
-use super::syms::LocalSymtable;
-
-/// Returns true if `sep` is valid for a function call (only `Long` and `End` are allowed because
-/// the parser only produces comma separators for function arguments).
-fn is_function_sep(sep: &ArgSepSyntax) -> bool {
-    match sep {
-        ArgSepSyntax::Exactly(ArgSep::Long) | ArgSepSyntax::End => true,
-        ArgSepSyntax::OneOf(seps) => seps.iter().all(|s| *s == ArgSep::Long),
-        _ => false,
-    }
-}
-
-/// Checks that the syntax of a callable that returns a value only uses separators that can appear
-/// in a function call (i.e. the comma separator).  The parser only produces `ArgSep::Long` for
-/// function arguments, so any other separator in the metadata would be dead/untestable.
-fn debug_assert_function_seps(md: &CallableMetadata, syntax: &CallableSyntax) {
-    if md.return_type().is_none() {
-        return;
-    }
-    for syn in syntax.singular.iter() {
-        let sep = match syn {
-            SingularArgSyntax::RequiredValue(_, sep) => sep,
-            SingularArgSyntax::RequiredRef(_, sep) => sep,
-            SingularArgSyntax::OptionalValue(_, sep) => sep,
-            SingularArgSyntax::AnyValue(_, sep) => sep,
-        };
-        debug_assert!(
-            is_function_sep(sep),
-            "Function {} has a non-comma separator in its singular args syntax",
-            md.name()
-        );
-    }
-    if let Some(repeated) = syntax.repeated.as_ref() {
-        debug_assert!(
-            is_function_sep(&repeated.sep),
-            "Function {} has a non-comma separator in its repeated args syntax",
-            md.name()
-        );
-    }
-}
-
-/// Finds the syntax definition that matches the given argument count.
-///
-/// Returns an error if no syntax matches, and panics if multiple syntaxes match (which would
-/// indicate an ambiguous callable definition).
-fn find_syntax(md: &CallableMetadata, pos: LineCol, nargs: usize) -> Result<&CallableSyntax> {
-    let mut matches = md.syntaxes().iter().filter(|s| s.expected_nargs().contains(&nargs));
-    let syntax = matches.next();
-    match syntax {
-        Some(syntax) => {
-            debug_assert!(matches.next().is_none(), "Ambiguous syntax definitions");
-            if cfg!(debug_assertions) {
-                debug_assert_function_seps(md, syntax);
-            }
-            Ok(syntax)
-        }
-        None => Err(Error::CallableSyntax(pos, md.clone())),
-    }
-}
+use std::rc::Rc;
 
 /// Compiles an argument separator with any necessary tagging.
 ///
@@ -100,7 +42,7 @@ fn find_syntax(md: &CallableMetadata, pos: LineCol, nargs: usize) -> Result<&Cal
 /// only for diagnostics purposes.
 #[allow(clippy::too_many_arguments)]
 fn validate_syn_argsep(
-    md: &CallableMetadata,
+    md: &Rc<CallableMetadata>,
     pos: LineCol,
     syn: &ArgSepSyntax,
     is_last: bool,
@@ -115,7 +57,7 @@ fn validate_syn_argsep(
         ArgSepSyntax::Exactly(exp_sep) => {
             debug_assert!(*exp_sep != ArgSep::End, "Use ArgSepSyntax::End");
             if sep != ArgSep::End && sep != *exp_sep {
-                return Err(Error::CallableSyntax(pos, md.clone()));
+                return Err(Error::CallableSyntax(pos, md.as_ref().clone()));
             }
             Ok(())
         }
@@ -130,7 +72,7 @@ fn validate_syn_argsep(
                 }
             }
             if !found {
-                return Err(Error::CallableSyntax(pos, md.clone()));
+                return Err(Error::CallableSyntax(pos, md.as_ref().clone()));
             }
             Ok(())
         }
@@ -145,7 +87,7 @@ fn validate_syn_argsep(
 /// Pre-allocates one local variable for a command output argument, setting its to its default
 /// value.
 fn define_new_arg(
-    symtable: &mut LocalSymtable<'_, '_, '_, '_>,
+    symtable: &mut LocalSymtable<'_, '_, '_>,
     vref: &VarRef,
     pos: LineCol,
     codegen: &mut Codegen,
@@ -162,11 +104,13 @@ fn define_new_arg(
 /// Pre-allocates local variables for command output arguments.
 pub(super) fn define_new_args(
     span: &CallSpan,
-    md: &CallableMetadata,
-    symtable: &mut LocalSymtable<'_, '_, '_, '_>,
+    md: &Rc<CallableMetadata>,
+    symtable: &mut LocalSymtable<'_, '_, '_>,
     codegen: &mut Codegen,
 ) -> Result<()> {
-    let syntax = find_syntax(md, span.vref_pos, span.args.len())?;
+    let Some(syntax) = md.find_syntax(span.args.len()) else {
+        return Err(Error::CallableSyntax(span.vref_pos, md.as_ref().clone()));
+    };
 
     let mut arg_iter = span.args.iter();
 
@@ -235,13 +179,15 @@ pub(super) fn define_new_args(
 /// eliminating the `MetadataBuilder` and pass a static reference here.
 pub(super) fn compile_args(
     span: CallSpan,
-    md: CallableMetadata,
-    symtable: &mut TempSymtable<'_, '_, '_, '_, '_>,
+    md: Rc<CallableMetadata>,
+    symtable: &mut TempSymtable<'_, '_, '_, '_>,
     codegen: &mut Codegen,
 ) -> Result<(Register, Vec<LineCol>)> {
     let key_pos = span.vref_pos;
 
-    let syntax = find_syntax(&md, key_pos, span.args.len())?;
+    let Some(syntax) = md.find_syntax(span.args.len()) else {
+        return Err(Error::CallableSyntax(key_pos, md.as_ref().clone()));
+    };
 
     let mut scope = symtable.temp_scope();
 
@@ -261,7 +207,7 @@ pub(super) fn compile_args(
                 let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
 
                 match expr {
-                    None => return Err(Error::CallableSyntax(key_pos, md)),
+                    None => return Err(Error::CallableSyntax(key_pos, md.as_ref().clone())),
                     Some(expr) => {
                         let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
                         arg_linecols.push(arg_pos);
@@ -277,12 +223,12 @@ pub(super) fn compile_args(
                 let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
 
                 match expr {
-                    None => return Err(Error::CallableSyntax(key_pos, md)),
+                    None => return Err(Error::CallableSyntax(key_pos, md.as_ref().clone())),
                     Some(Expr::Symbol(span)) => {
                         let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
                             Ok((reg, SymbolPrototype::Scalar(vtype))) => (reg, vtype),
                             Ok((_, SymbolPrototype::Array(_))) => {
-                                return Err(Error::CallableSyntax(span.pos, md));
+                                return Err(Error::CallableSyntax(span.pos, md.as_ref().clone()));
                             }
                             Err(e @ syms::Error::UndefinedSymbol(..)) => {
                                 if !details.define_undefined {
@@ -297,7 +243,9 @@ pub(super) fn compile_args(
                         codegen.emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
                         validate_syn_argsep(&md, arg_pos, exp_sep, arg_iter.peek().is_none(), sep)?;
                     }
-                    Some(expr) => return Err(Error::CallableSyntax(expr.start_pos(), md)),
+                    Some(expr) => {
+                        return Err(Error::CallableSyntax(expr.start_pos(), md.as_ref().clone()));
+                    }
                 }
             }
 
@@ -336,7 +284,7 @@ pub(super) fn compile_args(
                     Some(ArgSpan { expr, sep, sep_pos }) => (expr, sep, sep_pos),
                     None => {
                         if !details.allow_missing {
-                            return Err(Error::CallableSyntax(key_pos, md));
+                            return Err(Error::CallableSyntax(key_pos, md.as_ref().clone()));
                         }
                         (None, ArgSep::End, key_pos)
                     }
@@ -373,7 +321,7 @@ pub(super) fn compile_args(
             min_nargs += 1;
         }
         if input_nargs < min_nargs {
-            return Err(Error::CallableSyntax(key_pos, md));
+            return Err(Error::CallableSyntax(key_pos, md.as_ref().clone()));
         }
 
         if arg_iter.peek().is_none() {
@@ -394,7 +342,7 @@ pub(super) fn compile_args(
             let tag = match expr {
                 None => {
                     if !syn.allow_missing {
-                        return Err(Error::CallableSyntax(arg_pos, md));
+                        return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
                     }
                     bytecode::VarArgTag::Missing(sep)
                 }
@@ -416,13 +364,13 @@ pub(super) fn compile_args(
 
                     RepeatedTypeSyntax::VariableRef => {
                         let Expr::Symbol(span) = expr else {
-                            return Err(Error::CallableSyntax(arg_pos, md));
+                            return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
                         };
 
                         let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
                             Ok((reg, SymbolPrototype::Scalar(vtype))) => (reg, vtype),
                             Ok((_, SymbolPrototype::Array(_))) => {
-                                return Err(Error::CallableSyntax(arg_pos, md));
+                                return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
                             }
                             Err(syms::Error::UndefinedSymbol(..)) => {
                                 unreachable!("Caller must use define_new_args first for commands");
@@ -442,7 +390,7 @@ pub(super) fn compile_args(
 
     if arg_iter.peek().is_some() {
         debug_assert!(arg_iter.next().is_some(), "Args and their syntax must advance in unison");
-        return Err(Error::CallableSyntax(key_pos, md));
+        return Err(Error::CallableSyntax(key_pos, md.as_ref().clone()));
     }
 
     let first_reg = scope.first().map_err(|e| Error::from_syms(e, key_pos))?;

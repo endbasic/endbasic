@@ -25,7 +25,7 @@ use std::rc::Rc;
 
 /// A command that prints various positional arguments of different types.
 pub(super) struct OutPositionalCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     output: Rc<RefCell<String>>,
 }
 
@@ -61,8 +61,8 @@ impl OutPositionalCommand {
 
 #[async_trait(?Send)]
 impl Callable for OutPositionalCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

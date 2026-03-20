@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 /// A function that concatenates all of its string arguments.
 pub(super) struct ConcatFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl ConcatFunction {
@@ -48,8 +48,8 @@ impl ConcatFunction {
 
 #[async_trait(?Send)]
 impl Callable for ConcatFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

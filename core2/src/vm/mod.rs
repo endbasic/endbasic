@@ -356,7 +356,7 @@ mod tests {
     /// On each invocation, records the result of `scope.get_pos(n)` for `0..nargs` into
     /// `positions`.
     struct PosCapture {
-        metadata: CallableMetadata,
+        metadata: Rc<CallableMetadata>,
         nargs: u8,
         positions: Rc<RefCell<Vec<LineCol>>>,
     }
@@ -390,8 +390,8 @@ mod tests {
 
     #[async_trait(?Send)]
     impl Callable for PosCapture {
-        fn metadata(&self) -> &CallableMetadata {
-            &self.metadata
+        fn metadata(&self) -> Rc<CallableMetadata> {
+            self.metadata.clone()
         }
 
         async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

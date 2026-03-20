@@ -53,6 +53,11 @@ pub enum Error {
     BinaryOpType(LineCol, &'static str, ExprType, ExprType),
 
     /// Callable invoked with incorrect syntax.
+    // TODO(jmmv): It'd be nice if we could carry an Rc<CallableMetadata> here to avoid copying
+    // but... because of async in consumers, we would need an `Arc` instead just for this single
+    // error type.   Given that performance during error propagation is not important, the copy
+    // is just fine.  If we ever have to pollute everything with `Arc`s in the future, then we
+    // could do this.
     #[error("{0}: {} expected {}", .1.name(), .1.syntax())]
     CallableSyntax(LineCol, CallableMetadata),
 

@@ -22,7 +22,7 @@ use std::rc::Rc;
 
 /// A function that returns the last error recorded by the VM.
 pub(super) struct LastErrorFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl LastErrorFunction {
@@ -38,8 +38,8 @@ impl LastErrorFunction {
 
 #[async_trait(?Send)]
 impl Callable for LastErrorFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

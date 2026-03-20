@@ -25,7 +25,7 @@ use std::rc::Rc;
 
 /// A command that prints its single optional argument.
 pub(super) struct OutOptionalCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     output: Rc<RefCell<String>>,
 }
 
@@ -48,8 +48,8 @@ impl OutOptionalCommand {
 
 #[async_trait(?Send)]
 impl Callable for OutOptionalCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

@@ -33,7 +33,7 @@ use std::rc::Rc;
 /// them with a single space.
 pub struct OutCommand {
     /// Metadata describing the command's name and syntax.
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 
     /// Shared storage for captured output strings.
     data: Rc<RefCell<Vec<String>>>,
@@ -62,8 +62,8 @@ impl OutCommand {
 
 #[async_trait(?Send)]
 impl Callable for OutCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
