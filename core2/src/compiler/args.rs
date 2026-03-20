@@ -87,7 +87,7 @@ fn validate_syn_argsep(
 /// Pre-allocates one local variable for a command output argument, setting its to its default
 /// value.
 fn define_new_arg(
-    symtable: &mut LocalSymtable<'_, '_>,
+    symtable: &mut LocalSymtable<'_>,
     vref: &VarRef,
     pos: LineCol,
     codegen: &mut Codegen,
@@ -105,7 +105,7 @@ fn define_new_arg(
 pub(super) fn define_new_args(
     span: &CallSpan,
     md: &Rc<CallableMetadata>,
-    symtable: &mut LocalSymtable<'_, '_>,
+    symtable: &mut LocalSymtable<'_>,
     codegen: &mut Codegen,
 ) -> Result<()> {
     let Some(syntax) = md.find_syntax(span.args.len()) else {
@@ -180,7 +180,7 @@ pub(super) fn define_new_args(
 pub(super) fn compile_args(
     span: CallSpan,
     md: Rc<CallableMetadata>,
-    symtable: &mut TempSymtable<'_, '_, '_>,
+    symtable: &mut TempSymtable<'_, '_>,
     codegen: &mut Codegen,
 ) -> Result<(Register, Vec<LineCol>)> {
     let key_pos = span.vref_pos;
@@ -427,7 +427,7 @@ mod tests {
         let enter = codegen.emit(bytecode::make_nop(), LineCol { line: 0, col: 0 });
 
         let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(&upcalls);
+        let mut global = GlobalSymtable::new(upcalls);
         let mut local = global.enter_scope();
         let (first_reg, arg_linecols) = {
             let mut symtable = local.frozen();

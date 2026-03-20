@@ -29,7 +29,7 @@ use crate::reader::LineCol;
 /// first register.  The caller must guarantee that `exprs` is non-empty.
 pub(super) fn compile_integer_exprs(
     codegen: &mut Codegen,
-    symtable: &mut TempSymtable<'_, '_, '_>,
+    symtable: &mut TempSymtable<'_, '_>,
     scope: &mut TempScope,
     pos: LineCol,
     exprs: impl Iterator<Item = Expr>,
@@ -48,7 +48,7 @@ pub(super) fn compile_integer_exprs(
 /// Compiles an array element access expression into `reg`.
 fn compile_array_access(
     codegen: &mut Codegen,
-    symtable: &mut TempSymtable<'_, '_, '_>,
+    symtable: &mut TempSymtable<'_, '_>,
     reg: Register,
     key_pos: LineCol,
     arr_reg: Register,
@@ -451,7 +451,7 @@ fn resolve_numeric_binary_type(
 /// by recursing on the lhs.
 fn compile_pending_ops(
     codegen: &mut Codegen,
-    symtable: &mut TempSymtable<'_, '_, '_>,
+    symtable: &mut TempSymtable<'_, '_>,
     reg: Register,
     mut etype: ExprType,
     mut pending: Vec<PendingOp>,
@@ -574,7 +574,7 @@ fn compile_pending_ops(
 /// than recurses so that very long expression chains do not overflow the call stack.
 pub(super) fn compile_expr(
     codegen: &mut Codegen,
-    symtable: &mut TempSymtable<'_, '_, '_>,
+    symtable: &mut TempSymtable<'_, '_>,
     reg: Register,
     expr: Expr,
 ) -> Result<ExprType> {
@@ -727,7 +727,7 @@ pub(super) fn compile_expr(
 /// possible.
 pub(super) fn compile_expr_as_type(
     codegen: &mut Codegen,
-    symtable: &mut TempSymtable<'_, '_, '_>,
+    symtable: &mut TempSymtable<'_, '_>,
     reg: Register,
     expr: Expr,
     target: ExprType,

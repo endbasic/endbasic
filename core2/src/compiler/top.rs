@@ -106,7 +106,7 @@ fn static_end_code(expr: &Expr) -> Option<(i32, LineCol)> {
 /// Compiles an assignment statement `span` into the `codegen` block.
 fn compile_assignment(
     codegen: &mut Codegen,
-    symtable: &mut LocalSymtable<'_, '_>,
+    symtable: &mut LocalSymtable<'_>,
     span: AssignmentSpan,
 ) -> Result<()> {
     let vref_pos = span.vref_pos;
@@ -254,7 +254,7 @@ fn compile_case_relop(
 /// Compiles one `CASE` guard and returns the register and source position of its boolean result.
 fn compile_case_guard(
     ctx: &mut Context,
-    symtable: &mut TempSymtable<'_, '_, '_>,
+    symtable: &mut TempSymtable<'_, '_>,
     test_reg: Register,
     test_type: ExprType,
     guard: CaseGuardSpan,
@@ -327,7 +327,7 @@ fn compile_case_guard(
 /// Compiles a `SELECT` statement and emits bytecode into `ctx`.
 fn compile_select(
     ctx: &mut Context,
-    symtable: &mut LocalSymtable<'_, '_>,
+    symtable: &mut LocalSymtable<'_>,
     span: SelectSpan,
 ) -> Result<()> {
     let end_pos = span.end_pos;
@@ -428,11 +428,11 @@ fn compile_select(
 }
 
 /// Compiles a `DO` loop and emits bytecode into `ctx`.
-fn compile_do(ctx: &mut Context, symtable: &mut LocalSymtable<'_, '_>, span: DoSpan) -> Result<()> {
+fn compile_do(ctx: &mut Context, symtable: &mut LocalSymtable<'_>, span: DoSpan) -> Result<()> {
     /// Compiles one loop guard expression to a temporary boolean register.
     fn compile_guard(
         ctx: &mut Context,
-        symtable: &mut LocalSymtable<'_, '_>,
+        symtable: &mut LocalSymtable<'_>,
         guard: Expr,
     ) -> Result<(Register, LineCol)> {
         let guard_pos = guard.start_pos();
@@ -539,11 +539,7 @@ fn compile_do(ctx: &mut Context, symtable: &mut LocalSymtable<'_, '_>, span: DoS
 }
 
 /// Compiles a `FOR` loop and emits bytecode into `ctx`.
-fn compile_for(
-    ctx: &mut Context,
-    symtable: &mut LocalSymtable<'_, '_>,
-    span: ForSpan,
-) -> Result<()> {
+fn compile_for(ctx: &mut Context, symtable: &mut LocalSymtable<'_>, span: ForSpan) -> Result<()> {
     if span.iter_double && span.iter.ref_type.is_none() {
         match symtable.get_local_or_global(&span.iter) {
             Ok(..) => {
@@ -615,7 +611,7 @@ fn compile_for(
 }
 
 /// Compiles an `IF` statement `span` into the `ctx`.
-fn compile_if(ctx: &mut Context, symtable: &mut LocalSymtable<'_, '_>, span: IfSpan) -> Result<()> {
+fn compile_if(ctx: &mut Context, symtable: &mut LocalSymtable<'_>, span: IfSpan) -> Result<()> {
     let mut end_pcs: Vec<usize> = vec![];
     let nbranches = span.branches.len();
 
@@ -665,7 +661,7 @@ fn compile_if(ctx: &mut Context, symtable: &mut LocalSymtable<'_, '_>, span: IfS
 /// Compiles a `WHILE` loop and emits bytecode into `ctx`.
 fn compile_while(
     ctx: &mut Context,
-    symtable: &mut LocalSymtable<'_, '_>,
+    symtable: &mut LocalSymtable<'_>,
     span: WhileSpan,
 ) -> Result<()> {
     let start_pc = ctx.codegen.next_pc();
@@ -698,7 +694,7 @@ fn compile_while(
 /// Compiles a single `stmt` into the `ctx`.
 fn compile_stmt(
     ctx: &mut Context,
-    symtable: &mut LocalSymtable<'_, '_>,
+    symtable: &mut LocalSymtable<'_>,
     stmt: Statement,
 ) -> Result<()> {
     let start_pc = ctx.codegen.next_pc();
@@ -1025,7 +1021,7 @@ fn compile_stmt(
 }
 
 /// Compiles a sequence of `stmts` that all live in the same `symtable` scope.
-fn compile_scope<I>(ctx: &mut Context, mut symtable: LocalSymtable<'_, '_>, stmts: I) -> Result<()>
+fn compile_scope<I>(ctx: &mut Context, mut symtable: LocalSymtable<'_>, stmts: I) -> Result<()>
 where
     I: Iterator<Item = std::result::Result<Statement, parser::Error>>,
 {
@@ -1241,7 +1237,7 @@ fn prepare_globals(
 /// `upcalls` contains the metadata of all built-in callables that the compiled code can use.
 pub fn compile_with_globals(
     input: &mut dyn io::Read,
-    upcalls: &HashMap<SymbolKey, Rc<CallableMetadata>>,
+    upcalls: HashMap<SymbolKey, Rc<CallableMetadata>>,
     global_defs: &[GlobalDef],
 ) -> Result<Image> {
     let mut ctx = Context::default();
@@ -1273,7 +1269,7 @@ pub fn compile_with_globals(
 /// `upcalls` contains the metadata of all built-in callables that the compiled code can use.
 pub fn compile(
     input: &mut dyn io::Read,
-    upcalls: &HashMap<SymbolKey, Rc<CallableMetadata>>,
+    upcalls: HashMap<SymbolKey, Rc<CallableMetadata>>,
 ) -> Result<Image> {
     compile_with_globals(input, upcalls, &[])
 }
@@ -1286,7 +1282,7 @@ mod tests {
     use crate::vm::{StopReason, Vm};
 
     fn compile_and_get_global(defs: &[GlobalDef], name: &str) -> ConstantDatum {
-        let image = compile_with_globals(&mut "".as_bytes(), &HashMap::default(), defs)
+        let image = compile_with_globals(&mut "".as_bytes(), HashMap::default(), defs)
             .expect("compilation should succeed");
         let mut vm = Vm::new(HashMap::default());
         vm.load(image);
@@ -1369,7 +1365,7 @@ mod tests {
                 initial_value: Some(ConstantDatum::Double(1.5)),
             },
         }];
-        let result = compile_with_globals(&mut "".as_bytes(), &HashMap::default(), &defs);
+        let result = compile_with_globals(&mut "".as_bytes(), HashMap::default(), &defs);
         assert!(matches!(result, Err(Error::TypeMismatch(..))));
     }
 }
