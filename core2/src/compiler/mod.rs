@@ -19,9 +19,12 @@
 use crate::ast::{ExprType, VarRef};
 use crate::bytecode::{InvalidExitCodeError, RegisterScope};
 use crate::callable::CallableMetadata;
-use crate::parser;
+use crate::image::Image;
 use crate::reader::LineCol;
+use crate::{Callable, parser};
+use std::collections::HashMap;
 use std::io;
+use std::rc::Rc;
 
 mod args;
 
@@ -32,10 +35,12 @@ mod exprs;
 mod ids;
 
 mod syms;
+use syms::GlobalSymtable;
 pub use syms::SymbolKey;
 
 mod top;
-pub use top::{GlobalDef, GlobalDefKind, compile, only_metadata};
+use top::{Context, prepare_globals};
+pub use top::{GlobalDef, GlobalDefKind, only_metadata};
 
 /// Errors that can occur during compilation.
 #[derive(Debug, thiserror::Error)]
@@ -172,3 +177,42 @@ impl From<parser::Error> for Error {
 
 /// Result type for compilation operations.
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Compiler context.
+///
+/// This exists to support incremental compilation by keeping state and appending code to the
+/// image being built, which is useful in REPL scenarios.
+pub struct Compiler {
+    context: Context,
+    symtable: GlobalSymtable,
+}
+
+impl Compiler {
+    /// Creates a new compiler instance.
+    ///
+    /// `global_defs` provides pre-defined global variables visible to the compiled program.
+    ///
+    /// `upcalls` contains the metadata of all built-in callables that the compiled code can use.
+    pub fn new(
+        upcalls: &HashMap<SymbolKey, Rc<dyn Callable>>,
+        global_defs: &[GlobalDef],
+    ) -> Result<Self> {
+        let mut upcalls_metadata = HashMap::with_capacity(upcalls.len());
+        for (k, v) in upcalls.iter() {
+            upcalls_metadata.insert(k.clone(), v.metadata());
+        }
+
+        let mut context = Context::default();
+
+        let mut symtable = GlobalSymtable::new(upcalls_metadata);
+
+        prepare_globals(&mut context, &mut symtable, global_defs)?;
+
+        Ok(Self { context, symtable })
+    }
+
+    /// Compiles a chunk of code.
+    pub fn compile(self, input: &mut dyn io::Read) -> Result<Image> {
+        top::compile(input, self.context, self.symtable)
+    }
+}

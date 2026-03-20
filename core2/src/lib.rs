@@ -31,7 +31,7 @@ mod vm;
 pub use ast::{ArgSep, ExprType};
 pub use bytecode::{ExitCode, InvalidExitCodeError, VarArgTag};
 pub use callable::*;
-pub use compiler::{GlobalDef, GlobalDefKind, SymbolKey, compile, only_metadata};
+pub use compiler::{Compiler, GlobalDef, GlobalDefKind, SymbolKey, only_metadata};
 pub use mem::ConstantDatum;
 pub use vm::{GetGlobalError, GetGlobalResult, StopReason, Vm};
 

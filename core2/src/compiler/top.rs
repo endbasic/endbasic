@@ -55,7 +55,7 @@ enum CallableKind {
 /// This type exists to minimize the number of complex arguments passed across functions.
 /// If possible, avoid passing it and instead pass the minimum set of required fields.
 #[derive(Default)]
-struct Context {
+pub(super) struct Context {
     /// The code generator accumulating bytecode instructions.
     codegen: Codegen,
 
@@ -1189,7 +1189,7 @@ pub enum GlobalDefKind {
 ///
 /// After execution, use `Vm::get_global*` methods to query the values of these globals (and
 /// any globals declared via `DIM SHARED` in the program itself).
-fn prepare_globals(
+pub(super) fn prepare_globals(
     ctx: &mut Context,
     symtable: &mut GlobalSymtable,
     global_defs: &[GlobalDef],
@@ -1262,21 +1262,12 @@ fn prepare_globals(
     Ok(())
 }
 
-/// Compiles the `input` into an `Image` that can be executed by the VM, with `global_defs`
-/// pre-defined as global variables visible to the compiled program.
-///
-/// `upcalls` contains the metadata of all built-in callables that the compiled code can use.
+/// Compiles the `input` into an `Image` that can be executed by the VM.
 pub fn compile(
     input: &mut dyn io::Read,
-    upcalls: HashMap<SymbolKey, Rc<CallableMetadata>>,
-    global_defs: &[GlobalDef],
+    mut ctx: Context,
+    mut symtable: GlobalSymtable,
 ) -> Result<Image> {
-    let mut ctx = Context::default();
-
-    let mut symtable = GlobalSymtable::new(upcalls);
-
-    prepare_globals(&mut ctx, &mut symtable, global_defs)?;
-
     compile_scope(&mut ctx, symtable.enter_scope(), parser::parse(input))?;
     ctx.codegen.emit(bytecode::make_eof(), LineCol { line: 0, col: 0 });
 
@@ -1296,13 +1287,15 @@ pub fn compile(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Compiler;
     use crate::ast::ExprType;
     use crate::mem::ConstantDatum;
     use crate::vm::{StopReason, Vm};
 
     fn compile_and_get_global(defs: &[GlobalDef], name: &str) -> ConstantDatum {
-        let image = compile(&mut "".as_bytes(), HashMap::default(), defs)
-            .expect("compilation should succeed");
+        let compiler = Compiler::new(&HashMap::default(), defs)
+            .expect("constants initialization must succeed");
+        let image = compiler.compile(&mut "".as_bytes()).expect("compilation should succeed");
         let mut vm = Vm::new(HashMap::default());
         vm.load(image);
         match vm.exec() {
@@ -1384,7 +1377,7 @@ mod tests {
                 initial_value: Some(ConstantDatum::Double(1.5)),
             },
         }];
-        let result = compile(&mut "".as_bytes(), HashMap::default(), &defs);
+        let result = Compiler::new(&HashMap::default(), &defs);
         assert!(matches!(result, Err(Error::TypeMismatch(..))));
     }
 }
