@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 /// A command that defines the arguments passed in as a reference.
 pub(super) struct DefineAndChangeArgsCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl DefineAndChangeArgsCommand {
@@ -47,8 +47,8 @@ impl DefineAndChangeArgsCommand {
 
 #[async_trait(?Send)]
 impl Callable for DefineAndChangeArgsCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {

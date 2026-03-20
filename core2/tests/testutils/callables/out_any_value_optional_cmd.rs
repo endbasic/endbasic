@@ -25,7 +25,7 @@ use std::rc::Rc;
 
 /// A command that prints an argument of any type.
 pub(super) struct OutAnyValueOptionalCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     output: Rc<RefCell<String>>,
 }
 
@@ -48,8 +48,8 @@ impl OutAnyValueOptionalCommand {
 
 #[async_trait(?Send)]
 impl Callable for OutAnyValueOptionalCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

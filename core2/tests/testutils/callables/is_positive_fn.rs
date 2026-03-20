@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 /// A function that returns whether its integer argument is positive.
 pub(super) struct IsPositiveFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl IsPositiveFunction {
@@ -45,8 +45,8 @@ impl IsPositiveFunction {
 
 #[async_trait(?Send)]
 impl Callable for IsPositiveFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

@@ -27,6 +27,7 @@ use async_trait::async_trait;
 use std::borrow::Cow;
 use std::fmt;
 use std::ops::RangeInclusive;
+use std::rc::Rc;
 use std::str::Lines;
 
 /// Error types for callable execution.
@@ -453,30 +454,30 @@ impl CallableMetadataBuilder {
     }
 
     /// Generates the final `CallableMetadata` object, ensuring all values are present.
-    pub fn build(self) -> CallableMetadata {
+    pub fn build(self) -> Rc<CallableMetadata> {
         assert!(!self.syntaxes.is_empty(), "All callables must specify a syntax");
-        CallableMetadata {
+        Rc::from(CallableMetadata {
             name: self.name,
             return_type: self.return_type,
             syntaxes: self.syntaxes,
             category: self.category.expect("All callables must specify a category"),
             description: self.description.expect("All callables must specify a description"),
-        }
+        })
     }
 
     /// Generates the final `CallableMetadata` object, ensuring the minimal set of values are
     /// present.  Only useful for testing.
-    pub fn test_build(mut self) -> CallableMetadata {
+    pub fn test_build(mut self) -> Rc<CallableMetadata> {
         if self.syntaxes.is_empty() {
             self.syntaxes.push(CallableSyntax::new_static(&[], None));
         }
-        CallableMetadata {
+        Rc::from(CallableMetadata {
             name: self.name,
             return_type: self.return_type,
             syntaxes: self.syntaxes,
             category: self.category.unwrap_or(""),
             description: self.description.unwrap_or(""),
-        }
+        })
     }
 }
 
@@ -534,9 +535,62 @@ impl CallableMetadata {
         }
     }
 
-    /// Returns the callable's syntax definitions.
-    pub(crate) fn syntaxes(&self) -> &[CallableSyntax] {
-        &self.syntaxes
+    /// Returns true if `sep` is valid for a function call (only `Long` and `End` are allowed because
+    /// the parser only produces comma separators for function arguments).
+    fn is_function_sep(sep: &ArgSepSyntax) -> bool {
+        match sep {
+            ArgSepSyntax::Exactly(ArgSep::Long) | ArgSepSyntax::End => true,
+            ArgSepSyntax::OneOf(seps) => seps.iter().all(|s| *s == ArgSep::Long),
+            _ => false,
+        }
+    }
+
+    /// Checks that the syntax of a callable that returns a value only uses separators that can appear
+    /// in a function call (i.e. the comma separator).  The parser only produces `ArgSep::Long` for
+    /// function arguments, so any other separator in the metadata would be dead/untestable.
+    fn debug_assert_function_seps(&self, syntax: &CallableSyntax) {
+        if self.return_type().is_none() {
+            return;
+        }
+        for syn in syntax.singular.iter() {
+            let sep = match syn {
+                SingularArgSyntax::RequiredValue(_, sep) => sep,
+                SingularArgSyntax::RequiredRef(_, sep) => sep,
+                SingularArgSyntax::OptionalValue(_, sep) => sep,
+                SingularArgSyntax::AnyValue(_, sep) => sep,
+            };
+            debug_assert!(
+                Self::is_function_sep(sep),
+                "Function {} has a non-comma separator in its singular args syntax",
+                self.name()
+            );
+        }
+        if let Some(repeated) = syntax.repeated.as_ref() {
+            debug_assert!(
+                Self::is_function_sep(&repeated.sep),
+                "Function {} has a non-comma separator in its repeated args syntax",
+                self.name()
+            );
+        }
+    }
+
+    /// Finds the syntax definition that matches the given argument count.
+    ///
+    /// Returns an error if no syntax matches, and panics if multiple syntaxes match (which would
+    /// indicate an ambiguous callable definition).
+    pub(crate) fn find_syntax(&self, nargs: usize) -> Option<&CallableSyntax> {
+        let mut matches = self.syntaxes.iter().filter(|s| s.expected_nargs().contains(&nargs));
+        let syntax = matches.next();
+        match syntax {
+            Some(syntax) => {
+                debug_assert!(matches.next().is_none(), "Ambiguous syntax definitions");
+                if cfg!(debug_assertions) {
+                    self.debug_assert_function_seps(syntax);
+                }
+                Some(syntax)
+            }
+            None => None,
+        }
     }
 
     /// Gets the callable's category as a collection of lines.  The first line is the title of the
@@ -834,7 +888,7 @@ pub trait Callable {
     ///
     /// The return value takes the form of a reference to force the callable to store the metadata
     /// as a struct field so that calls to this function are guaranteed to be cheap.
-    fn metadata(&self) -> &CallableMetadata;
+    fn metadata(&self) -> Rc<CallableMetadata>;
 
     /// Executes the function.
     ///

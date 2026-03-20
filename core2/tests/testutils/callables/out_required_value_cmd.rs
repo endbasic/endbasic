@@ -25,7 +25,7 @@ use std::rc::Rc;
 
 /// A command that prints an argument of a specific type.
 pub(super) struct OutRequiredValueCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     output: Rc<RefCell<String>>,
 }
 
@@ -51,8 +51,8 @@ impl OutRequiredValueCommand {
 
 #[async_trait(?Send)]
 impl Callable for OutRequiredValueCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 /// A command that dumps all DATA values visible to the upcall.
 pub(super) struct GetDataCommand {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
     output: Rc<RefCell<String>>,
 }
 
@@ -50,8 +50,8 @@ fn format_datum(datum: &Option<ConstantDatum>) -> String {
 
 #[async_trait(?Send)]
 impl Callable for GetDataCommand {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

@@ -22,7 +22,7 @@ use std::rc::Rc;
 
 /// An argless function that returns the meaning of life (42).
 pub(super) struct MeaningOfLifeFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl MeaningOfLifeFunction {
@@ -38,8 +38,8 @@ impl MeaningOfLifeFunction {
 
 #[async_trait(?Send)]
 impl Callable for MeaningOfLifeFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {

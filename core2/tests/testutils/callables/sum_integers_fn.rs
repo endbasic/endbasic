@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 /// A function that adds all of its integer arguments.
 pub(super) struct SumIntegersFunction {
-    metadata: CallableMetadata,
+    metadata: Rc<CallableMetadata>,
 }
 
 impl SumIntegersFunction {
@@ -48,8 +48,8 @@ impl SumIntegersFunction {
 
 #[async_trait(?Send)]
 impl Callable for SumIntegersFunction {
-    fn metadata(&self) -> &CallableMetadata {
-        &self.metadata
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
