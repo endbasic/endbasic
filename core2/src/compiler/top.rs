@@ -1235,7 +1235,7 @@ fn prepare_globals(
 /// pre-defined as global variables visible to the compiled program.
 ///
 /// `upcalls` contains the metadata of all built-in callables that the compiled code can use.
-pub fn compile_with_globals(
+pub fn compile(
     input: &mut dyn io::Read,
     upcalls: HashMap<SymbolKey, Rc<CallableMetadata>>,
     global_defs: &[GlobalDef],
@@ -1264,16 +1264,6 @@ pub fn compile_with_globals(
     ctx.codegen.build_image(global_vars, ctx.data)
 }
 
-/// Compiles the `input` into an `Image` that can be executed by the VM.
-///
-/// `upcalls` contains the metadata of all built-in callables that the compiled code can use.
-pub fn compile(
-    input: &mut dyn io::Read,
-    upcalls: HashMap<SymbolKey, Rc<CallableMetadata>>,
-) -> Result<Image> {
-    compile_with_globals(input, upcalls, &[])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1282,7 +1272,7 @@ mod tests {
     use crate::vm::{StopReason, Vm};
 
     fn compile_and_get_global(defs: &[GlobalDef], name: &str) -> ConstantDatum {
-        let image = compile_with_globals(&mut "".as_bytes(), HashMap::default(), defs)
+        let image = compile(&mut "".as_bytes(), HashMap::default(), defs)
             .expect("compilation should succeed");
         let mut vm = Vm::new(HashMap::default());
         vm.load(image);
@@ -1365,7 +1355,7 @@ mod tests {
                 initial_value: Some(ConstantDatum::Double(1.5)),
             },
         }];
-        let result = compile_with_globals(&mut "".as_bytes(), HashMap::default(), &defs);
+        let result = compile(&mut "".as_bytes(), HashMap::default(), &defs);
         assert!(matches!(result, Err(Error::TypeMismatch(..))));
     }
 }
