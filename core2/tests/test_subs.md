@@ -545,3 +545,37 @@ END SUB
 ```plain
 4:5: Cannot redefine foo
 ```
+
+# Test: Sub nesting within a sub
+
+## Source
+
+```basic
+SUB foo
+    SUB bar
+    END SUB
+END SUB
+```
+
+## Compilation errors
+
+```plain
+2:5: Cannot nest FUNCTION or SUB definitions
+```
+
+# Test: Sub nesting within a function
+
+## Source
+
+```basic
+FUNCTION foo
+    SUB bar
+    END SUB
+END FUNCTION
+```
+
+## Compilation errors
+
+```plain
+2:5: Cannot nest FUNCTION or SUB definitions
+```
