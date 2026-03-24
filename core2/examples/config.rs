@@ -22,8 +22,7 @@
 //! not have side-effects.
 
 use endbasic_core2::{
-    ConstantDatum, ExprType, GlobalDef, GlobalDefKind, StopReason, Vm, compile_with_globals,
-    only_metadata,
+    ConstantDatum, ExprType, GlobalDef, GlobalDefKind, StopReason, Vm, compile, only_metadata,
 };
 use std::collections::HashMap;
 
@@ -80,7 +79,7 @@ fn main() {
 
     // Compile the script, making the pre-defined globals visible to it.
     let upcalls = HashMap::default();
-    let image = compile_with_globals(&mut SCRIPT.as_bytes(), only_metadata(&upcalls), &global_defs)
+    let image = compile(&mut SCRIPT.as_bytes(), only_metadata(&upcalls), &global_defs)
         .expect("Compilation failed");
 
     // Load and execute the compiled image.
