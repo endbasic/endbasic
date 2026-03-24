@@ -73,6 +73,7 @@ pub enum Token {
 
     Case,
     Data,
+    Declare,
     Do,
     Else,
     Elseif,
@@ -157,6 +158,7 @@ impl fmt::Display for Token {
 
             Token::Case => write!(f, "CASE"),
             Token::Data => write!(f, "DATA"),
+            Token::Declare => write!(f, "DECLARE"),
             Token::Do => write!(f, "DO"),
             Token::Else => write!(f, "ELSE"),
             Token::Elseif => write!(f, "ELSEIF"),
@@ -517,6 +519,7 @@ impl<'a> Lexer<'a> {
             "BOOLEAN" => Token::BooleanName,
             "CASE" => Token::Case,
             "DATA" => Token::Data,
+            "DECLARE" => Token::Declare,
             "DIM" => Token::Dim,
             "DO" => Token::Do,
             "DOUBLE" => Token::DoubleName,
@@ -1082,6 +1085,13 @@ mod tests {
                 ts(Token::Eof, 1, 13, 0),
             ],
         );
+    }
+
+    #[test]
+    fn test_declare() {
+        do_ok_test("DECLARE", &[ts(Token::Declare, 1, 1, 7), ts(Token::Eof, 1, 8, 0)]);
+
+        do_ok_test("declare", &[ts(Token::Declare, 1, 1, 7), ts(Token::Eof, 1, 8, 0)]);
     }
 
     #[test]

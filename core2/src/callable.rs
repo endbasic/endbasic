@@ -42,7 +42,7 @@ pub enum CallError {
 pub type CallResult<T> = Result<T, CallError>;
 
 /// Syntax specification for a required scalar parameter.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RequiredValueSyntax {
     /// The name of the parameter for help purposes.
     pub name: Cow<'static, str>,
@@ -52,7 +52,7 @@ pub struct RequiredValueSyntax {
 }
 
 /// Syntax specification for a required reference parameter.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RequiredRefSyntax {
     /// The name of the parameter for help purposes.
     pub name: Cow<'static, str>,
@@ -69,7 +69,7 @@ pub struct RequiredRefSyntax {
 /// Syntax specification for an optional scalar parameter.
 ///
 /// Optional parameters are only supported in commands.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct OptionalValueSyntax {
     /// The name of the parameter for help purposes.
     pub name: Cow<'static, str>,
@@ -79,7 +79,7 @@ pub struct OptionalValueSyntax {
 }
 
 /// Specifies the type constraints for a repeated parameter.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RepeatedTypeSyntax {
     /// Allows any value type, including empty arguments.  The values pushed onto the stack have
     /// the same semantics as those pushed by `AnyValueSyntax`.
@@ -95,7 +95,7 @@ pub enum RepeatedTypeSyntax {
 /// Syntax specification for a repeated parameter.
 ///
 /// The repeated parameter must appear after all singular positional parameters.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RepeatedSyntax {
     /// The name of the parameter for help purposes.
     pub name: Cow<'static, str>,
@@ -153,7 +153,7 @@ impl RepeatedSyntax {
 }
 
 /// Syntax specification for a parameter that accepts any scalar type.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AnyValueSyntax {
     /// The name of the parameter for help purposes.
     pub name: Cow<'static, str>,
@@ -212,7 +212,7 @@ impl ArgSepSyntax {
 ///
 /// Every item in this enum is composed of a struct that provides the details on the parameter and
 /// a struct that provides the details on how this parameter is separated from the next.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SingularArgSyntax {
     /// A required scalar value with the syntax details and the separator that follows.
     RequiredValue(RequiredValueSyntax, ArgSepSyntax),
@@ -234,7 +234,7 @@ pub enum SingularArgSyntax {
 /// builtin functions must never be ill-defined.
 // TODO(jmmv): It might be nice to try to express these restrictions in the type system, but
 // things are already too verbose as they are...
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CallableSyntax {
     /// Ordered list of singular arguments that appear before repeated arguments.
     pub(crate) singular: Cow<'static, [SingularArgSyntax]>,
@@ -485,7 +485,7 @@ impl CallableMetadataBuilder {
 ///
 /// The callable is expected to hold onto an instance of this object within its struct to make
 /// queries fast.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CallableMetadata {
     /// Name of the callable, stored in uppercase.
     name: Cow<'static, str>,

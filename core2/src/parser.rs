@@ -963,6 +963,7 @@ impl<'a> Parser<'a> {
                 Token::BooleanName
                 | Token::Case
                 | Token::Data
+                | Token::Declare
                 | Token::Do
                 | Token::Dim
                 | Token::DoubleName
@@ -1451,61 +1452,81 @@ impl<'a> Parser<'a> {
         Ok((body, end_pos))
     }
 
-    /// Parses a `FUNCTION` definition.
-    fn parse_function(&mut self, function_pos: LineCol) -> Result<Statement> {
+    /// Parses a `DECLARE` statement.
+    fn parse_declare(&mut self) -> Result<Statement> {
         let token_span = self.lexer.read()?;
-        let name = match token_span.token {
-            Token::Symbol(name) => {
-                if name.ref_type.is_none() {
-                    VarRef::new(name.name, Some(ExprType::Integer))
-                } else {
-                    name
-                }
-            }
+        let (name, name_pos, params) = match token_span.token {
+            Token::Function => self.parse_callable_signature(true, true)?,
+
+            Token::Sub => self.parse_callable_signature(true, false)?,
+
             _ => {
                 return Err(Error::Bad(
                     token_span.pos,
-                    "Expected a function name after FUNCTION".to_owned(),
+                    "Expected FUNCTION or SUB after DECLARE".to_owned(),
                 ));
             }
         };
-        let name_pos = token_span.pos;
-
-        let params = self.parse_callable_args()?;
-        self.expect_and_consume(Token::Eol, "Expected newline after FUNCTION name")?;
-
-        let (body, end_pos) = self.parse_callable_body(function_pos, Token::Function)?;
-
-        Ok(Statement::Callable(CallableSpan { name, name_pos, params, body, end_pos }))
+        Ok(Statement::Declare(DeclareSpan { name, name_pos, params }))
     }
 
-    /// Parses a `SUB` definition.
-    fn parse_sub(&mut self, sub_pos: LineCol) -> Result<Statement> {
+    /// Parses the signature of a callable declaration or definition.
+    fn parse_callable_signature(
+        &mut self,
+        is_declare: bool,
+        is_function: bool,
+    ) -> Result<(VarRef, LineCol, Vec<VarRef>)> {
+        let kw_name = if is_function { "FUNCTION" } else { "SUB" };
         let token_span = self.lexer.read()?;
         let name = match token_span.token {
-            Token::Symbol(name) => {
-                if name.ref_type.is_some() {
+            Token::Symbol(name) => match (name.ref_type, is_function) {
+                (None, true) => VarRef::new(name.name, Some(ExprType::Integer)),
+                (Some(..), true) => name,
+                (None, false) => name,
+                (Some(..), false) => {
                     return Err(Error::Bad(
                         token_span.pos,
                         "SUBs cannot return a value so type annotations are not allowed".to_owned(),
                     ));
                 }
-                name
-            }
+            },
             _ => {
                 return Err(Error::Bad(
                     token_span.pos,
-                    "Expected a function name after SUB".to_owned(),
+                    format!("Expected a name after {}", kw_name),
                 ));
             }
         };
         let name_pos = token_span.pos;
 
         let params = self.parse_callable_args()?;
-        self.expect_and_consume(Token::Eol, "Expected newline after SUB name")?;
 
+        let peeked = self.lexer.peek()?;
+        match peeked.token {
+            Token::Eol => (),
+            Token::Eof if is_declare => (),
+            _ => {
+                return Err(Error::Bad(
+                    peeked.pos,
+                    format!("Expected newline after {} name", kw_name),
+                ));
+            }
+        }
+
+        Ok((name, name_pos, params))
+    }
+
+    /// Parses a `FUNCTION` definition.
+    fn parse_function(&mut self, function_pos: LineCol) -> Result<Statement> {
+        let (name, name_pos, params) = self.parse_callable_signature(false, true)?;
+        let (body, end_pos) = self.parse_callable_body(function_pos, Token::Function)?;
+        Ok(Statement::Callable(CallableSpan { name, name_pos, params, body, end_pos }))
+    }
+
+    /// Parses a `SUB` definition.
+    fn parse_sub(&mut self, sub_pos: LineCol) -> Result<Statement> {
+        let (name, name_pos, params) = self.parse_callable_signature(false, false)?;
         let (body, end_pos) = self.parse_callable_body(sub_pos, Token::Sub)?;
-
         Ok(Statement::Callable(CallableSpan { name, name_pos, params, body, end_pos }))
     }
 
@@ -1863,6 +1884,7 @@ impl<'a> Parser<'a> {
         let token_span = self.lexer.read()?;
         let res = match token_span.token {
             Token::Data => Ok(Some(self.parse_data()?)),
+            Token::Declare => Ok(Some(self.parse_declare()?)),
             Token::Dim => Ok(Some(self.parse_dim()?)),
             Token::Do => {
                 let result = self.parse_do(token_span.pos);
@@ -2467,6 +2489,113 @@ mod tests {
         do_error_test("DATA -FALSE", "1:6: Expected number after -");
         do_error_test("DATA -\"abc\"", "1:6: Expected number after -");
         do_error_test("DATA -foo", "1:6: Expected number after -");
+    }
+
+    #[test]
+    fn test_declare_callable_no_args_eof() {
+        do_ok_test(
+            "DECLARE FUNCTION foo$",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", Some(ExprType::Text)),
+                name_pos: lc(1, 18),
+                params: vec![],
+            })],
+        );
+
+        do_ok_test(
+            "DECLARE SUB foo",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", None),
+                name_pos: lc(1, 13),
+                params: vec![],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_declare_callable_no_args_not_eof() {
+        do_ok_test(
+            "DECLARE FUNCTION foo$\nREM A comment",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", Some(ExprType::Text)),
+                name_pos: lc(1, 18),
+                params: vec![],
+            })],
+        );
+
+        do_ok_test(
+            "DECLARE SUB foo\nREM A comment",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", None),
+                name_pos: lc(1, 13),
+                params: vec![],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_declare_callable_consecutive() {
+        do_ok_test(
+            "DECLARE FUNCTION foo$\nDECLARE SUB bar",
+            &[
+                Statement::Declare(DeclareSpan {
+                    name: VarRef::new("foo", Some(ExprType::Text)),
+                    name_pos: lc(1, 18),
+                    params: vec![],
+                }),
+                Statement::Declare(DeclareSpan {
+                    name: VarRef::new("bar", None),
+                    name_pos: lc(2, 13),
+                    params: vec![],
+                }),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_declare_callable_multiple_params() {
+        do_ok_test(
+            "DECLARE FUNCTION foo$(x$, y, z AS BOOLEAN)",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", Some(ExprType::Text)),
+                name_pos: lc(1, 18),
+                params: vec![
+                    VarRef::new("x", Some(ExprType::Text)),
+                    VarRef::new("y", None),
+                    VarRef::new("z", Some(ExprType::Boolean)),
+                ],
+            })],
+        );
+
+        do_ok_test(
+            "DECLARE SUB foo(x$, y, z AS BOOLEAN)",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", None),
+                name_pos: lc(1, 13),
+                params: vec![
+                    VarRef::new("x", Some(ExprType::Text)),
+                    VarRef::new("y", None),
+                    VarRef::new("z", Some(ExprType::Boolean)),
+                ],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_declare_callable_errors() {
+        do_error_test("DECLARE", "1:8: Expected FUNCTION or SUB after DECLARE");
+        do_error_test("DECLARE foo", "1:9: Expected FUNCTION or SUB after DECLARE");
+
+        do_error_test("DECLARE FUNCTION", "1:17: Expected a name after FUNCTION");
+        do_error_test("DECLARE SUB", "1:12: Expected a name after SUB");
+
+        do_error_test("DECLARE FUNCTION foo()", "1:22: Expected a parameter name");
+        do_error_test("DECLARE SUB foo()", "1:17: Expected a parameter name");
+
+        do_error_test(
+            "DECLARE SUB foo%",
+            "1:13: SUBs cannot return a value so type annotations are not allowed",
+        );
     }
 
     #[test]
@@ -4266,7 +4395,7 @@ mod tests {
 
     #[test]
     fn test_function_errors() {
-        do_error_test("FUNCTION", "1:9: Expected a function name after FUNCTION");
+        do_error_test("FUNCTION", "1:9: Expected a name after FUNCTION");
         do_error_test("FUNCTION foo", "1:13: Expected newline after FUNCTION name");
         do_error_test("FUNCTION foo 3", "1:14: Expected newline after FUNCTION name");
         do_error_test("FUNCTION foo\nEND", "1:1: FUNCTION without END FUNCTION");
@@ -4776,7 +4905,7 @@ mod tests {
 
     #[test]
     fn test_sub_errors() {
-        do_error_test("SUB", "1:4: Expected a function name after SUB");
+        do_error_test("SUB", "1:4: Expected a name after SUB");
         do_error_test("SUB foo", "1:8: Expected newline after SUB name");
         do_error_test("SUB foo 3", "1:9: Expected newline after SUB name");
         do_error_test("SUB foo\nEND", "1:1: SUB without END SUB");
