@@ -147,6 +147,7 @@ where
 /// Representation of the symbol table for global symbols.
 ///
 /// Globals are variables and callables that are visible from any scope.
+#[derive(Clone)]
 pub(crate) struct GlobalSymtable {
     /// Map of global variable names to their prototypes and assigned registers.
     globals: HashMapWithIds<SymbolKey, SymbolPrototype, u8>,
@@ -219,6 +220,20 @@ impl GlobalSymtable {
     }
 }
 
+#[derive(Clone, Default)]
+pub(crate) struct LocalSymtableSnapshot {
+    /// Map of local variable names to their prototypes and assigned registers.
+    locals: HashMapWithIds<SymbolKey, SymbolPrototype, u8>,
+
+    /// Maximum number of allocated temporary registers in all possible evaluation scopes created
+    /// by this local symtable.  This is used to determine the size of the scope for register
+    /// allocation purposes at runtime.
+    count_temps: u8,
+
+    /// Number of reserved temporary registers that are active outside of `TempScope`.
+    active_temps: Rc<Cell<u8>>,
+}
+
 /// Representation of the symbol table for a local scope.
 ///
 /// A local scope can see all global symbols and defines its own symbols, which can shadow the
@@ -247,6 +262,30 @@ impl<'a> LocalSymtable<'a> {
             locals: HashMapWithIds::default(),
             count_temps: 0,
             active_temps: Rc::from(Cell::new(0)),
+        }
+    }
+
+    /// Preserves the state of this local symbol table, detached from the global symbol table
+    /// it belongs to.
+    pub(crate) fn save(self) -> LocalSymtableSnapshot {
+        LocalSymtableSnapshot {
+            locals: self.locals,
+            count_temps: self.count_temps,
+            active_temps: self.active_temps,
+        }
+    }
+
+    /// Reattaches a previous local symbol table content to a global symbol table so that it
+    /// can be used again for compilation.
+    pub(crate) fn restore(
+        symtable: &'a mut GlobalSymtable,
+        snapshot: LocalSymtableSnapshot,
+    ) -> Self {
+        Self {
+            symtable,
+            locals: snapshot.locals,
+            count_temps: snapshot.count_temps,
+            active_temps: snapshot.active_temps,
         }
     }
 
@@ -346,6 +385,13 @@ impl<'a> LocalSymtable<'a> {
     /// Returns true if a global variable `key` is already defined.
     pub(crate) fn contains_global(&self, key: &SymbolKey) -> bool {
         self.symtable.contains_global(key)
+    }
+
+    /// Iterates over all global variables, yielding `(key, prototype, register_index)` tuples.
+    pub(crate) fn iter_globals(
+        &self,
+    ) -> impl Iterator<Item = (SymbolKey, SymbolPrototype, u8)> + '_ {
+        self.symtable.iter_globals().map(|(k, v, i)| (k.clone(), v, i))
     }
 
     /// Changes the type of an existing local variable `vref` to `new_etype`.

@@ -35,8 +35,8 @@ mod exprs;
 mod ids;
 
 mod syms;
-use syms::GlobalSymtable;
 pub use syms::SymbolKey;
+use syms::{GlobalSymtable, LocalSymtable, LocalSymtableSnapshot};
 
 mod top;
 use top::{Context, prepare_globals};
@@ -185,6 +185,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Compiler {
     context: Context,
     symtable: GlobalSymtable,
+    program_scope: LocalSymtableSnapshot,
 }
 
 impl Compiler {
@@ -205,14 +206,27 @@ impl Compiler {
         let mut context = Context::default();
 
         let mut symtable = GlobalSymtable::new(upcalls_metadata);
-
         prepare_globals(&mut context, &mut symtable, global_defs)?;
 
-        Ok(Self { context, symtable })
+        Ok(Self { context, symtable, program_scope: LocalSymtableSnapshot::default() })
     }
 
     /// Compiles a chunk of code.
-    pub fn compile(self, input: &mut dyn io::Read) -> Result<Image> {
-        top::compile(input, self.context, self.symtable)
+    pub fn compile(mut self, input: &mut dyn io::Read) -> Result<Image> {
+        let symtable = LocalSymtable::restore(&mut self.symtable, self.program_scope);
+        let (image, _) = top::compile(input, &mut self.context, symtable)?;
+        Ok(image)
+    }
+
+    /// Compiles a chunk of code.
+    pub fn compile_more(&mut self, input: &mut dyn io::Read) -> Result<Image> {
+        let mut new_context = self.context.clone();
+        let mut new_symtable = self.symtable.clone();
+        let program_scope = LocalSymtable::restore(&mut new_symtable, self.program_scope.clone());
+        let (image, snapshot) = top::compile(input, &mut new_context, program_scope)?;
+        self.context = new_context;
+        self.symtable = new_symtable;
+        self.program_scope = snapshot;
+        Ok(image)
     }
 }

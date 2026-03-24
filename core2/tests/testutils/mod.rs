@@ -51,61 +51,91 @@ pub(super) fn src_path(name: &str) -> PathBuf {
     dir.join(name)
 }
 
+/// A parsed test case from a golden data file.
+#[derive(Debug, Eq, PartialEq)]
+struct Test {
+    name: String,
+    sources: Vec<String>,
+}
+
 /// A type describing the golden data of various tests in a file.
-///
-/// The first string is the test's name and the second is the input source code.
-type Tests = Vec<(String, String)>;
+type Tests = Vec<Test>;
+
+/// Returns true if the `line` corresponds to a source section.
+fn is_source_header(line: &str) -> bool {
+    line == "## Source" || line == "## Source (partial)"
+}
 
 /// Reads the source sections of a golden test description file.
 fn read_sources(path: &Path) -> io::Result<Tests> {
     let file = File::open(path).expect("Failed to open golden data file");
     let reader = BufReader::new(file);
 
-    fn add_test(tests: &mut Tests, name: String, source: Option<String>) -> io::Result<()> {
-        match source {
-            Some(source) => {
-                tests.push((name, source.trim_end().to_owned()));
-                Ok(())
-            }
-            None => Err(io::Error::new(
+    fn add_test(tests: &mut Tests, name: String, sources: Vec<String>) -> io::Result<()> {
+        if sources.is_empty() {
+            Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Test case '{}' has no Source section", name),
-            )),
+            ))
+        } else {
+            tests.push(Test { name, sources });
+            Ok(())
         }
+    }
+
+    fn finish_source(sources: &mut Vec<String>, source: &mut Option<String>) {
+        if let Some(source) = source.take() {
+            sources.push(source.trim_end().to_owned());
+        }
+    }
+
+    #[derive(Clone, Copy, Eq, PartialEq)]
+    enum Section {
+        Other,
+        Source,
     }
 
     let mut tests = vec![];
     let mut current_test = None;
+    let mut current_section = Section::Other;
+    let mut sources = vec![];
     let mut source: Option<String> = None;
     for line in reader.lines() {
         let line = line?;
 
         if let Some(stripped) = line.strip_prefix("# Test: ") {
+            finish_source(&mut sources, &mut source);
             if let Some(name) = current_test.take() {
-                add_test(&mut tests, name, source.take())?;
+                add_test(&mut tests, name, std::mem::take(&mut sources))?;
             }
             current_test = Some(stripped.to_owned());
-            source = None;
+            current_section = Section::Other;
             continue;
         } else if line.starts_with("# ") {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("Unexpected section header {}", line),
             ));
+        } else if is_source_header(&line) {
+            current_section = Section::Source;
+            continue;
+        } else if line.starts_with("## ") {
+            finish_source(&mut sources, &mut source);
+            current_section = Section::Other;
+            continue;
         } else if line == "```basic" {
-            if current_test.is_none() {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Source section without test header",
-                ));
+            if current_section == Section::Source {
+                if current_test.is_none() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Source section without test header",
+                    ));
+                }
+                source = Some(String::new());
             }
-            source = Some(String::new());
             continue;
         } else if line == "```" {
-            if let Some(name) = current_test.take() {
-                add_test(&mut tests, name, source.take())?;
-            }
-            source = None;
+            finish_source(&mut sources, &mut source);
             continue;
         }
 
@@ -115,8 +145,9 @@ fn read_sources(path: &Path) -> io::Result<Tests> {
         }
     }
 
+    finish_source(&mut sources, &mut source);
     if let Some(name) = current_test {
-        add_test(&mut tests, name, source.take())?;
+        add_test(&mut tests, name, std::mem::take(&mut sources))?;
     }
 
     if tests.is_empty() {
@@ -155,7 +186,7 @@ foo bar
     file.flush()?;
 
     assert_eq!(
-        [("first".to_owned(), "First line\n\nSecond line".to_owned())],
+        [Test { name: "first".to_owned(), sources: vec!["First line\n\nSecond line".to_owned()] }],
         read_sources(file.path())?.as_slice()
     );
 
@@ -197,13 +228,91 @@ The line
 
     assert_eq!(
         [
-            ("first".to_owned(), "First line\n\nSecond line".to_owned()),
-            ("second".to_owned(), "The line".to_owned()),
+            Test {
+                name: "first".to_owned(),
+                sources: vec!["First line\n\nSecond line".to_owned()],
+            },
+            Test { name: "second".to_owned(), sources: vec!["The line".to_owned()] },
         ],
         read_sources(file.path())?.as_slice()
     );
 
     Ok(())
+}
+
+#[test]
+fn test_read_sources_many_sources_per_test() -> io::Result<()> {
+    let mut file = NamedTempFile::new()?;
+    write!(
+        file,
+        "junk
+# Test: first
+
+## Source (partial)
+
+```basic
+First line
+```
+
+## Output
+
+```plain
+ignored
+```
+
+## Source (partial)
+
+```basic
+Second line
+
+Third line
+```
+"
+    )?;
+    file.flush()?;
+
+    assert_eq!(
+        [Test {
+            name: "first".to_owned(),
+            sources: vec!["First line".to_owned(), "Second line\n\nThird line".to_owned()],
+        }],
+        read_sources(file.path())?.as_slice()
+    );
+
+    Ok(())
+}
+
+/// Collection of section markers for a golden file.
+struct Labels {
+    source: &'static str,
+    disassembly: &'static str,
+    compiler_errors: &'static str,
+    exit_code: &'static str,
+    output: &'static str,
+    runtime_errors: &'static str,
+}
+
+/// Obtains the section markers to use when writing out the data of `test`.
+fn labels_for(test: &Test) -> Labels {
+    if test.sources.len() > 1 {
+        Labels {
+            source: "## Source (partial)",
+            disassembly: "## Disassembly (full)",
+            compiler_errors: "## Compiler errors (partial)",
+            exit_code: "## Exit code (full)",
+            output: "## Output (full)",
+            runtime_errors: "## Runtime errors (full)",
+        }
+    } else {
+        Labels {
+            source: "## Source",
+            disassembly: "## Disassembly",
+            compiler_errors: "## Compilation errors",
+            exit_code: "## Exit code",
+            output: "## Output",
+            runtime_errors: "## Runtime errors",
+        }
+    }
 }
 
 /// Generates a textual diff of `golden` and `generated`.  The output is meant to be useful for
@@ -297,6 +406,23 @@ fn test_diff_different() -> io::Result<()> {
     Ok(())
 }
 
+/// Executes the image already loaded in `vm` through completion, and converts the result
+/// into an exit code.
+async fn run_image(vm: &mut Vm) -> Result<i32, String> {
+    loop {
+        match vm.exec() {
+            StopReason::End(code) => return Ok(code.to_i32()),
+            StopReason::Eof => return Ok(0),
+            StopReason::Upcall(handle) => {
+                if let Err(e) = handle.invoke().await {
+                    return Err(e.to_string());
+                }
+            }
+            StopReason::Exception(pos, e) => return Err(format!("{}: {}", pos, e)),
+        }
+    }
+}
+
 /// Given a `golden` test definition, executes its source part and writes the corresponding
 /// `generated` file.  The test is expected to pass when both match, but the caller is responsible
 /// for checking this condition.
@@ -305,88 +431,71 @@ async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()
     let tests = read_sources(golden)?;
 
     let mut first = true;
-    for (name, source) in tests {
+    for test in tests {
         if !first {
             write!(generated, "\n")?;
         }
-        write!(generated, "# Test: {}\n\n", name)?;
+        write!(generated, "# Test: {}\n", test.name)?;
         first = false;
-
-        write!(generated, "## Source\n\n")?;
-        write!(generated, "```basic\n")?;
-        if !source.is_empty() {
-            write!(generated, "{}\n", source)?;
-        }
-        write!(generated, "```\n")?;
+        let labels = labels_for(&test);
 
         let console = Rc::from(RefCell::from(String::new()));
         let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::default();
         callables::register_all(&mut upcalls_by_name, console.clone());
-        let image = {
-            let compiler = Compiler::new(&upcalls_by_name, &[]).expect("Cannot fail");
-            compiler.compile(&mut source.as_bytes())
-        };
+        let mut compiler = Compiler::new(&upcalls_by_name, &[]).expect("Cannot fail");
 
-        let image = match image {
-            Ok(image) => image,
-            Err(e) => {
-                write!(generated, "\n## Compilation errors\n\n")?;
-                write!(generated, "```plain\n")?;
-                write!(generated, "{}\n", e)?;
-                write!(generated, "```\n")?;
-                continue;
+        for source in test.sources {
+            write!(generated, "\n{}\n\n", labels.source)?;
+            write!(generated, "```basic\n")?;
+            if !source.is_empty() {
+                write!(generated, "{}\n", source)?;
             }
-        };
-
-        write!(generated, "\n## Disassembly\n\n")?;
-        write!(generated, "```asm\n")?;
-        for line in image.disasm() {
-            write!(generated, "{}\n", line)?;
-        }
-        write!(generated, "```\n")?;
-
-        let mut vm = Vm::new(upcalls_by_name);
-        vm.load(image);
-        let mut stop: Option<Result<i32, String>> = None;
-        while stop.is_none() {
-            match vm.exec() {
-                StopReason::End(code) => stop = Some(Ok(code.to_i32())),
-                StopReason::Eof => stop = Some(Ok(0)),
-                StopReason::Upcall(handle) => {
-                    if let Err(e) = handle.invoke().await {
-                        stop = Some(Err(e.to_string()));
-                    }
-                }
-                StopReason::Exception(pos, e) => {
-                    stop = Some(Err(format!("{}: {}", pos, e)));
-                }
-            }
-        }
-
-        match stop.expect("The loop can only exit when this is set") {
-            Ok(0) => {
-                // Keep quiet in the common case.
-            }
-            Ok(i) => {
-                write!(generated, "\n## Exit code\n\n")?;
-                write!(generated, "```plain\n")?;
-                write!(generated, "{}\n", i)?;
-                write!(generated, "```\n")?;
-            }
-            Err(e) => {
-                write!(generated, "\n## Runtime errors\n\n")?;
-                write!(generated, "```plain\n")?;
-                write!(generated, "{}\n", e)?;
-                write!(generated, "```\n")?;
-            }
-        }
-
-        let console = console.borrow();
-        if !console.is_empty() {
-            write!(generated, "\n## Output\n\n")?;
-            write!(generated, "```plain\n")?;
-            write!(generated, "{}", console)?;
             write!(generated, "```\n")?;
+
+            let image = match compiler.compile_more(&mut source.as_bytes()) {
+                Ok(image) => image,
+                Err(e) => {
+                    write!(generated, "\n{}\n\n", labels.compiler_errors)?;
+                    write!(generated, "```plain\n")?;
+                    write!(generated, "{}\n", e)?;
+                    write!(generated, "```\n")?;
+                    continue;
+                }
+            };
+
+            write!(generated, "\n{}\n\n", labels.disassembly)?;
+            write!(generated, "```asm\n")?;
+            for line in image.disasm() {
+                write!(generated, "{}\n", line)?;
+            }
+            write!(generated, "```\n")?;
+
+            console.borrow_mut().clear();
+            let mut vm = Vm::new(upcalls_by_name.clone());
+            vm.load(image);
+            match run_image(&mut vm).await {
+                Ok(0) => (),
+                Ok(i) => {
+                    write!(generated, "\n{}\n\n", labels.exit_code)?;
+                    write!(generated, "```plain\n")?;
+                    write!(generated, "{}\n", i)?;
+                    write!(generated, "```\n")?;
+                }
+                Err(e) => {
+                    write!(generated, "\n{}\n\n", labels.runtime_errors)?;
+                    write!(generated, "```plain\n")?;
+                    write!(generated, "{}\n", e)?;
+                    write!(generated, "```\n")?;
+                }
+            }
+
+            let console = console.borrow();
+            if !console.is_empty() {
+                write!(generated, "\n{}\n\n", labels.output)?;
+                write!(generated, "```plain\n")?;
+                write!(generated, "{}", console)?;
+                write!(generated, "```\n")?;
+            }
         }
     }
 

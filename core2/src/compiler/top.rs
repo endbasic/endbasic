@@ -40,6 +40,8 @@ use std::io;
 use std::iter::Iterator;
 use std::rc::Rc;
 
+use super::syms::LocalSymtableSnapshot;
+
 /// Kind of a user-defined callable.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CallableKind {
@@ -54,7 +56,7 @@ enum CallableKind {
 ///
 /// This type exists to minimize the number of complex arguments passed across functions.
 /// If possible, avoid passing it and instead pass the minimum set of required fields.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct Context {
     /// The code generator accumulating bytecode instructions.
     codegen: Codegen,
@@ -1222,6 +1224,8 @@ pub(super) fn prepare_globals(
     // We use a short-lived `ENTER/LEAVE` scope to borrow local registers for the dimension
     // temporaries without permanently consuming global register slots.
     if array_globals.is_empty() {
+        // `compile` starts by popping an EOF, so make sure there is one.
+        ctx.codegen.emit(bytecode::make_eof(), preamble_pos);
         return Ok(());
     }
     for (reg, def) in array_globals {
@@ -1244,19 +1248,21 @@ pub(super) fn prepare_globals(
         ctx.codegen.emit(bytecode::make_alloc_array(reg, packed, first_dim_reg), preamble_pos);
     }
 
+    // `compile` starts by popping an EOF, so make sure there is one.
+    ctx.codegen.emit(bytecode::make_eof(), preamble_pos);
     Ok(())
 }
 
 /// Compiles the `input` into an `Image` that can be executed by the VM.
 pub fn compile(
     input: &mut dyn io::Read,
-    mut ctx: Context,
-    mut symtable: GlobalSymtable,
-) -> Result<Image> {
+    ctx: &mut Context,
+    mut symtable: LocalSymtable,
+) -> Result<(Image, LocalSymtableSnapshot)> {
+    ctx.codegen.pop_eof();
     {
-        let mut symtable = symtable.enter_scope();
         for stmt in parser::parse(input) {
-            compile_stmt(&mut ctx, &mut symtable, stmt?)?;
+            compile_stmt(ctx, &mut symtable, stmt?)?;
         }
     }
     ctx.codegen.emit(bytecode::make_eof(), LineCol { line: 0, col: 0 });
@@ -1271,7 +1277,8 @@ pub fn compile(
             (key.clone(), GlobalVarInfo { reg, subtype, ndims })
         })
         .collect();
-    ctx.codegen.build_image(global_vars, ctx.data)
+    let image = ctx.codegen.build_image(global_vars, ctx.data.clone())?;
+    Ok((image, symtable.save()))
 }
 
 #[cfg(test)]
