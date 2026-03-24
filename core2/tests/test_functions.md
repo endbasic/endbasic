@@ -1176,3 +1176,126 @@ END SUB
 ```plain
 2:5: Cannot nest FUNCTION or SUB definitions
 ```
+
+# Test: Function declarations
+
+## Source
+
+```basic
+DECLARE FUNCTION foo
+DECLARE FUNCTION foo%
+DECLARE FUNCTION bar(a AS STRING)
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       0                   # 0:0
+0001:   EOF                             # 0:0
+```
+
+# Test: Function declarations match definition
+
+## Source
+
+```basic
+DECLARE FUNCTION foo
+
+FUNCTION foo
+END FUNCTION
+
+DECLARE FUNCTION foo
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       0                   # 0:0
+0001:   EOF                             # 0:0
+
+-- FOO 
+0002:   LOADI       R64, 0              # 3:10
+0003:   ENTER       1                   # 0:0
+0004:   RETURN                          # 4:1
+```
+
+# Test: Function declarations must be top-level
+
+## Source
+
+```basic
+
+FUNCTION foo
+    DECLARE FUNCTION bar
+END FUNCTION
+```
+
+## Compilation errors
+
+```plain
+3:22: Cannot nest FUNCTION or SUB declarations nor definitions
+```
+
+# Test: Function pre-declaration does not match pre-definition
+
+## Source
+
+```basic
+DECLARE FUNCTION foo
+
+FUNCTION foo#
+END FUNCTION
+```
+
+## Compilation errors
+
+```plain
+3:10: Cannot redefine foo#
+```
+
+# Test: Function post-declaration does not match definition
+
+## Source
+
+```basic
+FUNCTION foo#
+END FUNCTION
+
+DECLARE FUNCTION foo
+```
+
+## Compilation errors
+
+```plain
+4:18: Cannot redefine foo%
+```
+
+# Test: Function declarations do not match
+
+## Source
+
+```basic
+DECLARE FUNCTION foo
+DECLARE FUNCTION foo#
+```
+
+## Compilation errors
+
+```plain
+2:18: Cannot redefine foo#
+```
+
+# Test: Function redeclared as sub
+
+## Source
+
+```basic
+DECLARE FUNCTION foo
+DECLARE SUB foo
+```
+
+## Compilation errors
+
+```plain
+2:13: Cannot redefine foo
+```

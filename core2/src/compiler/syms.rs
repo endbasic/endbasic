@@ -196,7 +196,7 @@ impl GlobalSymtable {
     }
 
     /// Defines a new user-defined `vref` callable with `md` metadata.
-    pub(crate) fn define_user_callable(
+    pub(crate) fn declare_user_callable(
         &mut self,
         vref: &VarRef,
         md: Rc<CallableMetadata>,
@@ -205,8 +205,12 @@ impl GlobalSymtable {
         if self.globals.get(&key).is_some() {
             return Err(Error::AlreadyDefined(vref.clone()));
         }
-        let previous = self.user_callables.insert(key, md);
-        if previous.is_none() { Ok(()) } else { Err(Error::AlreadyDefined(vref.clone())) }
+        if let Some(previous_md) = self.user_callables.insert(key.clone(), md.clone())
+            && previous_md != md
+        {
+            return Err(Error::AlreadyDefined(vref.clone()));
+        }
+        Ok(())
     }
 
     /// Gets a callable by its name `key`.
@@ -255,13 +259,13 @@ impl<'a> LocalSymtable<'a> {
         }
     }
 
-    /// Defines a new user-defined `vref` callable with `md` metadata.
-    pub(crate) fn define_user_callable(
+    /// Declares a new user-defined `vref` callable with `md` metadata.
+    pub(crate) fn declare_user_callable(
         &mut self,
         vref: &VarRef,
         md: Rc<CallableMetadata>,
     ) -> Result<()> {
-        self.symtable.define_user_callable(vref, md)
+        self.symtable.declare_user_callable(vref, md)
     }
 
     /// Freezes this table to get a `TempSymtable` that can be used to compile expressions.
@@ -723,7 +727,7 @@ mod tests {
         let md = CallableMetadataBuilder::new("MY_FUNC")
             .with_return_type(ExprType::Integer)
             .test_build();
-        global.define_user_callable(&VarRef::new("my_func", None), md)?;
+        global.declare_user_callable(&VarRef::new("my_func", None), md)?;
 
         let found = global.get_callable(&SymbolKey::from("my_func"));
         assert!(found.is_some());
@@ -733,15 +737,30 @@ mod tests {
     }
 
     #[test]
-    fn test_define_user_callable_already_defined() -> Result<()> {
+    fn test_define_user_callable_already_defined_but_is_compatible() -> Result<()> {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(upcalls);
 
         let md = CallableMetadataBuilder::new("DUP").test_build();
-        global.define_user_callable(&VarRef::new("dup", None), md)?;
+        global.declare_user_callable(&VarRef::new("dup", None), md)?;
 
         let md2 = CallableMetadataBuilder::new("DUP").test_build();
-        let err = global.define_user_callable(&VarRef::new("dup", None), md2).unwrap_err();
+        global.declare_user_callable(&VarRef::new("dup", None), md2)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_define_user_callable_already_defined_but_is_incompatible() -> Result<()> {
+        let upcalls = HashMap::default();
+        let mut global = GlobalSymtable::new(upcalls);
+
+        let md = CallableMetadataBuilder::new("DUP").test_build();
+        global.declare_user_callable(&VarRef::new("dup", None), md)?;
+
+        let md2 =
+            CallableMetadataBuilder::new("DUP").with_return_type(ExprType::Integer).test_build();
+        let err = global.declare_user_callable(&VarRef::new("dup", None), md2).unwrap_err();
         assert_eq!("Cannot redefine dup", err.to_string());
 
         Ok(())
@@ -754,7 +773,7 @@ mod tests {
         let mut local = global.enter_scope();
 
         let md = CallableMetadataBuilder::new("SUB1").test_build();
-        local.define_user_callable(&VarRef::new("sub1", None), md)?;
+        local.declare_user_callable(&VarRef::new("sub1", None), md)?;
 
         let found = local.get_callable(&SymbolKey::from("sub1"));
         assert!(found.is_some());
@@ -786,7 +805,7 @@ mod tests {
         let mut global = GlobalSymtable::new(upcalls_map);
         let user_md =
             CallableMetadataBuilder::new("SHARED").with_return_type(ExprType::Integer).test_build();
-        global.define_user_callable(&VarRef::new("shared", None), user_md).unwrap();
+        global.declare_user_callable(&VarRef::new("shared", None), user_md).unwrap();
 
         let found = global.get_callable(&SymbolKey::from("shared")).unwrap();
         assert_eq!(Some(ExprType::Integer), found.return_type());
@@ -977,7 +996,7 @@ mod tests {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(upcalls);
         let md = CallableMetadataBuilder::new("FOO").test_build();
-        global.define_user_callable(&VarRef::new("foo", None), md)?;
+        global.declare_user_callable(&VarRef::new("foo", None), md)?;
 
         let mut local = global.enter_scope();
         {

@@ -579,3 +579,124 @@ END FUNCTION
 ```plain
 2:5: Cannot nest FUNCTION or SUB definitions
 ```
+
+# Test: Sub declarations
+
+## Source
+
+```basic
+DECLARE SUB foo
+DECLARE SUB bar(a AS STRING)
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       0                   # 0:0
+0001:   EOF                             # 0:0
+```
+
+# Test: Sub declarations match definition
+
+## Source
+
+```basic
+DECLARE SUB foo
+
+SUB foo
+END SUB
+
+DECLARE SUB foo
+```
+
+## Disassembly
+
+```asm
+0000:   ENTER       0                   # 0:0
+0001:   EOF                             # 0:0
+
+-- FOO 
+0002:   ENTER       0                   # 0:0
+0003:   RETURN                          # 4:1
+```
+
+# Test: Sub declarations must be top-level
+
+## Source
+
+```basic
+
+SUB foo
+    SUB FUNCTION bar
+END SUB
+```
+
+## Compilation errors
+
+```plain
+3:5: Cannot nest FUNCTION or SUB definitions
+```
+
+# Test: Sub pre-declaration does not match pre-definition
+
+## Source
+
+```basic
+DECLARE SUB foo
+
+SUB foo(a AS STRING)
+END SUB
+```
+
+## Compilation errors
+
+```plain
+3:5: Cannot redefine foo
+```
+
+# Test: Sub post-declaration does not match definition
+
+## Source
+
+```basic
+SUB foo
+END SUB
+
+DECLARE SUB foo(a AS STRING)
+```
+
+## Compilation errors
+
+```plain
+4:13: Cannot redefine foo
+```
+
+# Test: Sub declarations do not match
+
+## Source
+
+```basic
+DECLARE SUB foo
+DECLARE SUB foo(a as STRING)
+```
+
+## Compilation errors
+
+```plain
+2:13: Cannot redefine foo
+```
+
+# Test: Sub redeclared as function
+
+## Source
+
+```basic
+DECLARE SUB foo
+DECLARE FUNCTION foo
+```
+
+## Compilation errors
+
+```plain
+2:18: Cannot redefine foo%
+```

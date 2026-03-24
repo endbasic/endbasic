@@ -62,7 +62,7 @@ pub enum Error {
     CallableSyntax(LineCol, CallableMetadata),
 
     /// Attempt to nest FUNCTION or SUB definitions.
-    #[error("{0}: Cannot nest FUNCTION or SUB definitions")]
+    #[error("{0}: Cannot nest FUNCTION or SUB declarations nor definitions")]
     CannotNestUserCallables(LineCol),
 
     /// Attempt to redefine an already-defined label.

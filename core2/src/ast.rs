@@ -447,6 +447,20 @@ pub struct DataSpan {
     pub values: Vec<Option<Expr>>,
 }
 
+/// Components of a `DECLARE` statement.
+#[derive(Debug, PartialEq)]
+pub struct DeclareSpan {
+    /// Name of the callable, expressed as a variable reference.  For functions, this contains
+    /// a type, and for subroutines, it does not.
+    pub name: VarRef,
+
+    /// Position of the name of the callable.
+    pub name_pos: LineCol,
+
+    /// Definition of the callable parameters.
+    pub params: Vec<VarRef>,
+}
+
 /// Components of a variable definition.
 ///
 /// Given that a definition causes the variable to be initialized to a default value, it is
@@ -723,6 +737,9 @@ pub enum Statement {
 
     /// Represents a `DATA` statement.
     Data(DataSpan),
+
+    /// Represents a `DECLARE` statement.
+    Declare(DeclareSpan),
 
     /// Represents a variable definition.
     Dim(DimSpan),

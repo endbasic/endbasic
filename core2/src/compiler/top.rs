@@ -783,36 +783,27 @@ fn compile_stmt(
 
         Statement::Callable(span) => {
             mark_start = false;
-            let mut syntax = vec![];
-            for (i, param) in span.params.iter().enumerate() {
-                let sep = if i == span.params.len() - 1 {
-                    ArgSepSyntax::End
-                } else {
-                    ArgSepSyntax::Exactly(ArgSep::Long)
-                };
-                syntax.push(SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax {
-                        name: Cow::Owned(param.name.to_owned()),
-                        vtype: param.ref_type.unwrap_or(ExprType::Integer),
-                    },
-                    sep,
-                ));
+            declare_callable(symtable, &span.name, span.name_pos, &span.params)?;
+            // If declaration succeeds, we still have to check for callable redefinition.
+            // This linear scan is not the most efficient, but it's fine for now.
+            for callable in &ctx.user_callables {
+                if span.name == callable.name {
+                    return Err(Error::AlreadyDefined(span.name_pos, span.name));
+                }
             }
-
-            let mut builder = CallableMetadataBuilder::new_dynamic(span.name.name.to_owned())
-                .with_dynamic_syntax(vec![(syntax, None)]);
-            if let Some(ctype) = span.name.ref_type {
-                builder = builder.with_return_type(ctype);
-            }
-
-            symtable
-                .define_user_callable(&span.name, builder.build())
-                .map_err(|e| Error::from_syms(e, span.name_pos))?;
             ctx.user_callables.push(span);
         }
 
         Statement::Data(span) => {
             ctx.data.extend(span.values.into_iter().map(|expr| expr.map(data_expr_to_constant)));
+        }
+
+        Statement::Declare(span) => {
+            mark_start = false;
+            if ctx.current_callable.is_some() {
+                return Err(Error::CannotNestUserCallables(span.name_pos));
+            }
+            declare_callable(symtable, &span.name, span.name_pos, &span.params)?;
         }
 
         Statement::Dim(span) => {
@@ -1035,12 +1026,51 @@ where
     Ok(())
 }
 
+/// Declares a callable.
+///
+/// If the callable is already defined, this ensures the new declaration matches the previous one
+/// and raises an error if not.
+fn declare_callable(
+    symtable: &mut LocalSymtable,
+    name: &VarRef,
+    name_pos: LineCol,
+    params: &[VarRef],
+) -> Result<()> {
+    let mut syntax = vec![];
+    for (i, param) in params.iter().enumerate() {
+        let sep = if i == params.len() - 1 {
+            ArgSepSyntax::End
+        } else {
+            ArgSepSyntax::Exactly(ArgSep::Long)
+        };
+        syntax.push(SingularArgSyntax::RequiredValue(
+            RequiredValueSyntax {
+                name: Cow::Owned(param.name.to_owned()),
+                vtype: param.ref_type.unwrap_or(ExprType::Integer),
+            },
+            sep,
+        ));
+    }
+
+    let mut builder = CallableMetadataBuilder::new_dynamic(name.name.to_owned())
+        .with_dynamic_syntax(vec![(syntax, None)]);
+    if let Some(ctype) = name.ref_type {
+        builder = builder.with_return_type(ctype);
+    }
+
+    symtable.declare_user_callable(name, builder.build()).map_err(|e| Error::from_syms(e, name_pos))
+}
+
 /// Compiles all user-defined callables that have been captured in `ctx`.
 fn compile_user_callables(ctx: &mut Context, symtable: &mut GlobalSymtable) -> Result<()> {
     let user_callables: Vec<CallableSpan> = ctx.user_callables.drain(..).collect();
     debug_assert!(ctx.user_callables.is_empty());
 
     for callable in user_callables {
+        if ctx.current_callable.is_some() {
+            return Err(Error::CannotNestUserCallables(callable.name_pos));
+        }
+
         let start_pc = ctx.codegen.next_pc();
 
         let key_pos = callable.name_pos;
@@ -1087,9 +1117,6 @@ fn compile_user_callables(ctx: &mut Context, symtable: &mut GlobalSymtable) -> R
         }
 
         compile_scope(ctx, symtable, callable.body.into_iter().map(Ok))?;
-        if let Some(span) = ctx.user_callables.first() {
-            return Err(Error::CannotNestUserCallables(span.name_pos));
-        }
 
         let return_addr = ctx.codegen.next_pc();
         ctx.codegen.emit(bytecode::make_return(), callable.end_pos);

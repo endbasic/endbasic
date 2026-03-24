@@ -38,6 +38,7 @@ currently supports:
 *   Strong typing with optional variable type annotations.
 *   `DATA` statements for literal primitive values.  Booleans, numbers, and
     strings are supported, but strings must be double-quoted.
+*   `DECLARE FUNCTION` / `DECLARE SUB`.
 *   `DO` / `LOOP` statements with optional `UNTIL` / `WHILE` pre- and
     post-guards and optional `EXIT DO` early terminations.
 *   `DIM SHARED` for global variables.
