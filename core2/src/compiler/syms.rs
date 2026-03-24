@@ -250,6 +250,11 @@ impl<'a> LocalSymtable<'a> {
         }
     }
 
+    /// Obtains mutable access to the parent global symtable.
+    pub(crate) fn global(&mut self) -> &mut GlobalSymtable {
+        self.symtable
+    }
+
     /// Consumes the local scope and returns the number of local variables defined, which includes
     /// the locals themselves and any temporaries used by the scope.
     pub(crate) fn leave_scope(self) -> Result<u8> {

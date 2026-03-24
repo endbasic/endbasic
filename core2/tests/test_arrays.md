@@ -233,12 +233,13 @@ OUT s(0), s(1), s(2)
 ## Source
 
 ```basic
+DIM SHARED a(2) AS INTEGER
+
 SUB fill_array
     a(0) = 100
     a(1) = 200
 END SUB
 
-DIM SHARED a(2) AS INTEGER
 fill_array
 OUT a(0), a(1)
 ```
@@ -247,27 +248,30 @@ OUT a(0), a(1)
 
 ```asm
 0000:   ENTER       5                   # 0:0
-0001:   LOADI       R64, 2              # 6:14
-0002:   ALLOCA      R0, [1]%, R64       # 6:12
-0003:   CALL        R64, 12             # 7:1, FILL_ARRAY
-0004:   LOADI       R66, 0              # 8:7
-0005:   LOADA       R65, R0, R66        # 8:5
-0006:   LOADI       R64, 290            # 8:5
-0007:   LOADI       R68, 1              # 8:13
-0008:   LOADA       R67, R0, R68        # 8:11
-0009:   LOADI       R66, 258            # 8:11
-0010:   UPCALL      0, R64              # 8:1, OUT
-0011:   EOF                             # 0:0
+0001:   LOADI       R64, 2              # 1:14
+0002:   ALLOCA      R0, [1]%, R64       # 1:12
+0003:   JUMP        12                  # 3:5
 
--- FILL_ARRAY 
-0012:   ENTER       2                   # 0:0
-0013:   LOADI       R64, 100            # 2:12
-0014:   LOADI       R65, 0              # 2:7
-0015:   STOREA      R0, R64, R65        # 2:5
-0016:   LOADI       R64, 200            # 3:12
-0017:   LOADI       R65, 1              # 3:7
-0018:   STOREA      R0, R64, R65        # 3:5
-0019:   RETURN                          # 4:1
+-- FILL_ARRAY (BEGIN)
+0004:   ENTER       2                   # 0:0
+0005:   LOADI       R64, 100            # 4:12
+0006:   LOADI       R65, 0              # 4:7
+0007:   STOREA      R0, R64, R65        # 4:5
+0008:   LOADI       R64, 200            # 5:12
+0009:   LOADI       R65, 1              # 5:7
+0010:   STOREA      R0, R64, R65        # 5:5
+0011:   RETURN                          # 6:1
+-- FILL_ARRAY (END)
+
+0012:   CALL        R64, 4              # 8:1, FILL_ARRAY
+0013:   LOADI       R66, 0              # 9:7
+0014:   LOADA       R65, R0, R66        # 9:5
+0015:   LOADI       R64, 290            # 9:5
+0016:   LOADI       R68, 1              # 9:13
+0017:   LOADA       R67, R0, R68        # 9:11
+0018:   LOADI       R66, 258            # 9:11
+0019:   UPCALL      0, R64              # 9:1, OUT
+0020:   EOF                             # 0:0
 ```
 
 ## Output
@@ -720,36 +724,39 @@ OUT sum(0)
 
 ```asm
 0000:   ENTER       4                   # 0:0
-0001:   LOADI       R67, 0              # 9:9
-0002:   CALL        R66, 7              # 9:5, SUM
-0003:   MOVE        R65, R66            # 9:5
-0004:   LOADI       R64, 258            # 9:5
-0005:   UPCALL      0, R64              # 9:1, OUT
-0006:   EOF                             # 0:0
+0001:   JUMP        24                  # 1:10
 
--- SUM 
-0007:   LOADI       R64, 0              # 1:10
-0008:   ENTER       5                   # 0:0
-0009:   LOADI       R67, 3              # 2:11
-0010:   ALLOCA      R66, [1]%, R67      # 2:9
-0011:   LOADI       R67, 10             # 3:12
-0012:   LOADI       R68, 0              # 3:7
-0013:   STOREA      R66, R67, R68       # 3:5
-0014:   LOADI       R67, 20             # 4:12
-0015:   LOADI       R68, 1              # 4:7
-0016:   STOREA      R66, R67, R68       # 4:5
-0017:   LOADI       R67, 30             # 5:12
-0018:   LOADI       R68, 2              # 5:7
-0019:   STOREA      R66, R67, R68       # 5:5
-0020:   LOADI       R67, 0              # 6:13
-0021:   LOADA       R64, R66, R67       # 6:11
-0022:   LOADI       R68, 1              # 6:20
-0023:   LOADA       R67, R66, R68       # 6:18
-0024:   ADDI        R64, R64, R67       # 6:16
-0025:   LOADI       R68, 2              # 6:27
-0026:   LOADA       R67, R66, R68       # 6:25
-0027:   ADDI        R64, R64, R67       # 6:23
-0028:   RETURN                          # 7:1
+-- SUM (BEGIN)
+0002:   LOADI       R64, 0              # 1:10
+0003:   ENTER       5                   # 0:0
+0004:   LOADI       R67, 3              # 2:11
+0005:   ALLOCA      R66, [1]%, R67      # 2:9
+0006:   LOADI       R67, 10             # 3:12
+0007:   LOADI       R68, 0              # 3:7
+0008:   STOREA      R66, R67, R68       # 3:5
+0009:   LOADI       R67, 20             # 4:12
+0010:   LOADI       R68, 1              # 4:7
+0011:   STOREA      R66, R67, R68       # 4:5
+0012:   LOADI       R67, 30             # 5:12
+0013:   LOADI       R68, 2              # 5:7
+0014:   STOREA      R66, R67, R68       # 5:5
+0015:   LOADI       R67, 0              # 6:13
+0016:   LOADA       R64, R66, R67       # 6:11
+0017:   LOADI       R68, 1              # 6:20
+0018:   LOADA       R67, R66, R68       # 6:18
+0019:   ADDI        R64, R64, R67       # 6:16
+0020:   LOADI       R68, 2              # 6:27
+0021:   LOADA       R67, R66, R68       # 6:25
+0022:   ADDI        R64, R64, R67       # 6:23
+0023:   RETURN                          # 7:1
+-- SUM (END)
+
+0024:   LOADI       R67, 0              # 9:9
+0025:   CALL        R66, 2              # 9:5, SUM
+0026:   MOVE        R65, R66            # 9:5
+0027:   LOADI       R64, 258            # 9:5
+0028:   UPCALL      0, R64              # 9:1, OUT
+0029:   EOF                             # 0:0
 ```
 
 ## Output

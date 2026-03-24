@@ -35,7 +35,7 @@ use crate::reader::LineCol;
 use crate::{Callable, CallableMetadataBuilder, parser};
 use std::borrow::Cow;
 use std::cmp::max;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::iter::Iterator;
 use std::rc::Rc;
@@ -59,9 +59,6 @@ struct Context {
     /// The code generator accumulating bytecode instructions.
     codegen: Codegen,
 
-    /// Collection of user-defined callable definitions to be compiled after the main scope.
-    user_callables: Vec<CallableSpan>,
-
     /// Collection of `DATA` values captured while compiling all statements.
     data: Vec<Option<ConstantDatum>>,
 
@@ -73,6 +70,9 @@ struct Context {
 
     /// Kind of the callable currently being compiled, if any.
     current_callable: Option<CallableKind>,
+
+    /// Callables defined (not just declared) so far.
+    defined_callables: HashSet<SymbolKey>,
 
     /// List of pending `EXIT FUNCTION` or `EXIT SUB` jumps in the current callable.
     callable_exit_jumps: Vec<(usize, LineCol)>,
@@ -784,14 +784,15 @@ fn compile_stmt(
         Statement::Callable(span) => {
             mark_start = false;
             declare_callable(symtable, &span.name, span.name_pos, &span.params)?;
+
+            let key = SymbolKey::from(&span.name.name);
             // If declaration succeeds, we still have to check for callable redefinition.
             // This linear scan is not the most efficient, but it's fine for now.
-            for callable in &ctx.user_callables {
-                if span.name == callable.name {
-                    return Err(Error::AlreadyDefined(span.name_pos, span.name));
-                }
+            if ctx.defined_callables.contains(&key) {
+                return Err(Error::AlreadyDefined(span.name_pos, span.name));
             }
-            ctx.user_callables.push(span);
+            compile_user_callable(ctx, symtable.global(), span)?;
+            ctx.defined_callables.insert(key);
         }
 
         Statement::Data(span) => {
@@ -1061,73 +1062,76 @@ fn declare_callable(
     symtable.declare_user_callable(name, builder.build()).map_err(|e| Error::from_syms(e, name_pos))
 }
 
-/// Compiles all user-defined callables that have been captured in `ctx`.
-fn compile_user_callables(ctx: &mut Context, symtable: &mut GlobalSymtable) -> Result<()> {
-    let user_callables: Vec<CallableSpan> = ctx.user_callables.drain(..).collect();
-    debug_assert!(ctx.user_callables.is_empty());
-
-    for callable in user_callables {
-        if ctx.current_callable.is_some() {
-            return Err(Error::CannotNestUserCallables(callable.name_pos));
-        }
-
-        let start_pc = ctx.codegen.next_pc();
-
-        let key_pos = callable.name_pos;
-        let key = SymbolKey::from(callable.name.name);
-        ctx.current_callable = Some(if callable.name.ref_type.is_some() {
-            CallableKind::Function
-        } else {
-            CallableKind::Sub
-        });
-        debug_assert!(ctx.callable_exit_jumps.is_empty());
-
-        let mut symtable = symtable.enter_scope();
-
-        // The call protocol expects the return value to be in the first local variable
-        // so allocate it early, and then all arguments follow in order from left to right.
-        if let Some(vtype) = callable.name.ref_type {
-            let ret_reg = symtable
-                .put_local(key.clone(), SymbolPrototype::Scalar(vtype))
-                .map_err(|e| Error::from_syms(e, key_pos))?;
-
-            // Set the default value of the function result.  We could instead try to do this
-            // at runtime by clearning the return register... but the problem is that we need
-            // to handle non-primitive types like strings and the runtime doesn't know the type
-            // of the result to properly allocate it.
-            let value = match vtype {
-                ExprType::Boolean | ExprType::Integer => 0,
-                ExprType::Double => {
-                    ctx.codegen.get_constant(ConstantDatum::Double(0.0), key_pos)?
-                }
-                ExprType::Text => {
-                    ctx.codegen.get_constant(ConstantDatum::Text(String::new()), key_pos)?
-                }
-            };
-            ctx.codegen.emit(bytecode::make_load_integer(ret_reg, value), key_pos);
-        }
-        for param in callable.params {
-            let key = SymbolKey::from(param.name);
-            symtable
-                .put_local(
-                    key.clone(),
-                    SymbolPrototype::Scalar(param.ref_type.unwrap_or(ExprType::Integer)),
-                )
-                .map_err(|e| Error::from_syms(e, key_pos))?;
-        }
-
-        compile_scope(ctx, symtable, callable.body.into_iter().map(Ok))?;
-
-        let return_addr = ctx.codegen.next_pc();
-        ctx.codegen.emit(bytecode::make_return(), callable.end_pos);
-        for (addr, pos) in ctx.callable_exit_jumps.drain(..) {
-            let target =
-                u16::try_from(return_addr).map_err(|_| Error::TargetTooFar(pos, return_addr))?;
-            ctx.codegen.patch(addr, bytecode::make_jump(target));
-        }
-        ctx.current_callable = None;
-        ctx.codegen.define_user_callable(key, start_pc);
+/// Compiles a single user-defined callable.
+fn compile_user_callable(
+    ctx: &mut Context,
+    symtable: &mut GlobalSymtable,
+    callable: CallableSpan,
+) -> Result<()> {
+    if ctx.current_callable.is_some() {
+        return Err(Error::CannotNestUserCallables(callable.name_pos));
     }
+
+    let skip_pc = ctx.codegen.emit(bytecode::make_nop(), callable.name_pos);
+
+    let start_pc = ctx.codegen.next_pc();
+
+    let key_pos = callable.name_pos;
+    let key = SymbolKey::from(callable.name.name);
+    ctx.current_callable = Some(if callable.name.ref_type.is_some() {
+        CallableKind::Function
+    } else {
+        CallableKind::Sub
+    });
+    debug_assert!(ctx.callable_exit_jumps.is_empty());
+
+    let mut symtable = symtable.enter_scope();
+
+    // The call protocol expects the return value to be in the first local variable
+    // so allocate it early, and then all arguments follow in order from left to right.
+    if let Some(vtype) = callable.name.ref_type {
+        let ret_reg = symtable
+            .put_local(key.clone(), SymbolPrototype::Scalar(vtype))
+            .map_err(|e| Error::from_syms(e, key_pos))?;
+
+        // Set the default value of the function result.  We could instead try to do this
+        // at runtime by clearning the return register... but the problem is that we need
+        // to handle non-primitive types like strings and the runtime doesn't know the type
+        // of the result to properly allocate it.
+        let value = match vtype {
+            ExprType::Boolean | ExprType::Integer => 0,
+            ExprType::Double => ctx.codegen.get_constant(ConstantDatum::Double(0.0), key_pos)?,
+            ExprType::Text => {
+                ctx.codegen.get_constant(ConstantDatum::Text(String::new()), key_pos)?
+            }
+        };
+        ctx.codegen.emit(bytecode::make_load_integer(ret_reg, value), key_pos);
+    }
+    for param in callable.params {
+        let key = SymbolKey::from(param.name);
+        symtable
+            .put_local(
+                key.clone(),
+                SymbolPrototype::Scalar(param.ref_type.unwrap_or(ExprType::Integer)),
+            )
+            .map_err(|e| Error::from_syms(e, key_pos))?;
+    }
+
+    compile_scope(ctx, symtable, callable.body.into_iter().map(Ok))?;
+
+    let return_addr = ctx.codegen.emit(bytecode::make_return(), callable.end_pos);
+    for (addr, pos) in ctx.callable_exit_jumps.drain(..) {
+        let target =
+            u16::try_from(return_addr).map_err(|_| Error::TargetTooFar(pos, return_addr))?;
+        ctx.codegen.patch(addr, bytecode::make_jump(target));
+    }
+    ctx.current_callable = None;
+    let skip_addr = ctx.codegen.next_pc();
+    ctx.codegen.define_user_callable(key, start_pc, skip_addr);
+
+    let target =
+        u16::try_from(skip_addr).map_err(|_| Error::TargetTooFar(callable.end_pos, skip_addr))?;
+    ctx.codegen.patch(skip_pc, bytecode::make_jump(target));
 
     Ok(())
 }
@@ -1275,8 +1279,6 @@ pub fn compile(
 
     compile_scope(&mut ctx, symtable.enter_scope(), parser::parse(input))?;
     ctx.codegen.emit(bytecode::make_eof(), LineCol { line: 0, col: 0 });
-
-    compile_user_callables(&mut ctx, &mut symtable)?;
 
     let global_vars = symtable
         .iter_globals()

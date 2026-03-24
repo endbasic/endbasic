@@ -148,16 +148,19 @@ OUT FOO
 
 ```asm
 0000:   ENTER       2                   # 0:0
-0001:   CALL        R65, 5              # 5:5, FOO
-0002:   LOADI       R64, 258            # 5:5
-0003:   UPCALL      0, R64              # 5:1, OUT
-0004:   EOF                             # 0:0
+0001:   JUMP        6                   # 1:10
 
--- FOO 
-0005:   LOADI       R64, 0              # 1:10
-0006:   ENTER       1                   # 0:0
-0007:   LOADI       R64, 42             # 2:11
-0008:   RETURN                          # 3:1
+-- FOO (BEGIN)
+0002:   LOADI       R64, 0              # 1:10
+0003:   ENTER       1                   # 0:0
+0004:   LOADI       R64, 42             # 2:11
+0005:   RETURN                          # 3:1
+-- FOO (END)
+
+0006:   CALL        R65, 2              # 5:5, FOO
+0007:   LOADI       R64, 258            # 5:5
+0008:   UPCALL      0, R64              # 5:1, OUT
+0009:   EOF                             # 0:0
 ```
 
 ## Output
@@ -182,15 +185,18 @@ FOO
 
 ```asm
 0000:   ENTER       0                   # 0:0
-0001:   CALL        R64, 3              # 5:1, FOO
-0002:   EOF                             # 0:0
+0001:   JUMP        7                   # 1:5
 
--- FOO 
-0003:   ENTER       2                   # 0:0
-0004:   LOADI       R65, 0              # 2:9
-0005:   LOADI       R64, 259            # 2:9
-0006:   UPCALL      0, R64              # 2:5, OUT
-0007:   RETURN                          # 3:1
+-- FOO (BEGIN)
+0002:   ENTER       2                   # 0:0
+0003:   LOADI       R65, 0              # 2:9
+0004:   LOADI       R64, 259            # 2:9
+0005:   UPCALL      0, R64              # 2:5, OUT
+0006:   RETURN                          # 3:1
+-- FOO (END)
+
+0007:   CALL        R64, 2              # 5:1, FOO
+0008:   EOF                             # 0:0
 ```
 
 ## Output
@@ -278,20 +284,23 @@ OUT foo(5)
 
 ```asm
 0000:   ENTER       4                   # 0:0
-0001:   LOADI       R67, 5              # 5:9
-0002:   CALL        R66, 7              # 5:5, FOO
-0003:   MOVE        R65, R66            # 5:5
-0004:   LOADI       R64, 258            # 5:5
-0005:   UPCALL      0, R64              # 5:1, OUT
-0006:   EOF                             # 0:0
+0001:   JUMP        8                   # 1:10
 
--- FOO 
-0007:   LOADI       R64, 0              # 1:10
-0008:   ENTER       3                   # 0:0
-0009:   MOVE        R64, R65            # 2:11
-0010:   LOADI       R66, 1              # 2:15
-0011:   ADDI        R64, R64, R66       # 2:13
-0012:   RETURN                          # 3:1
+-- FOO (BEGIN)
+0002:   LOADI       R64, 0              # 1:10
+0003:   ENTER       3                   # 0:0
+0004:   MOVE        R64, R65            # 2:11
+0005:   LOADI       R66, 1              # 2:15
+0006:   ADDI        R64, R64, R66       # 2:13
+0007:   RETURN                          # 3:1
+-- FOO (END)
+
+0008:   LOADI       R67, 5              # 5:9
+0009:   CALL        R66, 2              # 5:5, FOO
+0010:   MOVE        R65, R66            # 5:5
+0011:   LOADI       R64, 258            # 5:5
+0012:   UPCALL      0, R64              # 5:1, OUT
+0013:   EOF                             # 0:0
 ```
 
 ## Output
