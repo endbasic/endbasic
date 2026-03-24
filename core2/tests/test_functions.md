@@ -1142,3 +1142,37 @@ END FUNCTION
 ```plain
 4:10: Cannot redefine foo%
 ```
+
+# Test: Function nesting within a function
+
+## Source
+
+```basic
+FUNCTION foo
+    FUNCTION bar
+    END FUNCTION
+END FUNCTION
+```
+
+## Compilation errors
+
+```plain
+2:5: Cannot nest FUNCTION or SUB definitions
+```
+
+# Test: Function nesting within a sub
+
+## Source
+
+```basic
+SUB foo
+    FUNCTION bar
+    END FUNCTION
+END SUB
+```
+
+## Compilation errors
+
+```plain
+2:5: Cannot nest FUNCTION or SUB definitions
+```
