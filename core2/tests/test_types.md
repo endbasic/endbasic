@@ -11,15 +11,14 @@ OUT bool_1, bool_2
 ## Disassembly
 
 ```asm
-0000:   ENTER       6                   # 0:0
-0001:   LOADI       R64, 0              # 1:10
-0002:   LOADI       R65, 1              # 2:10
-0003:   MOVE        R67, R64            # 3:5
-0004:   LOADI       R66, 288            # 3:5
-0005:   MOVE        R69, R65            # 3:13
-0006:   LOADI       R68, 256            # 3:13
-0007:   UPCALL      0, R66              # 3:1, OUT
-0008:   EOF                             # 0:0
+0000:   LOADI       R64, 0              ; 1:10
+0001:   LOADI       R65, 1              ; 2:10
+0002:   MOVE        R67, R64            ; 3:5
+0003:   LOADI       R66, 288            ; 3:5
+0004:   MOVE        R69, R65            ; 3:13
+0005:   LOADI       R68, 256            ; 3:13
+0006:   UPCALL      0, R66              ; 3:1, OUT
+0007:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -43,21 +42,20 @@ OUT zero_double, small_double, large_double, tiny_double
 ## Disassembly
 
 ```asm
-0000:   ENTER       12                  # 0:0
-0001:   LOADC       R64, 0              # 1:15
-0002:   LOADC       R65, 1              # 2:16
-0003:   LOADC       R66, 2              # 3:16
-0004:   LOADC       R67, 3              # 4:15
-0005:   MOVE        R69, R64            # 5:5
-0006:   LOADI       R68, 289            # 5:5
-0007:   MOVE        R71, R65            # 5:18
-0008:   LOADI       R70, 289            # 5:18
-0009:   MOVE        R73, R66            # 5:32
-0010:   LOADI       R72, 289            # 5:32
-0011:   MOVE        R75, R67            # 5:46
-0012:   LOADI       R74, 257            # 5:46
-0013:   UPCALL      0, R68              # 5:1, OUT
-0014:   EOF                             # 0:0
+0000:   LOADC       R64, 0              ; 1:15
+0001:   LOADC       R65, 1              ; 2:16
+0002:   LOADC       R66, 2              ; 3:16
+0003:   LOADC       R67, 3              ; 4:15
+0004:   MOVE        R69, R64            ; 5:5
+0005:   LOADI       R68, 289            ; 5:5
+0006:   MOVE        R71, R65            ; 5:18
+0007:   LOADI       R70, 289            ; 5:18
+0008:   MOVE        R73, R66            ; 5:32
+0009:   LOADI       R72, 289            ; 5:32
+0010:   MOVE        R75, R67            ; 5:46
+0011:   LOADI       R74, 257            ; 5:46
+0012:   UPCALL      0, R68              ; 5:1, OUT
+0013:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -78,12 +76,11 @@ OUT small_int
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R64, 123            # 1:13
-0002:   MOVE        R66, R64            # 2:5
-0003:   LOADI       R65, 258            # 2:5
-0004:   UPCALL      0, R65              # 2:1, OUT
-0005:   EOF                             # 0:0
+0000:   LOADI       R64, 123            ; 1:13
+0001:   MOVE        R66, R64            ; 2:5
+0002:   LOADI       R65, 258            ; 2:5
+0003:   UPCALL      0, R65              ; 2:1, OUT
+0004:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -104,12 +101,11 @@ OUT large_int
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADC       R64, 0              # 1:13
-0002:   MOVE        R66, R64            # 2:5
-0003:   LOADI       R65, 258            # 2:5
-0004:   UPCALL      0, R65              # 2:1, OUT
-0005:   EOF                             # 0:0
+0000:   LOADC       R64, 0              ; 1:13
+0001:   MOVE        R66, R64            ; 2:5
+0002:   LOADI       R65, 258            ; 2:5
+0003:   UPCALL      0, R65              ; 2:1, OUT
+0004:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -130,12 +126,11 @@ OUT text
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R64, 0              # 1:8
-0002:   MOVE        R66, R64            # 2:5
-0003:   LOADI       R65, 259            # 2:5
-0004:   UPCALL      0, R65              # 2:1, OUT
-0005:   EOF                             # 0:0
+0000:   LOADI       R64, 0              ; 1:8
+0001:   MOVE        R66, R64            ; 2:5
+0002:   LOADI       R65, 259            ; 2:5
+0003:   UPCALL      0, R65              ; 2:1, OUT
+0004:   EOF                             ; 0:0
 ```
 
 ## Output

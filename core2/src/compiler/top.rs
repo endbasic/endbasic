@@ -1012,21 +1012,6 @@ fn compile_stmt(
     Ok(())
 }
 
-/// Compiles a sequence of `stmts` that all live in the same `symtable` scope.
-fn compile_scope<I>(ctx: &mut Context, mut symtable: LocalSymtable<'_>, stmts: I) -> Result<()>
-where
-    I: Iterator<Item = std::result::Result<Statement, parser::Error>>,
-{
-    let enter = ctx.codegen.emit(bytecode::make_nop(), LineCol { line: 0, col: 0 });
-    for stmt in stmts {
-        compile_stmt(ctx, &mut symtable, stmt?)?;
-    }
-    let nlocals =
-        symtable.leave_scope().map_err(|e| Error::from_syms(e, LineCol { line: 0, col: 0 }))?;
-    ctx.codegen.add_fixup(enter, Fixup::Enter(nlocals));
-    Ok(())
-}
-
 /// Declares a callable.
 ///
 /// If the callable is already defined, this ensures the new declaration matches the previous one
@@ -1117,7 +1102,9 @@ fn compile_user_callable(
             .map_err(|e| Error::from_syms(e, key_pos))?;
     }
 
-    compile_scope(ctx, symtable, callable.body.into_iter().map(Ok))?;
+    for stmt in callable.body {
+        compile_stmt(ctx, &mut symtable, stmt)?;
+    }
 
     let return_addr = ctx.codegen.emit(bytecode::make_return(), callable.end_pos);
     for (addr, pos) in ctx.callable_exit_jumps.drain(..) {
@@ -1237,7 +1224,6 @@ pub(super) fn prepare_globals(
     if array_globals.is_empty() {
         return Ok(());
     }
-    ctx.codegen.emit(bytecode::make_enter(max_ndims), preamble_pos);
     for (reg, def) in array_globals {
         let GlobalDefKind::Array { subtype, dimensions } = &def.kind else {
             unreachable!("array_globals only contains array defs per the loop above")
@@ -1257,7 +1243,6 @@ pub(super) fn prepare_globals(
             .map_err(|_| Error::TooManyArrayDimensions(preamble_pos, usize::from(ndims)))?;
         ctx.codegen.emit(bytecode::make_alloc_array(reg, packed, first_dim_reg), preamble_pos);
     }
-    ctx.codegen.emit(bytecode::make_leave(), preamble_pos);
 
     Ok(())
 }
@@ -1268,7 +1253,12 @@ pub fn compile(
     mut ctx: Context,
     mut symtable: GlobalSymtable,
 ) -> Result<Image> {
-    compile_scope(&mut ctx, symtable.enter_scope(), parser::parse(input))?;
+    {
+        let mut symtable = symtable.enter_scope();
+        for stmt in parser::parse(input) {
+            compile_stmt(&mut ctx, &mut symtable, stmt?)?;
+        }
+    }
     ctx.codegen.emit(bytecode::make_eof(), LineCol { line: 0, col: 0 });
 
     let global_vars = symtable

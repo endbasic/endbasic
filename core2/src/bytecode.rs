@@ -168,6 +168,9 @@ impl RawValue for Register {
 }
 
 impl Register {
+    /// Maximum number of supported registers.
+    pub(crate) const MAX: u8 = u8::MAX;
+
     /// Maximum number of supported global registers.
     pub(crate) const MAX_GLOBAL: u8 = 64;
 
@@ -497,9 +500,6 @@ pub(crate) enum Opcode {
     /// Compares two strings for equality and stores the result into a third one.
     EqualText,
 
-    /// Allocates local registers (locals and temporaries) when entering a scope.
-    Enter,
-
     /// Jumps to a subroutine at an address relative to the PC.
     Gosub,
 
@@ -529,9 +529,6 @@ pub(crate) enum Opcode {
 
     /// Jumps to an address relative to the PC if the condition register is false (0).
     JumpIfFalse,
-
-    /// Deallocates the registers allocated by the preamble ENTER, unwinding to the FP.
-    Leave,
 
     /// Compares two doubles for less-than and stores the result into a third one.
     LessDouble,
@@ -795,13 +792,6 @@ instr!(
 
 #[rustfmt::skip]
 instr!(
-    Opcode::Enter, "ENTER",
-    make_enter, parse_enter, format_enter,
-    u8, 0x000000ff, 0,  // Number of local registers to allocate.
-);
-
-#[rustfmt::skip]
-instr!(
     Opcode::Eof, "EOF",
     make_eof, parse_eof, format_eof,
 );
@@ -887,12 +877,6 @@ instr!(
     make_jump_if_false, parse_jump_if_false, format_jump_if_false,
     Register, 0x000000ff, 16,  // Condition register; if 0 (false), jump to target.
     u16, 0x0000ffff, 0,  // Target address.
-);
-
-#[rustfmt::skip]
-instr!(
-    Opcode::Leave, "LEAVE",
-    make_leave, parse_leave, format_leave,
 );
 
 #[rustfmt::skip]
@@ -1428,8 +1412,6 @@ mod tests {
 
     test_instr!(test_end, make_end, parse_end, Register::local(1).unwrap());
 
-    test_instr!(test_enter, make_enter, parse_enter, 10);
-
     test_instr!(test_eof, make_eof, parse_eof);
 
     test_instr!(test_gosub, make_gosub, parse_gosub, 12345);
@@ -1504,8 +1486,6 @@ mod tests {
         Register::local(1).unwrap(),
         12345
     );
-
-    test_instr!(test_leave, make_leave, parse_leave);
 
     test_instr!(
         test_less_double,

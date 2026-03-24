@@ -9,12 +9,11 @@ OUT -3.5
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   LOADC       R65, 0              # 1:6
-0002:   NEGD        R65                 # 1:5
-0003:   LOADI       R64, 257            # 1:5
-0004:   UPCALL      0, R64              # 1:1, OUT
-0005:   EOF                             # 0:0
+0000:   LOADC       R65, 0              ; 1:6
+0001:   NEGD        R65                 ; 1:5
+0002:   LOADI       R64, 257            ; 1:5
+0003:   UPCALL      0, R64              ; 1:1, OUT
+0004:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -34,12 +33,11 @@ OUT -7
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   LOADI       R65, 7              # 1:6
-0002:   NEGI        R65                 # 1:5
-0003:   LOADI       R64, 258            # 1:5
-0004:   UPCALL      0, R64              # 1:1, OUT
-0005:   EOF                             # 0:0
+0000:   LOADI       R65, 7              ; 1:6
+0001:   NEGI        R65                 ; 1:5
+0002:   LOADI       R64, 258            ; 1:5
+0003:   UPCALL      0, R64              ; 1:1, OUT
+0004:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -59,12 +57,11 @@ OUT -0
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   LOADI       R65, 0              # 1:6
-0002:   NEGI        R65                 # 1:5
-0003:   LOADI       R64, 258            # 1:5
-0004:   UPCALL      0, R64              # 1:1, OUT
-0005:   EOF                             # 0:0
+0000:   LOADI       R65, 0              ; 1:6
+0001:   NEGI        R65                 ; 1:5
+0002:   LOADI       R64, 258            ; 1:5
+0003:   UPCALL      0, R64              ; 1:1, OUT
+0004:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -98,10 +95,9 @@ a = -(&x80000000)
 ## Disassembly
 
 ```asm
-0000:   ENTER       1                   # 0:0
-0001:   LOADC       R64, 0              # 1:7
-0002:   NEGI        R64                 # 1:5
-0003:   EOF                             # 0:0
+0000:   LOADC       R64, 0              ; 1:7
+0001:   NEGI        R64                 ; 1:5
+0002:   EOF                             ; 0:0
 ```
 
 ## Runtime errors

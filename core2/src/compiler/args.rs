@@ -402,7 +402,6 @@ mod tests {
     use super::*;
     use crate::CallableMetadataBuilder;
     use crate::callable::RepeatedSyntax;
-    use crate::compiler::codegen::Fixup;
     use crate::compiler::syms::GlobalSymtable;
     use std::borrow::Cow;
     use std::collections::HashMap;
@@ -424,7 +423,6 @@ mod tests {
             .test_build();
 
         let mut codegen = Codegen::default();
-        let enter = codegen.emit(bytecode::make_nop(), LineCol { line: 0, col: 0 });
 
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(upcalls);
@@ -446,16 +444,12 @@ mod tests {
         codegen.set_arg_linecols(addr, arg_linecols);
         codegen.emit(bytecode::make_eof(), LineCol { line: 0, col: 0 });
 
-        let nlocals = local.leave_scope().map_err(|e| Error::from_syms(e, pos))?;
-        codegen.add_fixup(enter, Fixup::Enter(nlocals));
-
         let image = codegen.build_image(HashMap::default(), vec![])?;
         assert_eq!(
             vec![
-                "0000:   ENTER       1                   # 0:0".to_owned(),
-                "0001:   LOADI       R64, 0              # 1:1".to_owned(),
-                "0002:   UPCALL      0, R64              # 1:1, OUT".to_owned(),
-                "0003:   EOF                             # 0:0".to_owned(),
+                "0000:   LOADI       R64, 0              ; 1:1".to_owned(),
+                "0001:   UPCALL      0, R64              ; 1:1, OUT".to_owned(),
+                "0002:   EOF                             ; 0:0".to_owned(),
             ],
             image.disasm()
         );

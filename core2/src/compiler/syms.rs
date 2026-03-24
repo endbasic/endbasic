@@ -255,15 +255,6 @@ impl<'a> LocalSymtable<'a> {
         self.symtable
     }
 
-    /// Consumes the local scope and returns the number of local variables defined, which includes
-    /// the locals themselves and any temporaries used by the scope.
-    pub(crate) fn leave_scope(self) -> Result<u8> {
-        match u8::try_from(self.locals.len() + usize::from(self.count_temps)) {
-            Ok(nregs) => Ok(nregs),
-            Err(_) => Err(Error::OutOfRegisters(RegisterScope::Local)),
-        }
-    }
-
     /// Declares a new user-defined `vref` callable with `md` metadata.
     pub(crate) fn declare_user_callable(
         &mut self,
@@ -689,42 +680,6 @@ mod tests {
     }
 
     #[test]
-    fn test_leave_scope_counts_locals_only() -> Result<()> {
-        let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(upcalls);
-        let mut local = global.enter_scope();
-        local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
-        local.put_local(SymbolKey::from("b"), SymbolPrototype::Scalar(ExprType::Integer))?;
-        assert_eq!(2, local.leave_scope()?);
-        Ok(())
-    }
-
-    #[test]
-    fn test_leave_scope_counts_locals_and_temps() -> Result<()> {
-        let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(upcalls);
-        let mut local = global.enter_scope();
-        local.put_local(SymbolKey::from("a"), SymbolPrototype::Scalar(ExprType::Integer))?;
-        {
-            let temp = local.frozen();
-            let mut scope = temp.temp_scope();
-            scope.alloc()?;
-            scope.alloc()?;
-        }
-        assert_eq!(3, local.leave_scope()?);
-        Ok(())
-    }
-
-    #[test]
-    fn test_leave_scope_empty() -> Result<()> {
-        let upcalls = HashMap::default();
-        let mut global = GlobalSymtable::new(upcalls);
-        let local = global.enter_scope();
-        assert_eq!(0, local.leave_scope()?);
-        Ok(())
-    }
-
-    #[test]
     fn test_define_and_get_user_callable() -> Result<()> {
         let upcalls = HashMap::default();
         let mut global = GlobalSymtable::new(upcalls);
@@ -903,7 +858,6 @@ mod tests {
                 assert_eq!(Register::local(1).unwrap(), scope.alloc()?);
             }
         }
-        assert_eq!(5, local.leave_scope()?);
         Ok(())
     }
 
@@ -923,7 +877,6 @@ mod tests {
             },
         )?;
 
-        assert_eq!(3, local.leave_scope()?);
         Ok(())
     }
 
@@ -944,7 +897,6 @@ mod tests {
             },
         )?;
 
-        assert_eq!(3, local.leave_scope()?);
         Ok(())
     }
 
@@ -1021,7 +973,6 @@ mod tests {
         {
             let mut local = global.enter_scope();
             local.put_local(SymbolKey::from("x"), SymbolPrototype::Scalar(ExprType::Integer))?;
-            assert_eq!(1, local.leave_scope()?);
         }
 
         {
@@ -1033,7 +984,6 @@ mod tests {
             let reg =
                 local.put_local(SymbolKey::from("y"), SymbolPrototype::Scalar(ExprType::Double))?;
             assert_eq!(Register::local(0).unwrap(), reg);
-            assert_eq!(1, local.leave_scope()?);
         }
 
         Ok(())

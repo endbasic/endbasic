@@ -16,21 +16,20 @@ RETURN
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   LOADI       R65, 0              # 1:5
-0002:   LOADI       R64, 259            # 1:5
-0003:   UPCALL      0, R64              # 1:1, OUT
-0004:   GOSUB       10                  # 2:7
-0005:   LOADI       R65, 1              # 3:5
-0006:   LOADI       R64, 259            # 3:5
-0007:   UPCALL      0, R64              # 3:1, OUT
-0008:   LOADI       R64, 0              # 4:1
-0009:   END         R64                 # 4:1
-0010:   LOADI       R65, 2              # 7:5
-0011:   LOADI       R64, 259            # 7:5
-0012:   UPCALL      0, R64              # 7:1, OUT
-0013:   RETURN                          # 8:1
-0014:   EOF                             # 0:0
+0000:   LOADI       R65, 0              ; 1:5
+0001:   LOADI       R64, 259            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   GOSUB       9                   ; 2:7
+0004:   LOADI       R65, 1              ; 3:5
+0005:   LOADI       R64, 259            ; 3:5
+0006:   UPCALL      0, R64              ; 3:1, OUT
+0007:   LOADI       R64, 0              ; 4:1
+0008:   END         R64                 ; 4:1
+0009:   LOADI       R65, 2              ; 7:5
+0010:   LOADI       R64, 259            ; 7:5
+0011:   UPCALL      0, R64              ; 7:1, OUT
+0012:   RETURN                          ; 8:1
+0013:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -55,15 +54,14 @@ RETURN
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   GOSUB       4                   # 1:7
-0002:   LOADI       R64, 0              # 2:1
-0003:   END         R64                 # 2:1
-0004:   LOADI       R65, 0              # 3:9
-0005:   LOADI       R64, 259            # 3:9
-0006:   UPCALL      0, R64              # 3:5, OUT
-0007:   RETURN                          # 4:1
-0008:   EOF                             # 0:0
+0000:   GOSUB       3                   ; 1:7
+0001:   LOADI       R64, 0              ; 2:1
+0002:   END         R64                 ; 2:1
+0003:   LOADI       R65, 0              ; 3:9
+0004:   LOADI       R64, 259            ; 3:9
+0005:   UPCALL      0, R64              ; 3:5, OUT
+0006:   RETURN                          ; 4:1
+0007:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -102,37 +100,36 @@ RETURN
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   LOADI       R65, 0              # 1:5
-0002:   LOADI       R64, 259            # 1:5
-0003:   UPCALL      0, R64              # 1:1, OUT
-0004:   GOSUB       10                  # 2:7
-0005:   LOADI       R65, 1              # 3:5
-0006:   LOADI       R64, 259            # 3:5
-0007:   UPCALL      0, R64              # 3:1, OUT
-0008:   LOADI       R64, 0              # 4:1
-0009:   END         R64                 # 4:1
-0010:   LOADI       R65, 2              # 7:5
-0011:   LOADI       R64, 259            # 7:5
-0012:   UPCALL      0, R64              # 7:1, OUT
-0013:   GOSUB       18                  # 8:7
-0014:   LOADI       R65, 3              # 9:5
-0015:   LOADI       R64, 259            # 9:5
-0016:   UPCALL      0, R64              # 9:1, OUT
-0017:   RETURN                          # 10:1
-0018:   LOADI       R65, 4              # 13:5
-0019:   LOADI       R64, 259            # 13:5
-0020:   UPCALL      0, R64              # 13:1, OUT
-0021:   GOSUB       26                  # 14:7
-0022:   LOADI       R65, 5              # 15:5
-0023:   LOADI       R64, 259            # 15:5
-0024:   UPCALL      0, R64              # 15:1, OUT
-0025:   RETURN                          # 16:1
-0026:   LOADI       R65, 6              # 19:5
-0027:   LOADI       R64, 259            # 19:5
-0028:   UPCALL      0, R64              # 19:1, OUT
-0029:   RETURN                          # 20:1
-0030:   EOF                             # 0:0
+0000:   LOADI       R65, 0              ; 1:5
+0001:   LOADI       R64, 259            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   GOSUB       9                   ; 2:7
+0004:   LOADI       R65, 1              ; 3:5
+0005:   LOADI       R64, 259            ; 3:5
+0006:   UPCALL      0, R64              ; 3:1, OUT
+0007:   LOADI       R64, 0              ; 4:1
+0008:   END         R64                 ; 4:1
+0009:   LOADI       R65, 2              ; 7:5
+0010:   LOADI       R64, 259            ; 7:5
+0011:   UPCALL      0, R64              ; 7:1, OUT
+0012:   GOSUB       17                  ; 8:7
+0013:   LOADI       R65, 3              ; 9:5
+0014:   LOADI       R64, 259            ; 9:5
+0015:   UPCALL      0, R64              ; 9:1, OUT
+0016:   RETURN                          ; 10:1
+0017:   LOADI       R65, 4              ; 13:5
+0018:   LOADI       R64, 259            ; 13:5
+0019:   UPCALL      0, R64              ; 13:1, OUT
+0020:   GOSUB       25                  ; 14:7
+0021:   LOADI       R65, 5              ; 15:5
+0022:   LOADI       R64, 259            ; 15:5
+0023:   UPCALL      0, R64              ; 15:1, OUT
+0024:   RETURN                          ; 16:1
+0025:   LOADI       R65, 6              ; 19:5
+0026:   LOADI       R64, 259            ; 19:5
+0027:   UPCALL      0, R64              ; 19:1, OUT
+0028:   RETURN                          ; 20:1
+0029:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -158,9 +155,8 @@ RETURN
 ## Disassembly
 
 ```asm
-0000:   ENTER       0                   # 0:0
-0001:   RETURN                          # 1:1
-0002:   EOF                             # 0:0
+0000:   RETURN                          ; 1:1
+0001:   EOF                             ; 0:0
 ```
 
 ## Runtime errors
@@ -187,14 +183,13 @@ GOSUB @s
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   JUMP        6                   # 1:6
-0002:   LOADI       R65, 0              # 4:5
-0003:   LOADI       R64, 259            # 4:5
-0004:   UPCALL      0, R64              # 4:1, OUT
-0005:   RETURN                          # 5:1
-0006:   GOSUB       2                   # 8:7
-0007:   EOF                             # 0:0
+0000:   JUMP        5                   ; 1:6
+0001:   LOADI       R65, 0              ; 4:5
+0002:   LOADI       R64, 259            ; 4:5
+0003:   UPCALL      0, R64              ; 4:1, OUT
+0004:   RETURN                          ; 5:1
+0005:   GOSUB       1                   ; 8:7
+0006:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -214,12 +209,11 @@ GOSUB @sub: @sub: OUT 1
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   GOSUB       2                   # 1:7
-0002:   LOADI       R65, 1              # 1:23
-0003:   LOADI       R64, 258            # 1:23
-0004:   UPCALL      0, R64              # 1:19, OUT
-0005:   EOF                             # 0:0
+0000:   GOSUB       1                   ; 1:7
+0001:   LOADI       R65, 1              ; 1:23
+0002:   LOADI       R64, 258            ; 1:23
+0003:   UPCALL      0, R64              ; 1:19, OUT
+0004:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -241,10 +235,9 @@ RETURN
 ## Disassembly
 
 ```asm
-0000:   ENTER       0                   # 0:0
-0001:   JUMP        2                   # 1:6
-0002:   RETURN                          # 3:1
-0003:   EOF                             # 0:0
+0000:   JUMP        1                   ; 1:6
+0001:   RETURN                          ; 3:1
+0002:   EOF                             ; 0:0
 ```
 
 ## Runtime errors
