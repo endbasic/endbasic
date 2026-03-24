@@ -47,7 +47,6 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::EqualText => bytecode::format_equal_text(instr),
         Opcode::Eof => bytecode::format_eof(instr),
         Opcode::End => bytecode::format_end(instr),
-        Opcode::Enter => bytecode::format_enter(instr),
         Opcode::Gosub => bytecode::format_gosub(instr),
         Opcode::GreaterDouble => bytecode::format_greater_double(instr),
         Opcode::GreaterEqualDouble => bytecode::format_greater_equal_double(instr),
@@ -58,7 +57,6 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::IntegerToDouble => bytecode::format_integer_to_double(instr),
         Opcode::Jump => bytecode::format_jump(instr),
         Opcode::JumpIfFalse => bytecode::format_jump_if_false(instr),
-        Opcode::Leave => bytecode::format_leave(instr),
         Opcode::LessDouble => bytecode::format_less_double(instr),
         Opcode::LessEqualDouble => bytecode::format_less_equal_double(instr),
         Opcode::LessEqualInteger => bytecode::format_less_equal_integer(instr),
@@ -210,9 +208,9 @@ impl Image {
             if let Some((key, is_start)) = self.debug_info.callables.get(&i) {
                 if *is_start {
                     lines.push("".to_owned());
-                    lines.push(format!("-- {} (BEGIN)", key));
+                    lines.push(format!(";; {} (BEGIN)", key));
                 } else {
-                    lines.push(format!("-- {} (END)", key));
+                    lines.push(format!(";; {} (END)", key));
                     lines.push("".to_owned());
                 }
             }
@@ -222,7 +220,7 @@ impl Image {
             while line.len() < 40 {
                 line.push(' ');
             }
-            line.push_str(&format!("# {}", pos));
+            line.push_str(&format!("; {}", pos));
 
             match opcode_of(instr) {
                 Opcode::Call => {

@@ -11,9 +11,8 @@ GETDATA
 ## Disassembly
 
 ```asm
-0000:   ENTER       0                   # 0:0
-0001:   UPCALL      0, R64              # 3:1, GETDATA
-0002:   EOF                             # 0:0
+0000:   UPCALL      0, R64              ; 3:1, GETDATA
+0001:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -44,26 +43,25 @@ GETDATA
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R64, 0              # 1:4
-0002:   JMPF        R64, 4              # 1:4
-0003:   JUMP        6                   # 1:4
-0004:   LOADI       R64, 1              # 3:1
-0005:   JMPF        R64, 6              # 3:1
-0006:   LOADI       R64, 0              # 6:7
-0007:   JMPF        R64, 9              # 6:7
-0008:   JUMP        6                   # 6:7
-0009:   LOADI       R64, 0              # 9:9
-0010:   MOVE        R65, R64            # 9:5
-0011:   LOADI       R66, 0              # 9:14
-0012:   CMPLEI      R65, R65, R66       # 9:11
-0013:   JMPF        R65, 18             # 9:5
-0014:   MOVE        R64, R64            # 9:5
-0015:   LOADI       R65, 1              # 9:15
-0016:   ADDI        R64, R64, R65       # 9:11
-0017:   JUMP        10                  # 9:5
-0018:   UPCALL      0, R65              # 12:1, GETDATA
-0019:   EOF                             # 0:0
+0000:   LOADI       R64, 0              ; 1:4
+0001:   JMPF        R64, 3              ; 1:4
+0002:   JUMP        5                   ; 1:4
+0003:   LOADI       R64, 1              ; 3:1
+0004:   JMPF        R64, 5              ; 3:1
+0005:   LOADI       R64, 0              ; 6:7
+0006:   JMPF        R64, 8              ; 6:7
+0007:   JUMP        5                   ; 6:7
+0008:   LOADI       R64, 0              ; 9:9
+0009:   MOVE        R65, R64            ; 9:5
+0010:   LOADI       R66, 0              ; 9:14
+0011:   CMPLEI      R65, R65, R66       ; 9:11
+0012:   JMPF        R65, 17             ; 9:5
+0013:   MOVE        R64, R64            ; 9:5
+0014:   LOADI       R65, 1              ; 9:15
+0015:   ADDI        R64, R64, R65       ; 9:11
+0016:   JUMP        9                   ; 9:5
+0017:   UPCALL      0, R65              ; 12:1, GETDATA
+0018:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -86,10 +84,9 @@ GETDATA
 ## Disassembly
 
 ```asm
-0000:   ENTER       0                   # 0:0
-0001:   UPCALL      0, R64              # 1:1, GETDATA
-0002:   UPCALL      0, R64              # 4:1, GETDATA
-0003:   EOF                             # 0:0
+0000:   UPCALL      0, R64              ; 1:1, GETDATA
+0001:   UPCALL      0, R64              ; 4:1, GETDATA
+0002:   EOF                             ; 0:0
 ```
 
 ## Output

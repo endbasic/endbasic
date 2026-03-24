@@ -13,18 +13,17 @@ OUT "c"
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   LOADI       R65, 0              # 1:5
-0002:   LOADI       R64, 259            # 1:5
-0003:   UPCALL      0, R64              # 1:1, OUT
-0004:   JUMP        8                   # 2:6
-0005:   LOADI       R65, 1              # 3:5
-0006:   LOADI       R64, 259            # 3:5
-0007:   UPCALL      0, R64              # 3:1, OUT
-0008:   LOADI       R65, 2              # 5:5
-0009:   LOADI       R64, 259            # 5:5
-0010:   UPCALL      0, R64              # 5:1, OUT
-0011:   EOF                             # 0:0
+0000:   LOADI       R65, 0              ; 1:5
+0001:   LOADI       R64, 259            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   JUMP        7                   ; 2:6
+0004:   LOADI       R65, 1              ; 3:5
+0005:   LOADI       R64, 259            ; 3:5
+0006:   UPCALL      0, R64              ; 3:1, OUT
+0007:   LOADI       R65, 2              ; 5:5
+0008:   LOADI       R64, 259            ; 5:5
+0009:   UPCALL      0, R64              ; 5:1, OUT
+0010:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -47,12 +46,11 @@ OUT "a"
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   JUMP        5                   # 1:6
-0002:   LOADI       R65, 0              # 2:5
-0003:   LOADI       R64, 259            # 2:5
-0004:   UPCALL      0, R64              # 2:1, OUT
-0005:   EOF                             # 0:0
+0000:   JUMP        4                   ; 1:6
+0001:   LOADI       R65, 0              ; 2:5
+0002:   LOADI       R64, 259            ; 2:5
+0003:   UPCALL      0, R64              ; 2:1, OUT
+0004:   EOF                             ; 0:0
 ```
 
 # Test: GOTO target requires backwards jump
@@ -73,17 +71,16 @@ GOTO @print_it
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   JUMP        9                   # 1:6
-0002:   LOADI       R65, 0              # 2:5
-0003:   LOADI       R64, 259            # 2:5
-0004:   UPCALL      0, R64              # 2:1, OUT
-0005:   LOADI       R65, 1              # 4:5
-0006:   LOADI       R64, 259            # 4:5
-0007:   UPCALL      0, R64              # 4:1, OUT
-0008:   JUMP        10                  # 5:6
-0009:   JUMP        5                   # 7:6
-0010:   EOF                             # 0:0
+0000:   JUMP        8                   ; 1:6
+0001:   LOADI       R65, 0              ; 2:5
+0002:   LOADI       R64, 259            ; 2:5
+0003:   UPCALL      0, R64              ; 2:1, OUT
+0004:   LOADI       R65, 1              ; 4:5
+0005:   LOADI       R64, 259            ; 4:5
+0006:   UPCALL      0, R64              ; 4:1, OUT
+0007:   JUMP        9                   ; 5:6
+0008:   JUMP        4                   ; 7:6
+0009:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -105,15 +102,14 @@ OUT "skipped"
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   JUMP        5                   # 1:6
-0002:   LOADI       R65, 0              # 2:5
-0003:   LOADI       R64, 259            # 2:5
-0004:   UPCALL      0, R64              # 2:1, OUT
-0005:   LOADI       R65, 1              # 3:8
-0006:   LOADI       R64, 259            # 3:8
-0007:   UPCALL      0, R64              # 3:4, OUT
-0008:   EOF                             # 0:0
+0000:   JUMP        4                   ; 1:6
+0001:   LOADI       R65, 0              ; 2:5
+0002:   LOADI       R64, 259            ; 2:5
+0003:   UPCALL      0, R64              ; 2:1, OUT
+0004:   LOADI       R65, 1              ; 3:8
+0005:   LOADI       R64, 259            ; 3:8
+0006:   UPCALL      0, R64              ; 3:4, OUT
+0007:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -134,15 +130,14 @@ OUT "skipped": 20 OUT "target"
 ## Disassembly
 
 ```asm
-0000:   ENTER       2                   # 0:0
-0001:   JUMP        5                   # 1:6
-0002:   LOADI       R65, 0              # 2:5
-0003:   LOADI       R64, 259            # 2:5
-0004:   UPCALL      0, R64              # 2:1, OUT
-0005:   LOADI       R65, 1              # 2:23
-0006:   LOADI       R64, 259            # 2:23
-0007:   UPCALL      0, R64              # 2:19, OUT
-0008:   EOF                             # 0:0
+0000:   JUMP        4                   ; 1:6
+0001:   LOADI       R65, 0              ; 2:5
+0002:   LOADI       R64, 259            ; 2:5
+0003:   UPCALL      0, R64              ; 2:1, OUT
+0004:   LOADI       R65, 1              ; 2:23
+0005:   LOADI       R64, 259            ; 2:23
+0006:   UPCALL      0, R64              ; 2:19, OUT
+0007:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -232,19 +227,18 @@ GOTO @again
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R64, 0              # 1:5
-0002:   MOVE        R65, R64            # 3:4
-0003:   LOADI       R66, 5              # 3:8
-0004:   CMPEQI      R65, R65, R66       # 3:6
-0005:   JMPF        R65, 8              # 3:4
-0006:   MOVE        R65, R64            # 3:19
-0007:   END         R65                 # 3:15
-0008:   MOVE        R64, R64            # 4:5
-0009:   LOADI       R65, 1              # 4:9
-0010:   ADDI        R64, R64, R65       # 4:7
-0011:   JUMP        2                   # 5:6
-0012:   EOF                             # 0:0
+0000:   LOADI       R64, 0              ; 1:5
+0001:   MOVE        R65, R64            ; 3:4
+0002:   LOADI       R66, 5              ; 3:8
+0003:   CMPEQI      R65, R65, R66       ; 3:6
+0004:   JMPF        R65, 7              ; 3:4
+0005:   MOVE        R65, R64            ; 3:19
+0006:   END         R65                 ; 3:15
+0007:   MOVE        R64, R64            ; 4:5
+0008:   LOADI       R65, 1              ; 4:9
+0009:   ADDI        R64, R64, R65       ; 4:7
+0010:   JUMP        1                   ; 5:6
+0011:   EOF                             ; 0:0
 ```
 
 ## Exit code

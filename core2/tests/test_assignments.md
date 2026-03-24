@@ -12,13 +12,12 @@ OUT a
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R64, 1              # 1:5
-0002:   LOADI       R64, 2              # 2:5
-0003:   MOVE        R66, R64            # 4:5
-0004:   LOADI       R65, 258            # 4:5
-0005:   UPCALL      0, R65              # 4:1, OUT
-0006:   EOF                             # 0:0
+0000:   LOADI       R64, 1              ; 1:5
+0001:   LOADI       R64, 2              ; 2:5
+0002:   MOVE        R66, R64            ; 4:5
+0003:   LOADI       R65, 258            ; 4:5
+0004:   UPCALL      0, R65              ; 4:1, OUT
+0005:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -42,16 +41,15 @@ OUT a
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R64, 0              # 1:6
-0002:   MOVE        R66, R64            # 2:5
-0003:   LOADI       R65, 259            # 2:5
-0004:   UPCALL      0, R65              # 2:1, OUT
-0005:   LOADI       R64, 1              # 4:5
-0006:   MOVE        R66, R64            # 5:5
-0007:   LOADI       R65, 259            # 5:5
-0008:   UPCALL      0, R65              # 5:1, OUT
-0009:   EOF                             # 0:0
+0000:   LOADI       R64, 0              ; 1:6
+0001:   MOVE        R66, R64            ; 2:5
+0002:   LOADI       R65, 259            ; 2:5
+0003:   UPCALL      0, R65              ; 2:1, OUT
+0004:   LOADI       R64, 1              ; 4:5
+0005:   MOVE        R66, R64            ; 5:5
+0006:   LOADI       R65, 259            ; 5:5
+0007:   UPCALL      0, R65              ; 5:1, OUT
+0008:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -76,16 +74,15 @@ OUT a
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R64, 0              # 1:5
-0002:   MOVE        R66, R64            # 2:5
-0003:   LOADI       R65, 259            # 2:5
-0004:   UPCALL      0, R65              # 2:1, OUT
-0005:   LOADI       R64, 1              # 4:6
-0006:   MOVE        R66, R64            # 5:5
-0007:   LOADI       R65, 259            # 5:5
-0008:   UPCALL      0, R65              # 5:1, OUT
-0009:   EOF                             # 0:0
+0000:   LOADI       R64, 0              ; 1:5
+0001:   MOVE        R66, R64            ; 2:5
+0002:   LOADI       R65, 259            ; 2:5
+0003:   UPCALL      0, R65              ; 2:1, OUT
+0004:   LOADI       R64, 1              ; 4:6
+0005:   MOVE        R66, R64            ; 5:5
+0006:   LOADI       R65, 259            ; 5:5
+0007:   UPCALL      0, R65              ; 5:1, OUT
+0008:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -151,13 +148,12 @@ OUT d
 ## Disassembly
 
 ```asm
-0000:   ENTER       3                   # 0:0
-0001:   LOADI       R64, 6              # 1:6
-0002:   ITOD        R64                 # 1:6
-0003:   MOVE        R66, R64            # 2:5
-0004:   LOADI       R65, 257            # 2:5
-0005:   UPCALL      0, R65              # 2:1, OUT
-0006:   EOF                             # 0:0
+0000:   LOADI       R64, 6              ; 1:6
+0001:   ITOD        R64                 ; 1:6
+0002:   MOVE        R66, R64            ; 2:5
+0003:   LOADI       R65, 257            ; 2:5
+0004:   UPCALL      0, R65              ; 2:1, OUT
+0005:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -183,19 +179,18 @@ OUT i1, i2
 ## Disassembly
 
 ```asm
-0000:   ENTER       6                   # 0:0
-0001:   LOADI       R64, 0              # 1:6
-0002:   LOADC       R64, 0              # 2:6
-0003:   DTOI        R64                 # 2:6
-0004:   LOADI       R65, 0              # 4:6
-0005:   LOADC       R65, 1              # 5:6
-0006:   DTOI        R65                 # 5:6
-0007:   MOVE        R67, R64            # 7:5
-0008:   LOADI       R66, 290            # 7:5
-0009:   MOVE        R69, R65            # 7:9
-0010:   LOADI       R68, 258            # 7:9
-0011:   UPCALL      0, R66              # 7:1, OUT
-0012:   EOF                             # 0:0
+0000:   LOADI       R64, 0              ; 1:6
+0001:   LOADC       R64, 0              ; 2:6
+0002:   DTOI        R64                 ; 2:6
+0003:   LOADI       R65, 0              ; 4:6
+0004:   LOADC       R65, 1              ; 5:6
+0005:   DTOI        R65                 ; 5:6
+0006:   MOVE        R67, R64            ; 7:5
+0007:   LOADI       R66, 290            ; 7:5
+0008:   MOVE        R69, R65            ; 7:9
+0009:   LOADI       R68, 258            ; 7:9
+0010:   UPCALL      0, R66              ; 7:1, OUT
+0011:   EOF                             ; 0:0
 ```
 
 ## Output

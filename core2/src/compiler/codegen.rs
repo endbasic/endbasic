@@ -35,9 +35,6 @@ pub(super) enum Fixup {
     /// Fixup to resolve a user-defined call target address into a `CALL` instruction.
     Call(Register, SymbolKey),
 
-    /// Fixup to record the number of local variables to allocate in an `ENTER` instruction.
-    Enter(u8),
-
     /// Fixup to resolve a label target address into a `GOSUB` instruction.
     Gosub(String),
 
@@ -201,7 +198,6 @@ impl Codegen {
                         self.user_callables_addresses.get(&key).expect("Must be present");
                     bytecode::make_call(reg, Self::make_target(*target, pos)?)
                 }
-                Fixup::Enter(nargs) => bytecode::make_enter(nargs),
                 Fixup::Gosub(label) => {
                     let key = SymbolKey::from(&label);
                     let Some(target) = self.labels.get(&key) else {

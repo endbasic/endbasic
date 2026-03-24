@@ -179,7 +179,7 @@ impl Default for Context {
             fp: usize::from(Register::MAX_GLOBAL),
             stop: None,
             err_handler: ErrorHandler::None,
-            regs: vec![0; usize::from(Register::MAX_GLOBAL)],
+            regs: vec![0; usize::from(Register::MAX)],
             call_stack: vec![],
         }
     }
@@ -333,7 +333,6 @@ impl Context {
                 Opcode::EqualInteger => self.do_equal_integer(instr),
                 Opcode::EqualText => self.do_equal_text(instr, &image.constants, heap),
                 Opcode::End => self.do_end(instr),
-                Opcode::Enter => self.do_enter(instr),
                 Opcode::Eof => self.do_eof(instr),
                 Opcode::Gosub => self.do_gosub(instr),
                 Opcode::GreaterDouble => self.do_greater_double(instr),
@@ -347,7 +346,6 @@ impl Context {
                 Opcode::IntegerToDouble => self.do_integer_to_double(instr),
                 Opcode::Jump => self.do_jump(instr),
                 Opcode::JumpIfFalse => self.do_jump_if_false(instr),
-                Opcode::Leave => self.do_leave(instr),
                 Opcode::LessDouble => self.do_less_double(instr),
                 Opcode::LessEqualDouble => self.do_less_equal_double(instr),
                 Opcode::LessEqualInteger => self.do_less_equal_integer(instr),
@@ -668,13 +666,6 @@ impl Context {
         self.stop = Some(InternalStopReason::End(code));
     }
 
-    /// Implements the `Enter` opcode.
-    pub(super) fn do_enter(&mut self, instr: u32) {
-        let nlocals = bytecode::parse_enter(instr);
-        self.regs.resize(self.regs.len() + usize::from(nlocals), 0);
-        self.pc += 1;
-    }
-
     /// Implements the `Eof` opcode.
     pub(super) fn do_eof(&mut self, instr: u32) {
         bytecode::parse_eof(instr);
@@ -762,13 +753,6 @@ impl Context {
         } else {
             self.pc = Address::from(target);
         }
-    }
-
-    /// Implements the `Leave` opcode.
-    pub(super) fn do_leave(&mut self, instr: u32) {
-        bytecode::parse_leave(instr);
-        self.regs.truncate(self.fp);
-        self.pc += 1;
     }
 
     /// Implements the `LessDouble` opcode.
