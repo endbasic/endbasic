@@ -127,9 +127,9 @@ pub struct DebugInfo {
     /// Per-instruction metadata, one entry per instruction in the image's code.
     pub(crate) instrs: Vec<InstrMetadata>,
 
-    /// Maps instruction addresses to the names of user-defined callables that start at those
-    /// addresses.
-    pub(crate) callables: HashMap<usize, SymbolKey>,
+    /// Maps instruction addresses to the names of user-defined callables that start or end
+    /// at those addresses.  If the boolean is true, the position is a callable start.
+    pub(crate) callables: HashMap<usize, (SymbolKey, bool)>,
 
     /// Maps global variable names to their register assignments and type information.
     ///
@@ -206,9 +206,14 @@ impl Image {
             self.code.iter().copied().enumerate().zip(self.debug_info.instrs.iter())
         {
             let pos = meta.linecol;
-            if let Some(key) = self.debug_info.callables.get(&i) {
-                lines.push("".to_owned());
-                lines.push(format!("-- {} ", key));
+            if let Some((key, is_start)) = self.debug_info.callables.get(&i) {
+                if *is_start {
+                    lines.push("".to_owned());
+                    lines.push(format!("-- {} (BEGIN)", key));
+                } else {
+                    lines.push(format!("-- {} (END)", key));
+                    lines.push("".to_owned());
+                }
             }
 
             let mut line = format!("{:04}:   {}", i, format_instr(instr));
@@ -222,7 +227,7 @@ impl Image {
                 Opcode::Call => {
                     let (_reg, target) = bytecode::parse_call(instr);
                     let target = usize::from(target);
-                    let name = self
+                    let (name, _is_start) = self
                         .debug_info
                         .callables
                         .get(&target)

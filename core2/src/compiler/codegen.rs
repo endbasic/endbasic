@@ -66,8 +66,8 @@ pub(super) struct Codegen {
     /// Map of label names to their target addresses.
     labels: HashMap<SymbolKey, Address>,
 
-    /// Map of user callable names to their target addresses.
-    user_callables_addresses: HashMap<SymbolKey, Address>,
+    /// Map of user callable names to their target start and end addresses.
+    user_callables_addresses: HashMap<SymbolKey, (Address, Address)>,
 
     /// Map of built-in callable names to their return types and assigned upcall IDs.
     upcalls: HashMapWithIds<SymbolKey, Option<ExprType>, u16>,
@@ -174,8 +174,8 @@ impl Codegen {
     }
 
     /// Records the location of a user-defined callable.
-    pub(super) fn define_user_callable(&mut self, key: SymbolKey, address: Address) {
-        self.user_callables_addresses.insert(key, address);
+    pub(super) fn define_user_callable(&mut self, key: SymbolKey, start: Address, end: Address) {
+        self.user_callables_addresses.insert(key, (start, end));
     }
 
     /// Records the location of a label.  Returns false on failure (if the label already existed).
@@ -197,7 +197,8 @@ impl Codegen {
             let pos = self.instrs[addr].linecol;
             let instr = match fixup {
                 Fixup::Call(reg, key) => {
-                    let target = self.user_callables_addresses.get(&key).expect("Must be present");
+                    let (target, _end) =
+                        self.user_callables_addresses.get(&key).expect("Must be present");
                     bytecode::make_call(reg, Self::make_target(*target, pos)?)
                 }
                 Fixup::Enter(nargs) => bytecode::make_enter(nargs),
@@ -257,8 +258,11 @@ impl Codegen {
         self.apply_fixups()?;
 
         let mut callables = HashMap::default();
-        for (key, pc) in self.user_callables_addresses {
-            let previous = callables.insert(pc, key);
+        for (key, (start_pc, end_pc)) in self.user_callables_addresses {
+            let previous = callables.insert(start_pc, (key.clone(), true));
+            debug_assert!(previous.is_none(), "An address can only start one callable");
+
+            let previous = callables.insert(end_pc, (key, false));
             debug_assert!(previous.is_none(), "An address can only start one callable");
         }
 
