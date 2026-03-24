@@ -31,6 +31,7 @@ type Address = usize;
 
 /// Represents a fixup that needs to be applied to an instruction after all symbols have been
 /// located.
+#[derive(Clone)]
 pub(super) enum Fixup {
     /// Fixup to resolve a user-defined call target address into a `CALL` instruction.
     Call(Register, SymbolKey),
@@ -46,7 +47,7 @@ pub(super) enum Fixup {
 }
 
 /// The code generator.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct Codegen {
     /// The instructions being generated.
     code: Vec<u32>,
@@ -99,6 +100,14 @@ impl Codegen {
     /// CALL instruction.
     pub(super) fn set_arg_linecols(&mut self, addr: Address, arg_linecols: Vec<LineCol>) {
         self.instrs[addr].arg_linecols = arg_linecols;
+    }
+
+    /// Removes the EOF instruction from the program, if any.
+    pub(super) fn pop_eof(&mut self) {
+        if let Some(instr) = self.code.pop() {
+            debug_assert_eq!(bytecode::make_eof(), instr);
+            self.instrs.pop();
+        }
     }
 
     /// Emits code to set `reg` to the default value for `vtype`.
@@ -247,27 +256,27 @@ impl Codegen {
 
     /// Consumes the code generator and builds a ready-to-use `Image`.
     pub(super) fn build_image(
-        mut self,
+        &mut self,
         global_vars: HashMap<SymbolKey, GlobalVarInfo>,
         data: Vec<Option<ConstantDatum>>,
     ) -> Result<Image> {
         self.apply_fixups()?;
 
         let mut callables = HashMap::default();
-        for (key, (start_pc, end_pc)) in self.user_callables_addresses {
-            let previous = callables.insert(start_pc, (key.clone(), true));
+        for (key, (start_pc, end_pc)) in &self.user_callables_addresses {
+            let previous = callables.insert(*start_pc, (key.clone(), true));
             debug_assert!(previous.is_none(), "An address can only start one callable");
 
-            let previous = callables.insert(end_pc, (key, false));
+            let previous = callables.insert(*end_pc, (key.clone(), false));
             debug_assert!(previous.is_none(), "An address can only start one callable");
         }
 
         Ok(Image::new(
-            self.code,
+            self.code.clone(),
             self.upcalls.keys_to_vec(),
             self.constants.keys_to_vec(),
             data,
-            DebugInfo { instrs: self.instrs, callables, global_vars },
+            DebugInfo { instrs: self.instrs.clone(), callables, global_vars },
         ))
     }
 }

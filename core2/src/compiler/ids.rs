@@ -23,6 +23,7 @@ use std::hash::Hash;
 /// Hash map that assigns sequential identifiers to elements as they are inserted and
 /// allows later retrieval of these identifiers and retrieving the inserted values in
 /// insertion order.
+#[derive(Clone)]
 pub(super) struct HashMapWithIds<K, V, I> {
     /// The underlying storage mapping keys to their values and assigned identifiers.
     map: HashMap<K, (V, I)>,
@@ -90,10 +91,10 @@ where
     }
 
     /// Returns the keys in insertion order.
-    pub(super) fn keys_to_vec(self) -> Vec<K> {
-        let mut reverse = self.map.into_iter().collect::<Vec<(K, (V, I))>>();
+    pub(super) fn keys_to_vec(&self) -> Vec<K> {
+        let mut reverse = self.map.iter().collect::<Vec<(&K, &(V, I))>>();
         reverse.sort_by_key(|(_key, (_value, index))| *index);
-        reverse.into_iter().map(|(key, _index)| key).collect()
+        reverse.into_iter().map(|(key, _index)| key.clone()).collect()
     }
 }
 
