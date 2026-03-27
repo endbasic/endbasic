@@ -299,9 +299,9 @@ fn labels_for(test: &Test) -> Labels {
             source: "## Source (partial)",
             disassembly: "## Disassembly (full)",
             compiler_errors: "## Compiler errors (partial)",
-            exit_code: "## Exit code (full)",
-            output: "## Output (full)",
-            runtime_errors: "## Runtime errors (full)",
+            exit_code: "## Exit code (partial)",
+            output: "## Output (partial)",
+            runtime_errors: "## Runtime errors (partial)",
         }
     } else {
         Labels {
@@ -406,11 +406,10 @@ fn test_diff_different() -> io::Result<()> {
     Ok(())
 }
 
-/// Executes the image already loaded in `vm` through completion, and converts the result
-/// into an exit code.
-async fn run_image(vm: &mut Vm) -> Result<i32, String> {
+/// Executes `image` through completion in `vm`, and converts the result into an exit code.
+async fn run_image(vm: &mut Vm, image: &Image) -> Result<i32, String> {
     loop {
-        match vm.exec() {
+        match vm.exec(image) {
             StopReason::End(code) => return Ok(code.to_i32()),
             StopReason::Eof => return Ok(0),
             StopReason::Upcall(handle) => {
@@ -443,6 +442,8 @@ async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()
         let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::default();
         callables::register_all(&mut upcalls_by_name, console.clone());
         let mut compiler = Compiler::new(&upcalls_by_name, &[]).expect("Cannot fail");
+        let mut image = Image::default();
+        let mut vm = Vm::new(upcalls_by_name.clone());
 
         for source in test.sources {
             write!(generated, "\n{}\n\n", labels.source)?;
@@ -452,16 +453,13 @@ async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()
             }
             write!(generated, "```\n")?;
 
-            let image = match compiler.compile_more(&mut source.as_bytes()) {
-                Ok(image) => image,
-                Err(e) => {
-                    write!(generated, "\n{}\n\n", labels.compiler_errors)?;
-                    write!(generated, "```plain\n")?;
-                    write!(generated, "{}\n", e)?;
-                    write!(generated, "```\n")?;
-                    continue;
-                }
-            };
+            if let Err(e) = compiler.compile_more(&mut image, &mut source.as_bytes()) {
+                write!(generated, "\n{}\n\n", labels.compiler_errors)?;
+                write!(generated, "```plain\n")?;
+                write!(generated, "{}\n", e)?;
+                write!(generated, "```\n")?;
+                continue;
+            }
 
             write!(generated, "\n{}\n\n", labels.disassembly)?;
             write!(generated, "```asm\n")?;
@@ -471,9 +469,7 @@ async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()
             write!(generated, "```\n")?;
 
             console.borrow_mut().clear();
-            let mut vm = Vm::new(upcalls_by_name.clone());
-            vm.load(image);
-            match run_image(&mut vm).await {
+            match run_image(&mut vm, &image).await {
                 Ok(0) => (),
                 Ok(i) => {
                     write!(generated, "\n{}\n\n", labels.exit_code)?;

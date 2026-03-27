@@ -96,6 +96,11 @@ where
         reverse.sort_by_key(|(_key, (_value, index))| *index);
         reverse.into_iter().map(|(key, _index)| key.clone()).collect()
     }
+
+    /// Returns the keys with identifiers greater than or equal to `start`, in insertion order.
+    pub(super) fn keys_to_vec_from(&self, start: usize) -> Vec<K> {
+        self.keys_to_vec().into_iter().skip(start).collect()
+    }
 }
 
 #[cfg(test)]
@@ -137,6 +142,7 @@ mod tests {
         assert_eq!(Some((Some(()), 1)), map.insert("bar", ()));
 
         assert_eq!(["foo", "bar", "baz"], map.keys_to_vec().as_slice());
+        assert_eq!(["bar", "baz"], map.keys_to_vec_from(1).as_slice());
     }
 
     #[test]
@@ -150,6 +156,7 @@ mod tests {
         assert_eq!(Some((Some(()), 1)), map.insert("bar", ()));
 
         assert_eq!(["foo", "bar", "baz"], map.keys_to_vec().as_slice());
+        assert_eq!(["baz"], map.keys_to_vec_from(2).as_slice());
     }
 
     #[test]

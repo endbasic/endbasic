@@ -93,6 +93,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
 }
 
 /// Information about a global variable tracked for post-execution querying.
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct GlobalVarInfo {
     /// Global register index (0 to `Register::MAX_GLOBAL - 1`).
     pub(crate) reg: u8,
@@ -105,7 +106,7 @@ pub(crate) struct GlobalVarInfo {
 }
 
 /// Per-instruction metadata stored in `DebugInfo`.
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct InstrMetadata {
     /// Source location that generated this instruction.
     pub(crate) linecol: LineCol,
@@ -134,6 +135,30 @@ pub struct DebugInfo {
     ///
     /// This includes both host-pre-defined globals (from `compile_with_globals`) and
     /// globals declared via `DIM SHARED` in the user's program.
+    pub(crate) global_vars: HashMap<SymbolKey, GlobalVarInfo>,
+}
+
+/// Incremental update to append into an existing `Image`.
+pub(crate) struct ImageDelta {
+    /// Suffix of bytecode instructions to append after dropping the current EOF terminator.
+    pub(crate) code: Vec<u32>,
+
+    /// Additional upcall names referenced by the updated program.
+    pub(crate) upcalls: Vec<SymbolKey>,
+
+    /// Additional constants referenced by the updated program.
+    pub(crate) constants: Vec<ConstantDatum>,
+
+    /// Additional `DATA` values captured by the updated program.
+    pub(crate) data: Vec<Option<ConstantDatum>>,
+
+    /// Per-instruction metadata matching `code`.
+    pub(crate) instrs: Vec<InstrMetadata>,
+
+    /// Full user-callable metadata for the updated program.
+    pub(crate) callables: HashMap<usize, (SymbolKey, bool)>,
+
+    /// Full global variable metadata for the updated program.
     pub(crate) global_vars: HashMap<SymbolKey, GlobalVarInfo>,
 }
 
@@ -195,6 +220,25 @@ impl Image {
         debug_assert!(!code.is_empty(), "Compiler must ensure the image is not empty");
         debug_assert_eq!(code.len(), debug_info.instrs.len());
         Self { code, upcalls, constants, data, debug_info, _internal: () }
+    }
+
+    /// Appends `delta` to the image, replacing the current trailing EOF terminator.
+    pub(crate) fn append(&mut self, delta: ImageDelta) {
+        debug_assert_eq!(self.code.last().copied(), Some(bytecode::make_eof()));
+        debug_assert_eq!(self.debug_info.instrs.len(), self.code.len());
+        debug_assert_eq!(delta.code.len(), delta.instrs.len());
+        debug_assert_eq!(delta.code.last().copied(), Some(bytecode::make_eof()));
+
+        self.code.pop();
+        self.debug_info.instrs.pop();
+
+        self.code.extend(delta.code);
+        self.upcalls.extend(delta.upcalls);
+        self.constants.extend(delta.constants);
+        self.data.extend(delta.data);
+        self.debug_info.instrs.extend(delta.instrs);
+        self.debug_info.callables = delta.callables;
+        self.debug_info.global_vars = delta.global_vars;
     }
 
     /// Disassembles the image into a textual representation for debugging.

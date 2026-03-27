@@ -15,7 +15,7 @@ OUT 1
 0003:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
 0=1%
@@ -39,10 +39,9 @@ OUT 2
 0006:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
-0=1%
 0=2%
 ```
 
@@ -65,7 +64,7 @@ OUT a
 0004:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
 0=3%
@@ -90,10 +89,9 @@ OUT a
 0007:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
-0=3%
 0=3%
 ```
 
@@ -142,7 +140,7 @@ OUT a
 0004:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
 0=3%
@@ -225,7 +223,7 @@ say_hello
 0017:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
 0=8%
@@ -260,7 +258,7 @@ GETDATA
 0001:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
 0=1% 1=2%
@@ -281,10 +279,9 @@ GETDATA
 0002:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
-0=1% 1=2% 2=3%
 0=1% 1=2% 2=3%
 ```
 
@@ -343,7 +340,7 @@ OUT a
 0004:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
 0=5%
@@ -422,7 +419,7 @@ OUT stable
 0007:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
 0=7%
@@ -468,8 +465,238 @@ GETDATA
 0001:   EOF                             ; 0:0
 ```
 
-## Output (full)
+## Output (partial)
 
 ```plain
 0=9% 1=10%
+```
+
+# Test: Explicit END does not block later compiles
+
+## Source (partial)
+
+```basic
+OUT 1
+```
+
+## Disassembly (full)
+
+```asm
+0000:   LOADI       R65, 1              ; 1:5
+0001:   LOADI       R64, 258            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   EOF                             ; 0:0
+```
+
+## Output (partial)
+
+```plain
+0=1%
+```
+
+## Source (partial)
+
+```basic
+END 3
+```
+
+## Disassembly (full)
+
+```asm
+0000:   LOADI       R65, 1              ; 1:5
+0001:   LOADI       R64, 258            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   LOADI       R64, 3              ; 1:5
+0004:   END         R64                 ; 1:1
+0005:   EOF                             ; 0:0
+```
+
+## Exit code (partial)
+
+```plain
+3
+```
+
+## Source (partial)
+
+```basic
+OUT 2
+```
+
+## Disassembly (full)
+
+```asm
+0000:   LOADI       R65, 1              ; 1:5
+0001:   LOADI       R64, 258            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   LOADI       R64, 3              ; 1:5
+0004:   END         R64                 ; 1:1
+0005:   LOADI       R65, 2              ; 1:5
+0006:   LOADI       R64, 258            ; 1:5
+0007:   UPCALL      0, R64              ; 1:1, OUT
+0008:   EOF                             ; 0:0
+```
+
+## Output (partial)
+
+```plain
+0=2%
+```
+
+# Test: Runtime errors do not block later compiles
+
+## Source (partial)
+
+```basic
+OUT 1
+```
+
+## Disassembly (full)
+
+```asm
+0000:   LOADI       R65, 1              ; 1:5
+0001:   LOADI       R64, 258            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   EOF                             ; 0:0
+```
+
+## Output (partial)
+
+```plain
+0=1%
+```
+
+## Source (partial)
+
+```basic
+a = 1 / 0
+```
+
+## Disassembly (full)
+
+```asm
+0000:   LOADI       R65, 1              ; 1:5
+0001:   LOADI       R64, 258            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   LOADI       R64, 1              ; 1:5
+0004:   LOADI       R65, 0              ; 1:9
+0005:   DIVI        R64, R64, R65       ; 1:7
+0006:   EOF                             ; 0:0
+```
+
+## Runtime errors (partial)
+
+```plain
+1:7: Division by zero
+```
+
+## Source (partial)
+
+```basic
+OUT 2
+```
+
+## Disassembly (full)
+
+```asm
+0000:   LOADI       R65, 1              ; 1:5
+0001:   LOADI       R64, 258            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   LOADI       R64, 1              ; 1:5
+0004:   LOADI       R65, 0              ; 1:9
+0005:   DIVI        R64, R64, R65       ; 1:7
+0006:   LOADI       R66, 2              ; 1:5
+0007:   LOADI       R65, 258            ; 1:5
+0008:   UPCALL      0, R65              ; 1:1, OUT
+0009:   EOF                             ; 0:0
+```
+
+## Output (partial)
+
+```plain
+0=2%
+```
+
+# Test: Labels
+
+## Source (partial)
+
+```basic
+OUT "before"
+a = 0
+@first
+a = a + 1
+OUT a
+IF a = 5 THEN END
+```
+
+## Disassembly (full)
+
+```asm
+0000:   LOADI       R65, 0              ; 1:5
+0001:   LOADI       R64, 259            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   LOADI       R64, 0              ; 2:5
+0004:   MOVE        R64, R64            ; 4:5
+0005:   LOADI       R65, 1              ; 4:9
+0006:   ADDI        R64, R64, R65       ; 4:7
+0007:   MOVE        R66, R64            ; 5:5
+0008:   LOADI       R65, 258            ; 5:5
+0009:   UPCALL      0, R65              ; 5:1, OUT
+0010:   MOVE        R65, R64            ; 6:4
+0011:   LOADI       R66, 5              ; 6:8
+0012:   CMPEQI      R65, R65, R66       ; 6:6
+0013:   JMPF        R65, 16             ; 6:4
+0014:   LOADI       R65, 0              ; 6:15
+0015:   END         R65                 ; 6:15
+0016:   EOF                             ; 0:0
+```
+
+## Output (partial)
+
+```plain
+0=before$
+0=1%
+```
+
+## Source (partial)
+
+```basic
+GOTO @first
+OUT "done"
+```
+
+## Disassembly (full)
+
+```asm
+0000:   LOADI       R65, 0              ; 1:5
+0001:   LOADI       R64, 259            ; 1:5
+0002:   UPCALL      0, R64              ; 1:1, OUT
+0003:   LOADI       R64, 0              ; 2:5
+0004:   MOVE        R64, R64            ; 4:5
+0005:   LOADI       R65, 1              ; 4:9
+0006:   ADDI        R64, R64, R65       ; 4:7
+0007:   MOVE        R66, R64            ; 5:5
+0008:   LOADI       R65, 258            ; 5:5
+0009:   UPCALL      0, R65              ; 5:1, OUT
+0010:   MOVE        R65, R64            ; 6:4
+0011:   LOADI       R66, 5              ; 6:8
+0012:   CMPEQI      R65, R65, R66       ; 6:6
+0013:   JMPF        R65, 16             ; 6:4
+0014:   LOADI       R65, 0              ; 6:15
+0015:   END         R65                 ; 6:15
+0016:   JUMP        4                   ; 1:6
+0017:   LOADI       R66, 1              ; 2:5
+0018:   LOADI       R65, 259            ; 2:5
+0019:   UPCALL      0, R65              ; 2:1, OUT
+0020:   EOF                             ; 0:0
+```
+
+## Output (partial)
+
+```plain
+0=2%
+0=3%
+0=4%
+0=5%
 ```

@@ -213,20 +213,21 @@ impl Compiler {
 
     /// Compiles a chunk of code.
     pub fn compile(mut self, input: &mut dyn io::Read) -> Result<Image> {
-        let symtable = LocalSymtable::restore(&mut self.symtable, self.program_scope);
-        let (image, _) = top::compile(input, &mut self.context, symtable)?;
+        let mut image = Image::default();
+        self.compile_more(&mut image, input)?;
         Ok(image)
     }
 
-    /// Compiles a chunk of code.
-    pub fn compile_more(&mut self, input: &mut dyn io::Read) -> Result<Image> {
+    /// Compiles a chunk of code and appends it to `image`.
+    pub fn compile_more(&mut self, image: &mut Image, input: &mut dyn io::Read) -> Result<()> {
         let mut new_context = self.context.clone();
         let mut new_symtable = self.symtable.clone();
         let program_scope = LocalSymtable::restore(&mut new_symtable, self.program_scope.clone());
-        let (image, snapshot) = top::compile(input, &mut new_context, program_scope)?;
+        let (delta, snapshot) = top::compile(input, image, &mut new_context, program_scope)?;
+        image.append(delta);
         self.context = new_context;
         self.symtable = new_symtable;
         self.program_scope = snapshot;
-        Ok(image)
+        Ok(())
     }
 }

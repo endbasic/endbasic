@@ -20,7 +20,7 @@ use crate::ast::ExprType;
 use crate::bytecode::{self, ErrorHandlerMode, Register};
 use crate::compiler::ids::HashMapWithIds;
 use crate::compiler::{Error, Result, SymbolKey};
-use crate::image::{DebugInfo, GlobalVarInfo, Image, InstrMetadata};
+use crate::image::{GlobalVarInfo, Image, ImageDelta, InstrMetadata};
 use crate::mem::ConstantDatum;
 use crate::reader::LineCol;
 use std::collections::HashMap;
@@ -254,13 +254,37 @@ impl Codegen {
         }
     }
 
-    /// Consumes the code generator and builds a ready-to-use `Image`.
-    pub(super) fn build_image(
+    /// Builds an incremental update to append into `image`.
+    pub(super) fn build_image_delta(
         &mut self,
+        image: &Image,
         global_vars: HashMap<SymbolKey, GlobalVarInfo>,
-        data: Vec<Option<ConstantDatum>>,
-    ) -> Result<Image> {
+        data: &[Option<ConstantDatum>],
+    ) -> Result<ImageDelta> {
         self.apply_fixups()?;
+
+        let code_start = image.code.len().saturating_sub(1);
+        let constants_start = image.constants.len();
+        let instrs_start = image.debug_info.instrs.len().saturating_sub(1);
+        let upcalls_start = image.upcalls.len();
+
+        debug_assert_eq!(code_start, instrs_start);
+        debug_assert!(code_start <= self.code.len());
+        debug_assert!(constants_start <= self.constants.len());
+        debug_assert!(image.data.len() <= data.len());
+        debug_assert!(upcalls_start <= self.upcalls.len());
+
+        debug_assert_eq!(&image.code[..code_start], &self.code[..code_start]);
+        debug_assert_eq!(&image.debug_info.instrs[..instrs_start], &self.instrs[..instrs_start],);
+        debug_assert!(
+            self.constants.keys_to_vec().starts_with(image.constants.as_slice()),
+            "Image constants must match the compiler state prefix",
+        );
+        debug_assert!(
+            self.upcalls.keys_to_vec().starts_with(image.upcalls.as_slice()),
+            "Image upcalls must match the compiler state prefix",
+        );
+        debug_assert_eq!(image.data.as_slice(), &data[..image.data.len()]);
 
         let mut callables = HashMap::default();
         for (key, (start_pc, end_pc)) in &self.user_callables_addresses {
@@ -271,12 +295,27 @@ impl Codegen {
             debug_assert!(previous.is_none(), "An address can only start one callable");
         }
 
-        Ok(Image::new(
-            self.code.clone(),
-            self.upcalls.keys_to_vec(),
-            self.constants.keys_to_vec(),
-            data,
-            DebugInfo { instrs: self.instrs.clone(), callables, global_vars },
-        ))
+        Ok(ImageDelta {
+            code: self.code[code_start..].to_vec(),
+            upcalls: self.upcalls.keys_to_vec_from(upcalls_start),
+            constants: self.constants.keys_to_vec_from(constants_start),
+            data: data[image.data.len()..].to_vec(),
+            instrs: self.instrs[instrs_start..].to_vec(),
+            callables,
+            global_vars,
+        })
+    }
+
+    #[cfg(test)]
+    /// Builds a ready-to-use `Image`.
+    pub(super) fn build_image(
+        &mut self,
+        global_vars: HashMap<SymbolKey, GlobalVarInfo>,
+        data: Vec<Option<ConstantDatum>>,
+    ) -> Result<Image> {
+        let mut image = Image::default();
+        let delta = self.build_image_delta(&image, global_vars, &data)?;
+        image.append(delta);
+        Ok(image)
     }
 }

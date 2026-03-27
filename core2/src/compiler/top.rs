@@ -29,7 +29,7 @@ use crate::compiler::syms::{
     self, GlobalSymtable, LocalSymtable, SymbolKey, SymbolPrototype, TempSymtable,
 };
 use crate::compiler::{Error, Result};
-use crate::image::{GlobalVarInfo, Image};
+use crate::image::{GlobalVarInfo, Image, ImageDelta};
 use crate::mem::ConstantDatum;
 use crate::reader::LineCol;
 use crate::{Callable, CallableMetadataBuilder, parser};
@@ -1256,9 +1256,10 @@ pub(super) fn prepare_globals(
 /// Compiles the `input` into an `Image` that can be executed by the VM.
 pub fn compile(
     input: &mut dyn io::Read,
+    image: &Image,
     ctx: &mut Context,
     mut symtable: LocalSymtable,
-) -> Result<(Image, LocalSymtableSnapshot)> {
+) -> Result<(ImageDelta, LocalSymtableSnapshot)> {
     ctx.codegen.pop_eof();
     {
         for stmt in parser::parse(input) {
@@ -1277,8 +1278,8 @@ pub fn compile(
             (key.clone(), GlobalVarInfo { reg, subtype, ndims })
         })
         .collect();
-    let image = ctx.codegen.build_image(global_vars, ctx.data.clone())?;
-    Ok((image, symtable.save()))
+    let delta = ctx.codegen.build_image_delta(image, global_vars, &ctx.data)?;
+    Ok((delta, symtable.save()))
 }
 
 #[cfg(test)]
@@ -1294,15 +1295,14 @@ mod tests {
             .expect("constants initialization must succeed");
         let image = compiler.compile(&mut "".as_bytes()).expect("compilation should succeed");
         let mut vm = Vm::new(HashMap::default());
-        vm.load(image);
-        match vm.exec() {
+        match vm.exec(&image) {
             StopReason::End(code) if code.is_success() => {}
             StopReason::End(code) => panic!("unexpected exit code: {}", code.to_i32()),
             StopReason::Eof => {}
             StopReason::Exception(pos, msg) => panic!("exception at {pos}: {msg}"),
             StopReason::Upcall(_) => panic!("unexpected upcall"),
         }
-        vm.get_global(name).expect("get_global failed").expect("global not found")
+        vm.get_global(&image, name).expect("get_global failed").expect("global not found")
     }
 
     #[test]
