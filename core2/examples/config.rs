@@ -80,10 +80,9 @@ fn main() {
     let compiler = Compiler::new(&upcalls, &global_defs).expect("Globals initialization failed");
     let image = compiler.compile(&mut SCRIPT.as_bytes()).expect("Compilation failed");
 
-    // Load and execute the compiled image.
+    // Execute the compiled image.
     let mut vm = Vm::new(upcalls);
-    vm.load(image);
-    match vm.exec() {
+    match vm.exec(&image) {
         StopReason::End(code) => {
             if !code.is_success() {
                 eprintln!("Script exited with code {}", code.to_i32());
@@ -101,19 +100,19 @@ fn main() {
     }
 
     // Query the global variables by name.
-    match vm.get_global("foo_value") {
+    match vm.get_global(&image, "foo_value") {
         Ok(Some(ConstantDatum::Integer(v))) => println!("foo_value% = {}", v),
         Ok(Some(other)) => println!("foo_value% has unexpected type: {:?}", other),
         Ok(None) => println!("foo_value% is not set"),
         Err(e) => println!("foo_value%: error: {}", e),
     }
-    match vm.get_global("result_total") {
+    match vm.get_global(&image, "result_total") {
         Ok(Some(ConstantDatum::Integer(v))) => println!("result_total% = {}", v),
         Ok(Some(other)) => println!("result_total% has unexpected type: {:?}", other),
         Ok(None) => println!("result_total% is not set"),
         Err(e) => println!("result_total%: error: {}", e),
     }
-    match vm.get_global("status") {
+    match vm.get_global(&image, "status") {
         Ok(Some(ConstantDatum::Text(v))) => println!("status$ = {:?}", v),
         Ok(Some(other)) => println!("status$ has unexpected type: {:?}", other),
         Ok(None) => println!("status$ is not set"),
@@ -121,7 +120,7 @@ fn main() {
     }
     // defined_within was not provided upfront but was declared as a global within
     // the script.  We can query it here too.
-    match vm.get_global("defined_within") {
+    match vm.get_global(&image, "defined_within") {
         Ok(Some(ConstantDatum::Integer(v))) => println!("defined_within% = {}", v),
         Ok(Some(other)) => println!("result_total% has unexpected type: {:?}", other),
         Ok(None) => println!("defined_within% is not set"),
@@ -129,7 +128,7 @@ fn main() {
     }
     // optional_flag was declared but the script never assigned it, so it should
     // receive its "zero value".
-    match vm.get_global("optional_flag") {
+    match vm.get_global(&image, "optional_flag") {
         Ok(Some(ConstantDatum::Boolean(v))) => println!("optional_flag? = {}", v),
         Ok(Some(other)) => println!("optional_flag? has unexpected type: {:?}", other),
         Ok(None) => println!("optional_flag? is not declared"),
@@ -137,20 +136,20 @@ fn main() {
     }
     // injected_value was pre-initialized to 5 before compilation.  The script incremented
     // it by 1, so we expect 6 here.
-    match vm.get_global("injected_value") {
+    match vm.get_global(&image, "injected_value") {
         Ok(Some(ConstantDatum::Integer(v))) => println!("injected_value% = {}", v),
         Ok(Some(other)) => println!("injected_value% has unexpected type: {:?}", other),
         Ok(None) => println!("injected_value% is not set"),
         Err(e) => println!("injected_value%: error: {}", e),
     }
     // "unknown" was never declared at all, so get_global returns Ok(None).
-    match vm.get_global("unknown") {
+    match vm.get_global(&image, "unknown") {
         Ok(Some(v)) => println!("unknown = {:?}", v),
         Ok(None) => println!("unknown is not declared"),
         Err(e) => println!("unknown: error: {}", e),
     }
     for i in 0..3_i32 {
-        match vm.get_global_array("results", &[i]) {
+        match vm.get_global_array(&image, "results", &[i]) {
             Ok(Some(ConstantDatum::Integer(v))) => println!("results%({}) = {}", i, v),
             Ok(Some(other)) => println!("results%({}) has unexpected type: {:?}", i, other),
             Ok(None) => println!("results%({}) is not set", i),
@@ -158,7 +157,7 @@ fn main() {
         }
     }
     // Demonstrate that querying a scalar as an array yields an error.
-    match vm.get_global_array("foo_value", &[0]) {
+    match vm.get_global_array(&image, "foo_value", &[0]) {
         Ok(v) => println!("foo_value%(0) = {:?}", v),
         Err(e) => println!("foo_value%(0): error: {}", e),
     }
