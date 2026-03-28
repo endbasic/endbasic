@@ -63,6 +63,10 @@ fn validate_syn_argsep(
         }
 
         ArgSepSyntax::OneOf(exp_seps) => {
+            if sep == ArgSep::End {
+                return Ok(());
+            }
+
             let mut found = false;
             for exp_sep in *exp_seps {
                 debug_assert!(*exp_sep != ArgSep::End, "Use ArgSepSyntax::End");
@@ -338,6 +342,7 @@ pub(super) fn compile_args(
             let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
             let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
             arg_linecols.push(arg_pos);
+            validate_syn_argsep(&md, arg_pos, &syn.sep, arg_iter.peek().is_none(), sep)?;
 
             let tag = match expr {
                 None => {
