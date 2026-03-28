@@ -1298,7 +1298,8 @@ mod tests {
             StopReason::Exception(pos, msg) => panic!("exception at {pos}: {msg}"),
             StopReason::Upcall(_) => panic!("unexpected upcall"),
         }
-        vm.get_global(&image, name).expect("get_global failed").expect("global not found")
+        let key = SymbolKey::from(name);
+        vm.get_global(&image, &key).expect("get_global failed").expect("global not found")
     }
 
     #[test]

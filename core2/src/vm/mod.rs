@@ -235,18 +235,21 @@ impl Vm {
         }
     }
 
-    /// Returns the value of the global scalar variable `name` as a `ConstantDatum`.
+    /// Returns the value of the global scalar variable `key` as a `ConstantDatum`.
     ///
     /// Returns `Ok(None)` if the variable is not defined (no image is loaded or the
     /// variable was not declared).  Returns `Err` if the variable exists but is an
     /// array; in that case, use `get_global_array` instead.
-    pub fn get_global(&self, image: &Image, name: &str) -> GetGlobalResult<Option<ConstantDatum>> {
-        let key = SymbolKey::from(name);
-        let Some(info) = image.debug_info.global_vars.get(&key) else {
+    pub fn get_global(
+        &self,
+        image: &Image,
+        key: &SymbolKey,
+    ) -> GetGlobalResult<Option<ConstantDatum>> {
+        let Some(info) = image.debug_info.global_vars.get(key) else {
             return Ok(None);
         };
         if info.ndims != 0 {
-            return Err(GetGlobalError::IsArray(name.to_owned()));
+            return Err(GetGlobalError::IsArray(key.to_string()));
         }
         let raw = self.context.get_global_reg_raw(info.reg);
         let datum = match info.subtype {
@@ -261,7 +264,7 @@ impl Vm {
         Ok(Some(datum))
     }
 
-    /// Returns the value of an element in the global array variable `name` at the given
+    /// Returns the value of an element in the global array variable `key` at the given
     /// `subscripts` as a `ConstantDatum`.
     ///
     /// Returns `Ok(None)` if the variable is not defined (no image is loaded or the
@@ -270,15 +273,14 @@ impl Vm {
     pub fn get_global_array(
         &self,
         image: &Image,
-        name: &str,
+        key: &SymbolKey,
         subscripts: &[i32],
     ) -> GetGlobalResult<Option<ConstantDatum>> {
-        let key = SymbolKey::from(name);
-        let Some(info) = image.debug_info.global_vars.get(&key) else {
+        let Some(info) = image.debug_info.global_vars.get(key) else {
             return Ok(None);
         };
         if info.ndims == 0 {
-            return Err(GetGlobalError::IsScalar(name.to_owned()));
+            return Err(GetGlobalError::IsScalar(key.to_string()));
         }
         let raw = self.context.get_global_reg_raw(info.reg);
         let ptr = DatumPtr::from(raw);
