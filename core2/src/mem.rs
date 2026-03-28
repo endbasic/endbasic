@@ -102,6 +102,36 @@ impl Hash for ConstantDatum {
     }
 }
 
+impl From<bool> for ConstantDatum {
+    fn from(value: bool) -> Self {
+        Self::Boolean(value)
+    }
+}
+
+impl From<f64> for ConstantDatum {
+    fn from(value: f64) -> Self {
+        Self::Double(value)
+    }
+}
+
+impl From<i32> for ConstantDatum {
+    fn from(value: i32) -> Self {
+        Self::Integer(value)
+    }
+}
+
+impl From<&str> for ConstantDatum {
+    fn from(value: &str) -> Self {
+        Self::Text(value.to_owned())
+    }
+}
+
+impl From<String> for ConstantDatum {
+    fn from(value: String) -> Self {
+        Self::Text(value)
+    }
+}
+
 impl ConstantDatum {
     /// Returns the type of the constant datum.
     pub(crate) fn etype(&self) -> ExprType {
@@ -191,5 +221,34 @@ impl DatumPtr {
             DatumPtr::Heap(index) => unchecked_u24_as_usize(*index),
             DatumPtr::Constant(_) => panic!("Expected a heap pointer"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_constant_datum_from_scalars() {
+        assert_eq!(ConstantDatum::Boolean(true), ConstantDatum::from(true));
+        assert_eq!(ConstantDatum::Double(3.25), ConstantDatum::from(3.25));
+        assert_eq!(ConstantDatum::Integer(-7), ConstantDatum::from(-7));
+    }
+
+    #[test]
+    fn test_constant_datum_from_str() {
+        let mut text = "hello".to_owned();
+        let datum = ConstantDatum::from(text.as_str());
+        text.clear();
+
+        assert_eq!(ConstantDatum::Text("hello".to_owned()), datum);
+    }
+
+    #[test]
+    fn test_constant_datum_from_string() {
+        assert_eq!(
+            ConstantDatum::Text("hello".to_owned()),
+            ConstantDatum::from("hello".to_owned())
+        );
     }
 }
