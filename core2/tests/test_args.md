@@ -722,6 +722,34 @@ DEFINE_AND_CHANGE_ARGS 5
 1:24: DEFINE_AND_CHANGE_ARGS expected arg1[ <,|;> .. <,|;> argN]
 ```
 
+# Test: Repeated references with require_one, invalid first separator
+
+## Source
+
+```basic
+DEFINE_AND_CHANGE_ARGS b AS d
+```
+
+## Compilation errors
+
+```plain
+1:24: DEFINE_AND_CHANGE_ARGS expected arg1[ <,|;> .. <,|;> argN]
+```
+
+# Test: Repeated references with require_one, invalid later separator
+
+## Source
+
+```basic
+DEFINE_AND_CHANGE_ARGS b, d AS i
+```
+
+## Compilation errors
+
+```plain
+1:27: DEFINE_AND_CHANGE_ARGS expected arg1[ <,|;> .. <,|;> argN]
+```
+
 # Test: Repeated references with require_one, single argument
 
 ## Source
