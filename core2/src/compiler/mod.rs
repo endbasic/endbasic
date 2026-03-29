@@ -135,8 +135,8 @@ pub enum Error {
     TypeMismatch(LineCol, ExprType, ExprType),
 
     /// Reference to an undefined symbol.
-    #[error("{0}: Undefined {2} symbol {1}")]
-    UndefinedSymbol(LineCol, VarRef, RegisterScope),
+    #[error("{0}: Undefined symbol {1}")]
+    UndefinedSymbol(LineCol, VarRef),
 
     /// Reference to an unknown label.
     #[error("{0}: Unknown label {1}")]
@@ -161,7 +161,7 @@ impl Error {
                 Error::IncompatibleTypeAnnotationInReference(pos, vref)
             }
             syms::Error::OutOfRegisters(scope) => Error::OutOfRegisters(pos, scope),
-            syms::Error::UndefinedSymbol(vref, scope) => Error::UndefinedSymbol(pos, vref, scope),
+            syms::Error::UndefinedSymbol(vref, _scope) => Error::UndefinedSymbol(pos, vref),
         }
     }
 }

@@ -20,7 +20,7 @@ use crate::ast::{
     ArgSep, AssignmentSpan, CallableSpan, CaseGuardSpan, CaseRelOp, DoGuard, DoSpan, Expr,
     ExprType, ForSpan, IfSpan, OnErrorSpan, SelectSpan, Statement, VarRef, WhileSpan,
 };
-use crate::bytecode::{self, ErrorHandlerMode, PackedArrayType, Register, RegisterScope};
+use crate::bytecode::{self, ErrorHandlerMode, PackedArrayType, Register};
 use crate::callable::{ArgSepSyntax, CallableMetadata, RequiredValueSyntax, SingularArgSyntax};
 use crate::compiler::args::{compile_args, define_new_args};
 use crate::compiler::codegen::{Codegen, Fixup};
@@ -754,11 +754,7 @@ fn compile_stmt(
             let key_pos = span.vref_pos;
 
             let Some(md) = symtable.get_callable(&key) else {
-                return Err(Error::UndefinedSymbol(
-                    key_pos,
-                    span.vref.clone(),
-                    RegisterScope::Global,
-                ));
+                return Err(Error::UndefinedSymbol(key_pos, span.vref.clone()));
             };
             if md.return_type().is_some() {
                 return Err(Error::NotAFunction(span.vref_pos, span.vref));

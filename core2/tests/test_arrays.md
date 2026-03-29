@@ -388,7 +388,7 @@ OUT foo(1)
 ## Compilation errors
 
 ```plain
-1:5: Undefined global symbol foo
+1:5: Undefined symbol foo
 ```
 
 # Test: Scalar used as array-style expression
@@ -403,7 +403,7 @@ OUT a(1)
 ## Compilation errors
 
 ```plain
-2:5: Undefined global symbol a
+2:5: Undefined symbol a
 ```
 
 # Test: Array dimension too large
