@@ -955,11 +955,11 @@ mod tests {
             r#"SHARE , "a""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: SHARE expected filename$[, acl1$, .., aclN$]",
+            "1:10: SHARE expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a"; "b""#,
         );
         client_check_stmt_compilation_err(
-            "1:1: SHARE expected filename$[, acl1$, .., aclN$]",
+            "1:15: SHARE expected filename$[, acl1$, .., aclN$]",
             r#"SHARE "a", "b"; "c""#,
         );
         client_check_stmt_compilation_err(

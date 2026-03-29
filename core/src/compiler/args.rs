@@ -442,7 +442,6 @@ fn find_syntax(md: &CallableMetadata, pos: LineCol, nargs: usize) -> Result<&Cal
 fn compile_syn_argsep(
     instrs: &mut Vec<Instruction>,
     md: &CallableMetadata,
-    pos: LineCol,
     syn: &ArgSepSyntax,
     is_last: bool,
     sep: ArgSep,
@@ -458,7 +457,7 @@ fn compile_syn_argsep(
         ArgSepSyntax::Exactly(exp_sep) => {
             debug_assert!(*exp_sep != ArgSep::End, "Use ArgSepSyntax::End");
             if sep != ArgSep::End && sep != *exp_sep {
-                return Err(Error::CallableSyntaxError(pos, md.clone()));
+                return Err(Error::CallableSyntaxError(sep_pos, md.clone()));
             }
             Ok(0)
         }
@@ -470,7 +469,7 @@ fn compile_syn_argsep(
                 Ok(0)
             } else {
                 if sep != *exp_sep1 && sep != *exp_sep2 {
-                    return Err(Error::CallableSyntaxError(pos, md.clone()));
+                    return Err(Error::CallableSyntaxError(sep_pos, md.clone()));
                 }
                 instrs.insert(sep_tag_pc, Instruction::PushInteger(sep as i32, sep_pos));
                 Ok(1)
@@ -576,7 +575,6 @@ fn compile_args(
             nargs += compile_syn_argsep(
                 instrs,
                 md,
-                pos,
                 &syn.sep,
                 input_nargs == remaining,
                 span.sep,
@@ -663,7 +661,6 @@ fn compile_args(
         nargs += compile_syn_argsep(
             instrs,
             md,
-            pos,
             exp_sep,
             input_nargs == remaining,
             span.sep,
@@ -1777,7 +1774,7 @@ mod compile_tests {
                 ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 4) },
             ])
             .exp_error(Error::CallableSyntaxError(
-                lc(1000, 2000),
+                lc(1, 1),
                 CallableMetadataBuilder::new("TEST")
                     .with_syntax(&[(
                         &[
@@ -1818,7 +1815,7 @@ mod compile_tests {
                 ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 4) },
             ])
             .exp_error(Error::CallableSyntaxError(
-                lc(1000, 2000),
+                lc(1, 1),
                 CallableMetadataBuilder::new("TEST")
                     .with_syntax(&[(
                         &[

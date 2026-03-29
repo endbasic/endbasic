@@ -637,7 +637,7 @@ mod tests {
             r#"GPIO_WRITE 1, TRUE, 2"#,
         );
         check_stmt_compilation_err(
-            "1:1: GPIO_WRITE expected pin%, value?",
+            "1:13: GPIO_WRITE expected pin%, value?",
             r#"GPIO_WRITE 1; TRUE"#,
         );
 

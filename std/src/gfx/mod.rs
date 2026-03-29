@@ -683,12 +683,16 @@ mod tests {
 
     /// Verifies error conditions for a command named `name` that takes an X/Y pair and a radius.
     fn check_errors_xy_radius(name: &'static str) {
-        for args in &["1, , 3", "1, 2", "1, 2, 3, 4", "2; 3, 4"] {
+        for args in &["1, , 3", "1, 2", "1, 2, 3, 4"] {
             check_stmt_compilation_err(
                 format!("1:1: {} expected x%, y%, r%", name),
                 &format!("{} {}", name, args),
             );
         }
+        check_stmt_compilation_err(
+            format!("1:{}: {} expected x%, y%, r%", name.len() + 3, name),
+            &format!("{} 2; 3, 4", name),
+        );
 
         for args in &["-40000, 1, 1", "1, -40000, 1"] {
             let pos = name.len() + 1 + args.find('-').unwrap() + 1;
@@ -831,9 +835,10 @@ mod tests {
 
     #[test]
     fn test_gfx_pixel_errors() {
-        for cmd in &["GFX_PIXEL , 2", "GFX_PIXEL 1, 2, 3", "GFX_PIXEL 1", "GFX_PIXEL 1; 2"] {
+        for cmd in &["GFX_PIXEL , 2", "GFX_PIXEL 1, 2, 3", "GFX_PIXEL 1"] {
             check_stmt_compilation_err("1:1: GFX_PIXEL expected x%, y%", cmd);
         }
+        check_stmt_compilation_err("1:12: GFX_PIXEL expected x%, y%", "GFX_PIXEL 1; 2");
 
         for cmd in &["GFX_PIXEL -40000, 1", "GFX_PIXEL 1, -40000"] {
             check_stmt_err(
