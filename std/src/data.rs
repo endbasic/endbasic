@@ -304,7 +304,7 @@ mod tests {
     fn test_read_errors() {
         check_stmt_compilation_err("1:1: READ expected vref1[, .., vrefN]", "READ");
         check_stmt_compilation_err("1:6: Requires a reference, not a value", "READ 3");
-        check_stmt_compilation_err("1:1: READ expected vref1[, .., vrefN]", "READ i; j");
+        check_stmt_compilation_err("1:7: READ expected vref1[, .., vrefN]", "READ i; j");
 
         check_stmt_err(
             "1:16: Cannot assign value of type STRING to variable of type INTEGER",

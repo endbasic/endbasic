@@ -719,7 +719,7 @@ mod tests {
             "1:1: COLOR expected <> | <fg%> | <[fg%], [bg%]>",
             "COLOR 1, 2, 3",
         );
-        check_stmt_compilation_err("1:1: COLOR expected <> | <fg%> | <[fg%], [bg%]>", "COLOR 1; 2");
+        check_stmt_compilation_err("1:8: COLOR expected <> | <fg%> | <[fg%], [bg%]>", "COLOR 1; 2");
 
         check_stmt_err("1:7: Color out of range", "COLOR 1000, 0");
         check_stmt_err("1:10: Color out of range", "COLOR 0, 1000");
@@ -855,7 +855,7 @@ mod tests {
         );
         check_stmt_compilation_err("1:7: expected STRING but found INTEGER", "INPUT 3 ; a");
         check_stmt_compilation_err(
-            "1:1: INPUT expected <vref> | <[prompt$] <,|;> vref>",
+            "1:13: INPUT expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT \"foo\" AS bar",
         );
         check_stmt_err("1:7: Undefined symbol A", "INPUT a + 1 ; b");
@@ -884,7 +884,7 @@ mod tests {
         check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE");
         check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE 1");
         check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE 1, 2, 3");
-        check_stmt_compilation_err("1:1: LOCATE expected column%, row%", "LOCATE 1; 2");
+        check_stmt_compilation_err("1:9: LOCATE expected column%, row%", "LOCATE 1; 2");
 
         check_stmt_err("1:8: Column out of range", "LOCATE -1, 2");
         check_stmt_err("1:8: Column out of range", "LOCATE 70000, 2");
@@ -994,11 +994,11 @@ mod tests {
     #[test]
     fn test_print_errors() {
         check_stmt_compilation_err(
-            "1:1: PRINT expected [expr1 <,|;> .. <,|;> exprN]",
+            "1:9: PRINT expected [expr1 <,|;> .. <,|;> exprN]",
             "PRINT 3 AS 4",
         );
         check_stmt_compilation_err(
-            "1:1: PRINT expected [expr1 <,|;> .. <,|;> exprN]",
+            "1:12: PRINT expected [expr1 <,|;> .. <,|;> exprN]",
             "PRINT 3, 4 AS 5",
         );
         // Ensure type errors from `Expr` and `Value` bubble up.
