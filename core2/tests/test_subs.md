@@ -209,7 +209,7 @@ OUT local_var
 ## Compilation errors
 
 ```plain
-6:5: Undefined global symbol local_var
+6:5: Undefined symbol local_var
 ```
 
 # Test: Calling a command as a function with arguments

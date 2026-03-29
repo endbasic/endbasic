@@ -121,7 +121,7 @@ END FUNCTION
 ## Compiler errors (partial)
 
 ```plain
-2:9: Undefined global symbol a
+2:9: Undefined symbol a
 ```
 
 ## Source (partial)
@@ -309,7 +309,7 @@ c = b + 3
 ## Compiler errors (partial)
 
 ```plain
-1:5: Undefined global symbol b
+1:5: Undefined symbol b
 ```
 
 ## Source (partial)
@@ -321,7 +321,7 @@ OUT a, c
 ## Compiler errors (partial)
 
 ```plain
-1:8: Undefined global symbol c
+1:8: Undefined symbol c
 ```
 
 ## Source (partial)
@@ -381,7 +381,7 @@ END FUNCTION
 ## Compiler errors (partial)
 
 ```plain
-2:14: Undefined global symbol missing
+2:14: Undefined symbol missing
 ```
 
 ## Source (partial)
@@ -393,7 +393,7 @@ OUT stable, broken
 ## Compiler errors (partial)
 
 ```plain
-1:13: Undefined global symbol broken
+1:13: Undefined symbol broken
 ```
 
 ## Source (partial)

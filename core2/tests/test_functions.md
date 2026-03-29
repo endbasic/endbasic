@@ -358,7 +358,7 @@ OUT local_var
 ## Compilation errors
 
 ```plain
-6:5: Undefined global symbol local_var
+6:5: Undefined symbol local_var
 ```
 
 # Test: Argument passing

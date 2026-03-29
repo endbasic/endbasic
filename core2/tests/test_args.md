@@ -508,7 +508,7 @@ OUT i
 ## Compilation errors
 
 ```plain
-1:24: Undefined global symbol i
+1:24: Undefined symbol i
 ```
 
 # Test: Singular required reference, define output variable with default type

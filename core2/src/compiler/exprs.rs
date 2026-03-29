@@ -17,7 +17,7 @@
 //! Functions to convert expressions into bytecode.
 
 use crate::ast::{Expr, ExprType};
-use crate::bytecode::{self, Register, RegisterScope};
+use crate::bytecode::{self, Register};
 use crate::compiler::args::compile_args;
 use crate::compiler::codegen::{Codegen, Fixup};
 use crate::compiler::syms::{self, SymbolKey, SymbolPrototype, TempScope, TempSymtable};
@@ -647,11 +647,7 @@ pub(super) fn compile_expr(
                         codegen, symtable, reg, key_pos, arr_reg, &info, span.args,
                     ),
                     Err(syms::Error::UndefinedSymbol(..)) | Ok((_, SymbolPrototype::Scalar(_))) => {
-                        return Err(Error::UndefinedSymbol(
-                            span.vref_pos,
-                            span.vref,
-                            RegisterScope::Global,
-                        ));
+                        return Err(Error::UndefinedSymbol(span.vref_pos, span.vref));
                     }
                     Err(e) => return Err(Error::from_syms(e, key_pos)),
                 }
@@ -682,7 +678,7 @@ pub(super) fn compile_expr(
                 let key = SymbolKey::from(&span.vref.name);
 
                 let Some(md) = symtable.get_callable(&key) else {
-                    return Err(Error::UndefinedSymbol(span.pos, span.vref, RegisterScope::Global));
+                    return Err(Error::UndefinedSymbol(span.pos, span.vref));
                 };
 
                 let Some(etype) = md.return_type() else {
