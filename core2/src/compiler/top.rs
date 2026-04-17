@@ -1133,6 +1133,7 @@ pub fn only_metadata(
 }
 
 /// Descriptor for a single global variable to be pre-defined before compilation.
+#[derive(Clone)]
 pub struct GlobalDef {
     /// Name of the variable (case-insensitive, as in EndBASIC).
     pub name: String,
@@ -1142,6 +1143,7 @@ pub struct GlobalDef {
 }
 
 /// Kind of a pre-defined global variable.
+#[derive(Clone)]
 pub enum GlobalDefKind {
     /// A scalar (non-array) variable.
     Scalar {
