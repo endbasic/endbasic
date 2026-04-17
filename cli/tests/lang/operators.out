@@ -56,8 +56,8 @@ ERROR: 1:13: Cannot << BOOLEAN
 ERROR: 1:13: Cannot << BOOLEAN
 ERROR: 1:11: Cannot << DOUBLE
 ERROR: 1:13: Cannot << STRING
-ERROR: 1:9: expected INTEGER but found BOOLEAN
-ERROR: 1:9: expected INTEGER but found DOUBLE
+ERROR: 1:9: Expected INTEGER but found BOOLEAN
+ERROR: 1:9: Expected INTEGER but found DOUBLE
 ERROR: 1:9: Number of bits to << (-1) must be positive
 >>> Test bitwise shift right
  3
@@ -76,8 +76,8 @@ ERROR: 1:13: Cannot >> BOOLEAN
 ERROR: 1:13: Cannot >> BOOLEAN
 ERROR: 1:11: Cannot >> DOUBLE
 ERROR: 1:13: Cannot >> STRING
-ERROR: 1:9: expected INTEGER but found BOOLEAN
-ERROR: 1:9: expected INTEGER but found DOUBLE
+ERROR: 1:9: Expected INTEGER but found BOOLEAN
+ERROR: 1:9: Expected INTEGER but found DOUBLE
 ERROR: 1:9: Number of bits to >> (-1) must be positive
 >>> Test = types
 TRUE

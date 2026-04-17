@@ -766,13 +766,13 @@ mod tests {
             "1:1: LOGIN expected <username$> | <username$, password$>",
             r#"LOGIN ;"#,
         );
-        client_check_stmt_compilation_err("1:7: expected STRING but found INTEGER", r#"LOGIN 3"#);
+        client_check_stmt_compilation_err("1:7: Expected STRING but found INTEGER", r#"LOGIN 3"#);
         client_check_stmt_compilation_err(
-            "1:7: expected STRING but found INTEGER",
+            "1:7: Expected STRING but found INTEGER",
             r#"LOGIN 3, "a""#,
         );
         client_check_stmt_compilation_err(
-            "1:12: expected STRING but found INTEGER",
+            "1:12: Expected STRING but found INTEGER",
             r#"LOGIN "a", 3"#,
         );
     }
@@ -949,7 +949,7 @@ mod tests {
             "1:1: SHARE expected filename$[, acl1$, .., aclN$]",
             r#"SHARE"#,
         );
-        client_check_stmt_compilation_err("1:7: expected STRING but found INTEGER", r#"SHARE 1"#);
+        client_check_stmt_compilation_err("1:7: Expected STRING but found INTEGER", r#"SHARE 1"#);
         client_check_stmt_compilation_err(
             "1:1: SHARE expected filename$[, acl1$, .., aclN$]",
             r#"SHARE , "a""#,
@@ -967,7 +967,7 @@ mod tests {
             r#"SHARE "a", , "b""#,
         );
         client_check_stmt_compilation_err(
-            "1:12: expected STRING but found INTEGER",
+            "1:12: Expected STRING but found INTEGER",
             r#"SHARE "a", 3, "b""#,
         );
         client_check_stmt_err(

@@ -917,7 +917,7 @@ mod tests {
     #[test]
     fn test_gfx_sync_errors() {
         check_stmt_compilation_err("1:1: GFX_SYNC expected <> | <enabled?>", "GFX_SYNC 2, 3");
-        check_stmt_compilation_err("1:10: expected BOOLEAN but found INTEGER", "GFX_SYNC 2");
+        check_stmt_compilation_err("1:10: Expected BOOLEAN but found INTEGER", "GFX_SYNC 2");
     }
 
     #[test]
