@@ -86,7 +86,7 @@ pub enum Error {
     #[error("{0}: Cannot define already-defined symbol {1}")]
     RedefinitionError(LineCol, SymbolKey),
 
-    #[error("{0}: expected {2} but found {1}")]
+    #[error("{0}: Expected {2} but found {1}")]
     TypeMismatch(LineCol, ExprType, ExprType),
 
     #[error("{0}: Cannot {1} {2}")]

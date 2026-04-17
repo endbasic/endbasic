@@ -853,7 +853,7 @@ mod tests {
             "1:1: INPUT expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT ;",
         );
-        check_stmt_compilation_err("1:7: expected STRING but found INTEGER", "INPUT 3 ; a");
+        check_stmt_compilation_err("1:7: Expected STRING but found INTEGER", "INPUT 3 ; a");
         check_stmt_compilation_err(
             "1:13: INPUT expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT \"foo\" AS bar",

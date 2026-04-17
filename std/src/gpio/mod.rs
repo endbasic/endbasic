@@ -577,7 +577,7 @@ mod tests {
     fn test_gpio_setup_errors() {
         check_stmt_compilation_err("1:1: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP"#);
         check_stmt_compilation_err("1:1: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP 1"#);
-        check_stmt_compilation_err("1:15: expected STRING but found INTEGER", r#"GPIO_SETUP 1; 2"#);
+        check_stmt_compilation_err("1:15: Expected STRING but found INTEGER", r#"GPIO_SETUP 1; 2"#);
         check_stmt_compilation_err("1:1: GPIO_SETUP expected pin%, mode$", r#"GPIO_SETUP 1, 2, 3"#);
 
         check_pin_validation("1:12: ", "1:12: ", r#"GPIO_SETUP _PIN_, "IN""#);
@@ -644,7 +644,7 @@ mod tests {
         check_pin_validation("1:12: ", "1:12: ", r#"GPIO_WRITE _PIN_, TRUE"#);
 
         check_stmt_compilation_err(
-            "1:15: expected BOOLEAN but found INTEGER",
+            "1:15: Expected BOOLEAN but found INTEGER",
             r#"GPIO_WRITE 1, 5"#,
         );
     }

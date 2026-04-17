@@ -793,7 +793,7 @@ mod tests {
         Tester::default()
             .run(format!("{} 3", cmd))
             .expect_compilation_err(format!(
-                "1:{}: expected STRING but found INTEGER",
+                "1:{}: Expected STRING but found INTEGER",
                 cmd.len() + 2,
             ))
             .check();

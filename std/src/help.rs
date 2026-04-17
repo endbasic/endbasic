@@ -936,7 +936,7 @@ This is the first and only topic with just one line.
         t.run(r#"HELP "foo", 3"#)
             .expect_compilation_err("1:1: HELP expected <> | <topic$>")
             .check();
-        t.run(r#"HELP 3"#).expect_compilation_err("1:6: expected STRING but found INTEGER").check();
+        t.run(r#"HELP 3"#).expect_compilation_err("1:6: Expected STRING but found INTEGER").check();
 
         t.run(r#"HELP "lang%""#).expect_err("1:6: Unknown help topic lang%").check();
 
