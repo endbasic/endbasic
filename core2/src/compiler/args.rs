@@ -36,17 +36,17 @@ use std::rc::Rc;
 ///
 /// `syn` contains the details about the separator syntax that is accepted.
 ///
-/// `sep` and `sep_pos` are the details about the separator being compiled.
-///
 /// `is_last` indicates whether this is the last separator in the command call and is used
 /// only for diagnostics purposes.
+///
+/// `sep` and `sep_pos` are the details about the separator being compiled.
 #[allow(clippy::too_many_arguments)]
 fn validate_syn_argsep(
     md: &Rc<CallableMetadata>,
-    pos: LineCol,
     syn: &ArgSepSyntax,
     is_last: bool,
     sep: ArgSep,
+    sep_pos: LineCol,
 ) -> Result<()> {
     debug_assert!(
         (!is_last || sep == ArgSep::End) && (is_last || sep != ArgSep::End),
@@ -57,7 +57,7 @@ fn validate_syn_argsep(
         ArgSepSyntax::Exactly(exp_sep) => {
             debug_assert!(*exp_sep != ArgSep::End, "Use ArgSepSyntax::End");
             if sep != ArgSep::End && sep != *exp_sep {
-                return Err(Error::CallableSyntax(pos, md.as_ref().clone()));
+                return Err(Error::CallableSyntax(sep_pos, md.as_ref().clone()));
             }
             Ok(())
         }
@@ -76,7 +76,7 @@ fn validate_syn_argsep(
                 }
             }
             if !found {
-                return Err(Error::CallableSyntax(pos, md.as_ref().clone()));
+                return Err(Error::CallableSyntax(sep_pos, md.as_ref().clone()));
             }
             Ok(())
         }
@@ -216,7 +216,7 @@ pub(super) fn compile_args(
                         let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
                         arg_linecols.push(arg_pos);
                         compile_expr_as_type(codegen, symtable, temp_value, expr, details.vtype)?;
-                        validate_syn_argsep(&md, arg_pos, exp_sep, arg_iter.peek().is_none(), sep)?;
+                        validate_syn_argsep(&md, exp_sep, arg_iter.peek().is_none(), sep, sep_pos)?;
                     }
                 }
             }
@@ -245,7 +245,7 @@ pub(super) fn compile_args(
                         let temp = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
                         arg_linecols.push(arg_pos);
                         codegen.emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
-                        validate_syn_argsep(&md, arg_pos, exp_sep, arg_iter.peek().is_none(), sep)?;
+                        validate_syn_argsep(&md, exp_sep, arg_iter.peek().is_none(), sep, sep_pos)?;
                     }
                     Some(expr) => {
                         return Err(Error::CallableSyntax(expr.start_pos(), md.as_ref().clone()));
@@ -275,7 +275,7 @@ pub(super) fn compile_args(
                         bytecode::VarArgTag::Immediate(sep, details.vtype)
                     }
                 };
-                validate_syn_argsep(&md, arg_pos, exp_sep, arg_iter.peek().is_none(), sep)?;
+                validate_syn_argsep(&md, exp_sep, arg_iter.peek().is_none(), sep, sep_pos)?;
                 codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
             }
 
@@ -306,7 +306,7 @@ pub(super) fn compile_args(
                         bytecode::VarArgTag::Immediate(sep, etype)
                     }
                 };
-                validate_syn_argsep(&md, arg_pos, exp_sep, arg_iter.peek().is_none(), sep)?;
+                validate_syn_argsep(&md, exp_sep, arg_iter.peek().is_none(), sep, sep_pos)?;
                 codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
             }
         };
@@ -342,7 +342,7 @@ pub(super) fn compile_args(
             let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
             let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
             arg_linecols.push(arg_pos);
-            validate_syn_argsep(&md, arg_pos, &syn.sep, arg_iter.peek().is_none(), sep)?;
+            validate_syn_argsep(&md, &syn.sep, arg_iter.peek().is_none(), sep, sep_pos)?;
 
             let tag = match expr {
                 None => {
