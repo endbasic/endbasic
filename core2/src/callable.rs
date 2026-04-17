@@ -36,6 +36,10 @@ pub enum CallError {
     /// Generic error with a static message.
     #[error("{0}")]
     Other(&'static str),
+
+    /// Indicates a syntax error only detectable at runtime.
+    #[error("{1}")]
+    Syntax(LineCol, String),
 }
 
 /// Result type for callable execution.

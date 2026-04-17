@@ -16,7 +16,6 @@
 
 //! Virtual machine for EndBASIC execution.
 
-use crate::CallResult;
 use crate::ast::ExprType;
 use crate::bytecode::{ExitCode, Register};
 use crate::callable::{Callable, Scope};
@@ -24,6 +23,7 @@ use crate::compiler::SymbolKey;
 use crate::image::Image;
 use crate::mem::{ConstantDatum, DatumPtr, HeapDatum};
 use crate::reader::LineCol;
+use crate::{CallError, CallResult};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -71,7 +71,11 @@ impl<'a> UpcallHandler<'a> {
         match upcall.exec(vm.upcall_scope(image, first_reg, upcall_pc)).await {
             Ok(()) => Ok(()),
             Err(e) => {
-                vm.handle_exception(image, upcall_pc, e.to_string(), None);
+                let pos_override = match e {
+                    CallError::Syntax(pos, _) => Some(pos),
+                    _ => None,
+                };
+                vm.handle_exception(image, upcall_pc, e.to_string(), pos_override);
                 Ok(())
             }
         }
