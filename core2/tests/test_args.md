@@ -277,7 +277,21 @@ OUT_POSITIONAL 3 AS 5.6 AS "Foo"
 ## Compilation errors
 
 ```plain
-1:16: OUT_POSITIONAL expected [arg1] <,|;> arg2% AS arg3
+1:18: OUT_POSITIONAL expected [arg1] <,|;> arg2% AS arg3
+```
+
+# Test: Singular arguments of various kinds, second separator mismatched
+
+## Source
+
+```basic
+OUT_POSITIONAL 3, 5; "Foo"
+```
+
+## Compilation errors
+
+```plain
+1:20: OUT_POSITIONAL expected [arg1] <,|;> arg2% AS arg3
 ```
 
 # Test: Repeated arguments, none provided
@@ -733,7 +747,7 @@ DEFINE_AND_CHANGE_ARGS b AS d
 ## Compilation errors
 
 ```plain
-1:24: DEFINE_AND_CHANGE_ARGS expected arg1[ <,|;> .. <,|;> argN]
+1:26: DEFINE_AND_CHANGE_ARGS expected arg1[ <,|;> .. <,|;> argN]
 ```
 
 # Test: Repeated references with require_one, invalid later separator
@@ -747,7 +761,7 @@ DEFINE_AND_CHANGE_ARGS b, d AS i
 ## Compilation errors
 
 ```plain
-1:27: DEFINE_AND_CHANGE_ARGS expected arg1[ <,|;> .. <,|;> argN]
+1:29: DEFINE_AND_CHANGE_ARGS expected arg1[ <,|;> .. <,|;> argN]
 ```
 
 # Test: Repeated references with require_one, single argument
