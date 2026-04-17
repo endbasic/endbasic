@@ -22,6 +22,13 @@ use std::borrow::Cow;
 use std::rc::Rc;
 
 /// A function that raises an error based on a string argument.
+///
+/// The first argument is a keyword that determines the error type.  When the
+/// keyword is `"syntax"`, `"syntax0"`, or `"syntax1"`, the error is a
+/// `CallError::Syntax` with the position overridden to point at the string
+/// argument, the first argument, or the second argument respectively.  This
+/// lets integration tests verify that the VM correctly propagates the position
+/// override from `CallError::Syntax`.
 pub(super) struct RaisefFunction {
     metadata: Rc<CallableMetadata>,
 }
@@ -31,13 +38,37 @@ impl RaisefFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RAISEF")
                 .with_return_type(ExprType::Boolean)
-                .with_syntax(&[(
-                    &[SingularArgSyntax::RequiredValue(
-                        RequiredValueSyntax { name: Cow::Borrowed("arg"), vtype: ExprType::Text },
-                        ArgSepSyntax::End,
-                    )],
-                    None,
-                )])
+                .with_syntax(&[
+                    (
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("arg"),
+                                vtype: ExprType::Text,
+                            },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("arg"),
+                                    vtype: ExprType::Text,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("n"),
+                                    vtype: ExprType::Integer,
+                                },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                ])
                 .test_build(),
         })
     }
@@ -51,13 +82,15 @@ impl Callable for RaisefFunction {
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let arg = scope.get_string(1);
-        let message = match arg {
-            "argument" => "Bad argument",
-            "eval" => "Some eval error",
-            "internal" => "Some internal error",
-            "io" => "Some I/O error",
-            _ => "Invalid arguments",
-        };
-        Err(CallError::Other(message))
+        match arg {
+            "argument" => Err(CallError::Other("Bad argument")),
+            "eval" => Err(CallError::Other("Some eval error")),
+            "internal" => Err(CallError::Other("Some internal error")),
+            "io" => Err(CallError::Other("Some I/O error")),
+            "syntax" => Err(CallError::Syntax(scope.get_pos(0), "Some syntax error".to_owned())),
+            "syntax0" => Err(CallError::Syntax(scope.get_pos(0), "Some syntax error".to_owned())),
+            "syntax1" => Err(CallError::Syntax(scope.get_pos(1), "Some syntax error".to_owned())),
+            _ => Err(CallError::Other("Invalid arguments")),
+        }
     }
 }
