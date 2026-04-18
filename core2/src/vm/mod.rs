@@ -71,8 +71,7 @@ impl<'a> UpcallHandler<'a> {
         match upcall.exec(vm.upcall_scope(image, first_reg, upcall_pc)).await {
             Ok(()) => Ok(()),
             Err(e) => {
-                let pos_override = image.debug_info.instrs[upcall_pc].arg_linecols.first().copied();
-                vm.handle_exception(image, upcall_pc, e.to_string(), pos_override);
+                vm.handle_exception(image, upcall_pc, e.to_string(), None);
                 Ok(())
             }
         }
