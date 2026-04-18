@@ -29,21 +29,22 @@ use crate::reader::LineCol;
 use crate::{ArgSep, ArgSepSyntax, ExprType, RepeatedTypeSyntax, SingularArgSyntax};
 use std::rc::Rc;
 
-/// Compiles an argument separator with any necessary tagging.
-///
-/// `instrs` is the list of instructions into which insert the separator tag at `sep_tag_pc`
-/// when it is needed to disambiguate separators at runtime.
+/// Validates an argument separator against the expected syntax.
 ///
 /// `syn` contains the details about the separator syntax that is accepted.
+///
+/// `end_ok` indicates whether an `ArgSep::End` is acceptable.  This is true for repeated
+/// arguments, where `End` terminates the argument sequence, and false for singular arguments,
+/// where `End` should only be accepted by `ArgSepSyntax::End`.
 ///
 /// `is_last` indicates whether this is the last separator in the command call and is used
 /// only for diagnostics purposes.
 ///
-/// `sep` and `sep_pos` are the details about the separator being compiled.
-#[allow(clippy::too_many_arguments)]
+/// `sep` and `sep_pos` are the details about the separator being validated.
 fn validate_syn_argsep(
     md: &Rc<CallableMetadata>,
     syn: &ArgSepSyntax,
+    end_ok: bool,
     is_last: bool,
     sep: ArgSep,
     sep_pos: LineCol,
@@ -56,15 +57,19 @@ fn validate_syn_argsep(
     match syn {
         ArgSepSyntax::Exactly(exp_sep) => {
             debug_assert!(*exp_sep != ArgSep::End, "Use ArgSepSyntax::End");
-            if sep != ArgSep::End && sep != *exp_sep {
-                return Err(Error::CallableSyntax(sep_pos, md.as_ref().clone()));
+            if sep == *exp_sep || (sep == ArgSep::End && end_ok) {
+                Ok(())
+            } else {
+                Err(Error::CallableSyntax(sep_pos, md.as_ref().clone()))
             }
-            Ok(())
         }
 
         ArgSepSyntax::OneOf(exp_seps) => {
             if sep == ArgSep::End {
-                return Ok(());
+                if end_ok {
+                    return Ok(());
+                }
+                return Err(Error::CallableSyntax(sep_pos, md.as_ref().clone()));
             }
 
             let mut found = false;
@@ -216,7 +221,14 @@ pub(super) fn compile_args(
                         let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
                         arg_linecols.push(arg_pos);
                         compile_expr_as_type(codegen, symtable, temp_value, expr, details.vtype)?;
-                        validate_syn_argsep(&md, exp_sep, arg_iter.peek().is_none(), sep, sep_pos)?;
+                        validate_syn_argsep(
+                            &md,
+                            exp_sep,
+                            false,
+                            arg_iter.peek().is_none(),
+                            sep,
+                            sep_pos,
+                        )?;
                     }
                 }
             }
@@ -245,7 +257,14 @@ pub(super) fn compile_args(
                         let temp = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
                         arg_linecols.push(arg_pos);
                         codegen.emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
-                        validate_syn_argsep(&md, exp_sep, arg_iter.peek().is_none(), sep, sep_pos)?;
+                        validate_syn_argsep(
+                            &md,
+                            exp_sep,
+                            false,
+                            arg_iter.peek().is_none(),
+                            sep,
+                            sep_pos,
+                        )?;
                     }
                     Some(expr) => {
                         return Err(Error::CallableSyntax(expr.start_pos(), md.as_ref().clone()));
@@ -275,7 +294,7 @@ pub(super) fn compile_args(
                         bytecode::VarArgTag::Immediate(sep, details.vtype)
                     }
                 };
-                validate_syn_argsep(&md, exp_sep, arg_iter.peek().is_none(), sep, sep_pos)?;
+                validate_syn_argsep(&md, exp_sep, false, arg_iter.peek().is_none(), sep, sep_pos)?;
                 codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
             }
 
@@ -306,7 +325,7 @@ pub(super) fn compile_args(
                         bytecode::VarArgTag::Immediate(sep, etype)
                     }
                 };
-                validate_syn_argsep(&md, exp_sep, arg_iter.peek().is_none(), sep, sep_pos)?;
+                validate_syn_argsep(&md, exp_sep, false, arg_iter.peek().is_none(), sep, sep_pos)?;
                 codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
             }
         };
@@ -342,7 +361,7 @@ pub(super) fn compile_args(
             let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
             let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
             arg_linecols.push(arg_pos);
-            validate_syn_argsep(&md, &syn.sep, arg_iter.peek().is_none(), sep, sep_pos)?;
+            validate_syn_argsep(&md, &syn.sep, true, arg_iter.peek().is_none(), sep, sep_pos)?;
 
             let tag = match expr {
                 None => {
