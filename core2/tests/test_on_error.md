@@ -35,7 +35,7 @@ OUT 2
 
 ```plain
 0=1%
-0=3:12: Some internal error$
+0=3:5: Some internal error$
 ```
 
 # Test: ON ERROR GOTO label
@@ -76,7 +76,7 @@ OUT LAST_ERROR
 
 ```plain
 0=1%
-0=3:12: Some internal error$
+0=3:5: Some internal error$
 ```
 
 # Test: ON ERROR reset
@@ -120,7 +120,7 @@ OUT RAISEF("internal")
 ## Runtime errors
 
 ```plain
-7:12: Some internal error
+7:5: Some internal error
 ```
 
 ## Output
@@ -163,7 +163,7 @@ OUT LAST_ERROR
 
 ```plain
 0=1%
-0=3:12: Some internal error$
+0=3:5: Some internal error$
 ```
 
 # Test: ON ERROR RESUME NEXT command failure
@@ -196,7 +196,7 @@ OUT LAST_ERROR
 
 ```plain
 0=1%
-0=3:7: Some internal error$
+0=3:1: Some internal error$
 ```
 
 # Test: ON ERROR RESUME NEXT function failure in statement
@@ -230,7 +230,7 @@ OUT 1: OUT RAISEF("internal"): OUT LAST_ERROR
 
 ```plain
 0=1%
-0=2:19: Some internal error$
+0=2:12: Some internal error$
 ```
 
 # Test: ON ERROR RESUME NEXT command failure in statement
@@ -261,7 +261,7 @@ OUT 1: RAISE "internal": OUT LAST_ERROR
 
 ```plain
 0=1%
-0=2:14: Some internal error$
+0=2:8: Some internal error$
 ```
 
 # Test: ON ERROR RESUME NEXT argument error
@@ -290,7 +290,7 @@ ON ERROR RESUME NEXT: OUT RAISEF("argument"): OUT LAST_ERROR
 ## Output
 
 ```plain
-0=1:34: Bad argument$
+0=1:27: Bad argument$
 ```
 
 # Test: ON ERROR RESUME NEXT eval error
@@ -319,7 +319,7 @@ ON ERROR RESUME NEXT: OUT RAISEF("eval"): OUT LAST_ERROR
 ## Output
 
 ```plain
-0=1:34: Some eval error$
+0=1:27: Some eval error$
 ```
 
 # Test: ON ERROR RESUME NEXT internal error
@@ -348,7 +348,7 @@ ON ERROR RESUME NEXT: OUT RAISEF("internal"): OUT LAST_ERROR
 ## Output
 
 ```plain
-0=1:34: Some internal error$
+0=1:27: Some internal error$
 ```
 
 # Test: ON ERROR RESUME NEXT I/O error
@@ -377,7 +377,7 @@ ON ERROR RESUME NEXT: OUT RAISEF("io"): OUT LAST_ERROR
 ## Output
 
 ```plain
-0=1:34: Some I/O error$
+0=1:27: Some I/O error$
 ```
 
 # Test: ON ERROR GOTO unknown label
