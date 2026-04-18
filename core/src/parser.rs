@@ -794,15 +794,13 @@ impl<'a> Parser<'a> {
                 | Token::Then
                 | Token::To
                 | Token::Step => break,
-                Token::RightParen => {
-                    if !op_spans.iter().any(|eos| eos.op == ExprOp::LeftParen) {
-                        // We encountered an unbalanced parenthesis but we don't know if this is
-                        // because we were called from within an argument list (in which case the
-                        // caller consumed the opening parenthesis and is expecting to consume the
-                        // closing parenthesis) or because we really found an invalid expression.
-                        // Only the caller can know, so avoid consuming the token and exit.
-                        break;
-                    }
+                Token::RightParen if !op_spans.iter().any(|eos| eos.op == ExprOp::LeftParen) => {
+                    // We encountered an unbalanced parenthesis but we don't know if this is
+                    // because we were called from within an argument list (in which case the
+                    // caller consumed the opening parenthesis and is expecting to consume the
+                    // closing parenthesis) or because we really found an invalid expression.
+                    // Only the caller can know, so avoid consuming the token and exit.
+                    break;
                 }
                 _ => (),
             };
