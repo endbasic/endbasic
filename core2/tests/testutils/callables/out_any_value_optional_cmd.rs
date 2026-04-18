@@ -33,13 +33,16 @@ impl OutAnyValueOptionalCommand {
     pub(super) fn new(output: Rc<RefCell<String>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("OUT_ANY_VALUE_OPTIONAL")
-                .with_syntax(&[(
-                    &[SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg"), allow_missing: true },
-                        ArgSepSyntax::End,
-                    )],
-                    None,
-                )])
+                .with_syntax(&[
+                    (&[], None),
+                    (
+                        &[SingularArgSyntax::AnyValue(
+                            AnyValueSyntax { name: Cow::Borrowed("arg"), allow_missing: true },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                ])
                 .test_build(),
             output,
         })
