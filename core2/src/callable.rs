@@ -268,21 +268,8 @@ impl CallableSyntax {
 
     /// Computes the range of the expected number of parameters for this syntax.
     pub(crate) fn expected_nargs(&self) -> RangeInclusive<usize> {
-        let mut min = 0;
-        let mut max = 0;
-
-        for syn in self.singular.iter() {
-            let may_be_missing = match syn {
-                SingularArgSyntax::RequiredValue(..) => false,
-                SingularArgSyntax::RequiredRef(..) => false,
-                SingularArgSyntax::OptionalValue(..) => true,
-                SingularArgSyntax::AnyValue(details, ..) => details.allow_missing,
-            };
-            if !may_be_missing {
-                min += 1;
-            }
-            max += 1;
-        }
+        let mut min = self.singular.len();
+        let mut max = self.singular.len();
 
         if let Some(syn) = self.repeated.as_ref() {
             if syn.require_one {

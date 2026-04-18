@@ -82,9 +82,8 @@ OUT_OPTIONAL
 ## Disassembly
 
 ```asm
-0000:   LOADI       R64, 0              ; 1:1
-0001:   UPCALL      0, R64              ; 1:1, OUT_OPTIONAL
-0002:   EOF                             ; 0:0
+0000:   UPCALL      0, R64              ; 1:1, OUT_OPTIONAL
+0001:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -127,7 +126,7 @@ OUT_OPTIONAL "Foo", "Bar"
 ## Compilation errors
 
 ```plain
-1:1: OUT_OPTIONAL expected [arg$]
+1:1: OUT_OPTIONAL expected <> | <[arg$]>
 ```
 
 # Test: Singular argument of any type, not optional
@@ -185,15 +184,14 @@ OUT_ANY_VALUE_OPTIONAL "Text"
 ## Disassembly
 
 ```asm
-0000:   LOADI       R64, 0              ; 1:1
-0001:   UPCALL      0, R64              ; 1:1, OUT_ANY_VALUE_OPTIONAL
-0002:   LOADI       R65, 1              ; 2:24
-0003:   LOADI       R64, 256            ; 2:24
-0004:   UPCALL      0, R64              ; 2:1, OUT_ANY_VALUE_OPTIONAL
-0005:   LOADI       R65, 0              ; 3:24
-0006:   LOADI       R64, 259            ; 3:24
-0007:   UPCALL      0, R64              ; 3:1, OUT_ANY_VALUE_OPTIONAL
-0008:   EOF                             ; 0:0
+0000:   UPCALL      0, R64              ; 1:1, OUT_ANY_VALUE_OPTIONAL
+0001:   LOADI       R65, 1              ; 2:24
+0002:   LOADI       R64, 256            ; 2:24
+0003:   UPCALL      0, R64              ; 2:1, OUT_ANY_VALUE_OPTIONAL
+0004:   LOADI       R65, 0              ; 3:24
+0005:   LOADI       R64, 259            ; 3:24
+0006:   UPCALL      0, R64              ; 3:1, OUT_ANY_VALUE_OPTIONAL
+0007:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -215,7 +213,7 @@ OUT_ANY_VALUE_OPTIONAL "Text", 3
 ## Compilation errors
 
 ```plain
-1:1: OUT_ANY_VALUE_OPTIONAL expected [arg]
+1:1: OUT_ANY_VALUE_OPTIONAL expected <> | <[arg]>
 ```
 
 # Test: Singular arguments of various kinds, with type casting
@@ -804,7 +802,7 @@ OUT_POSITIONAL 3, 5
 ## Compilation errors
 
 ```plain
-1:20: OUT_POSITIONAL expected [arg1] <,|;> arg2% AS arg3
+1:1: OUT_POSITIONAL expected [arg1] <,|;> arg2% AS arg3
 ```
 
 # Test: OneOf separator rejects End on a singular argument
@@ -818,7 +816,7 @@ OUT_SEP_END 3
 ## Compilation errors
 
 ```plain
-1:14: OUT_SEP_END expected [first] <,|;> second
+1:1: OUT_SEP_END expected [first] <,|;> second
 ```
 
 # Test: OneOf separator accepts valid separator, then End
