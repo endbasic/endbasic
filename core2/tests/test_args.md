@@ -792,3 +792,83 @@ OUT b
 ```plain
 0=false?
 ```
+
+# Test: Exactly separator rejects End on a singular argument
+
+## Source
+
+```basic
+OUT_POSITIONAL 3, 5
+```
+
+## Compilation errors
+
+```plain
+1:20: OUT_POSITIONAL expected [arg1] <,|;> arg2% AS arg3
+```
+
+# Test: OneOf separator rejects End on a singular argument
+
+## Source
+
+```basic
+OUT_SEP_END 3
+```
+
+## Compilation errors
+
+```plain
+1:14: OUT_SEP_END expected [first] <,|;> second
+```
+
+# Test: OneOf separator accepts valid separator, then End
+
+## Source
+
+```basic
+OUT_SEP_END 3, 5
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R65, 3              ; 1:13
+0001:   LOADI       R64, 290            ; 1:13
+0002:   LOADI       R67, 5              ; 1:16
+0003:   LOADI       R66, 258            ; 1:16
+0004:   UPCALL      0, R64              ; 1:1, OUT_SEP_END
+0005:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+3% , 
+5%
+```
+
+# Test: OneOf separator accepts short separator on a singular argument
+
+## Source
+
+```basic
+OUT_SEP_END 3; 5
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R65, 3              ; 1:13
+0001:   LOADI       R64, 274            ; 1:13
+0002:   LOADI       R67, 5              ; 1:16
+0003:   LOADI       R66, 258            ; 1:16
+0004:   UPCALL      0, R64              ; 1:1, OUT_SEP_END
+0005:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+3% ; 
+5%
+```

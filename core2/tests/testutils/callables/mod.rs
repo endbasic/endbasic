@@ -63,6 +63,9 @@ use out_positional_cmd::OutPositionalCommand;
 mod out_required_value_cmd;
 use out_required_value_cmd::OutRequiredValueCommand;
 
+mod out_sep_end_cmd;
+use out_sep_end_cmd::OutSepEndCommand;
+
 mod raise_cmd;
 use raise_cmd::RaiseCommand;
 
@@ -120,7 +123,8 @@ pub(super) fn register_all(
         OutCommand::new(console.clone()) as Rc<dyn Callable>,
         OutOptionalCommand::new(console.clone()) as Rc<dyn Callable>,
         OutPositionalCommand::new(console.clone()) as Rc<dyn Callable>,
-        OutRequiredValueCommand::new(console) as Rc<dyn Callable>,
+        OutRequiredValueCommand::new(console.clone()) as Rc<dyn Callable>,
+        OutSepEndCommand::new(console) as Rc<dyn Callable>,
         RaiseCommand::new() as Rc<dyn Callable>,
         RaisefFunction::new() as Rc<dyn Callable>,
         SumDoublesFunction::new() as Rc<dyn Callable>,
