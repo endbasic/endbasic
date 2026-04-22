@@ -50,7 +50,7 @@ impl Callable for IsPositiveFunction {
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
-        let n = scope.get_integer(1);
+        let n = scope.get_integer(0);
         scope.return_boolean(n > 0);
         Ok(())
     }

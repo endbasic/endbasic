@@ -81,7 +81,7 @@ impl Callable for RaisefFunction {
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
-        let arg = scope.get_string(1);
+        let arg = scope.get_string(0);
         match arg {
             "argument" => Err(CallError::Other("Bad argument")),
             "eval" => Err(CallError::Other("Some eval error")),

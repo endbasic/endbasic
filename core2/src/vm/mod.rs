@@ -68,7 +68,8 @@ impl<'a> UpcallHandler<'a> {
             .take()
             .expect("This is only reachable when the VM has a pending upcall");
         let upcall = vm.upcalls[usize::from(index)].clone();
-        match upcall.exec(vm.upcall_scope(image, first_reg, upcall_pc)).await {
+        let is_function = upcall.metadata().return_type().is_some();
+        match upcall.exec(vm.upcall_scope(image, first_reg, is_function, upcall_pc)).await {
             Ok(()) => Ok(()),
             Err(e) => {
                 let pos_override = match e {
@@ -180,11 +181,14 @@ impl Vm {
     /// Constructs a `Scope` for an upcall with arguments starting at `reg`.
     ///
     /// `upcall_pc` is the address of the UPCALL instruction in the image, used to look up
-    /// per-argument source locations from `DebugInfo`.
+    /// per-argument source locations from `DebugInfo`.  `is_function` indicates whether the
+    /// upcall is a function (with a return value slot) so that `Scope::arg_offset` can be set
+    /// appropriately.
     fn upcall_scope<'a>(
         &'a mut self,
         image: &'a Image,
         reg: Register,
+        is_function: bool,
         upcall_pc: usize,
     ) -> Scope<'a> {
         let arg_linecols = image
@@ -195,6 +199,7 @@ impl Vm {
             .unwrap_or(&[]);
         self.context.upcall_scope(
             reg,
+            is_function,
             image.constants.as_slice(),
             &mut self.heap,
             arg_linecols,
