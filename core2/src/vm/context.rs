@@ -281,9 +281,15 @@ impl Context {
     }
 
     /// Constructs a `Scope` for an upcall with arguments starting at `reg`.
+    ///
+    /// When `is_function` is true, the first register slot is reserved for the return value and
+    /// `arg_offset` is set to 1 so that `get_*` method indices are zero-based on the first
+    /// argument.  When false, `arg_offset` is 0.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn upcall_scope<'a>(
         &'a mut self,
         reg: Register,
+        is_function: bool,
         constants: &'a [ConstantDatum],
         heap: &'a mut Vec<HeapDatum>,
         arg_linecols: &'a [LineCol],
@@ -299,6 +305,7 @@ impl Context {
             constants,
             heap,
             fp: self.fp + index,
+            arg_offset: if is_function { 1 } else { 0 },
             arg_linecols,
             last_error,
             data,

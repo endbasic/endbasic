@@ -54,7 +54,7 @@ impl Callable for ConcatFunction {
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut result = String::new();
-        let mut reg = 1;
+        let mut reg = 0;
         loop {
             let sep = match scope.get_type(reg) {
                 VarArgTag::Immediate(sep, etype) => {

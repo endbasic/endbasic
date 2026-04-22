@@ -769,11 +769,19 @@ pub struct Scope<'a> {
     /// Start of the current frame (where the arguments to the upcall start).
     pub(crate) fp: usize,
 
-    /// Source locations of the call arguments, one per register slot in the argument area.
+    /// Number of register slots to skip before the first argument.
     ///
-    /// Indexed in the same order as the argument registers: `arg_linecols[N]` is the source
-    /// position of the expression that was compiled into register slot `N`.  May be shorter
-    /// than the actual argument register count if debug information is unavailable.
+    /// For commands, this is 0 because the first register slot holds the first argument.  For
+    /// functions, this is 1 because the first register slot holds the return value and arguments
+    /// start at slot 1.  The `get_*` methods add this offset to their register accesses so that
+    /// both commands and functions can use index 0 to refer to the first argument.
+    pub(crate) arg_offset: usize,
+
+    /// Source locations of the call arguments, one per argument in encounter order.
+    ///
+    /// Indexed by logical argument number: `arg_linecols[0]` is the source position of the first
+    /// argument.  Does not include an entry for the function return value slot.  May be shorter
+    /// than the actual argument count if debug information is unavailable.
     pub(crate) arg_linecols: &'a [LineCol],
 
     /// Last error raised in the VM, if any.
@@ -789,50 +797,50 @@ impl<'a> Scope<'a> {
         self.data
     }
 
-    /// Returns the source position of the argument at `arg`, or `None` if unavailable.
+    /// Returns the source position of the argument at `arg`.
     ///
-    /// `arg` is the register-slot index of the argument, matching the `N` in `scope.get_*(N)`.
+    /// `arg` is the logical argument index, matching the `N` in `scope.get_*(N)`.
     pub fn get_pos(&self, arg: u8) -> LineCol {
         self.arg_linecols[usize::from(arg)]
     }
 
     /// Gets the type tag of the argument at `arg`.
     pub fn get_type(&self, arg: u8) -> VarArgTag {
-        VarArgTag::parse_u64(self.regs[self.fp + (arg as usize)]).unwrap()
+        VarArgTag::parse_u64(self.regs[self.fp + self.arg_offset + (arg as usize)]).unwrap()
     }
 
     /// Gets the boolean value of the argument at `arg`.
     pub fn get_boolean(&self, arg: u8) -> bool {
-        self.regs[self.fp + (arg as usize)] != 0
+        self.regs[self.fp + self.arg_offset + (arg as usize)] != 0
     }
 
     /// Gets the double value of the argument at `arg`.
     pub fn get_double(&self, arg: u8) -> f64 {
-        f64::from_bits(self.regs[self.fp + (arg as usize)])
+        f64::from_bits(self.regs[self.fp + self.arg_offset + (arg as usize)])
     }
 
     /// Gets the integer value of the argument at `arg`.
     pub fn get_integer(&self, arg: u8) -> i32 {
-        self.regs[self.fp + (arg as usize)] as i32
+        self.regs[self.fp + self.arg_offset + (arg as usize)] as i32
     }
 
     /// Gets an immutable register reference from the argument at `arg`.
     pub fn get_ref(&self, arg: u8) -> RegisterRef<'_, 'a> {
-        let tagged_ptr = self.regs[self.fp + (arg as usize)];
+        let tagged_ptr = self.regs[self.fp + self.arg_offset + (arg as usize)];
         let (index, vtype) = TaggedRegisterRef::from_u64(tagged_ptr).parse();
         RegisterRef { scope: self, index, vtype }
     }
 
     /// Gets a mutable register reference from the argument at `arg`.
     pub fn get_mut_ref(&mut self, arg: u8) -> RegisterRefMut<'_, 'a> {
-        let tagged_ptr = self.regs[self.fp + (arg as usize)];
+        let tagged_ptr = self.regs[self.fp + self.arg_offset + (arg as usize)];
         let (index, vtype) = TaggedRegisterRef::from_u64(tagged_ptr).parse();
         RegisterRefMut { scope: self, index, vtype }
     }
 
     /// Gets the string value of the argument at `arg`.
     pub fn get_string(&self, arg: u8) -> &str {
-        let index = self.regs[self.fp + (arg as usize)];
+        let index = self.regs[self.fp + self.arg_offset + (arg as usize)];
         let ptr = DatumPtr::from(index);
         ptr.resolve_string(self.constants, self.heap)
     }
