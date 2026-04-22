@@ -797,6 +797,11 @@ impl<'a> Scope<'a> {
         self.data
     }
 
+    /// Returns the total number of argument register slots.
+    pub fn nargs(&self) -> usize {
+        self.arg_linecols.len()
+    }
+
     /// Returns the source position of the argument at `arg`.
     ///
     /// `arg` is the logical argument index, matching the `N` in `scope.get_*(N)`.

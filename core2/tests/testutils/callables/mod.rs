@@ -42,6 +42,9 @@ use is_positive_fn::IsPositiveFunction;
 mod last_error_fn;
 use last_error_fn::LastErrorFunction;
 
+mod max_doubles_fn;
+use max_doubles_fn::MaxDoublesFunction;
+
 mod meaning_of_life_fn;
 use meaning_of_life_fn::MeaningOfLifeFunction;
 
@@ -66,6 +69,9 @@ use out_required_value_cmd::OutRequiredValueCommand;
 mod out_sep_end_cmd;
 use out_sep_end_cmd::OutSepEndCommand;
 
+mod out_typed_integers_cmd;
+use out_typed_integers_cmd::OutTypedIntegersCommand;
+
 mod raise_cmd;
 use raise_cmd::RaiseCommand;
 
@@ -77,6 +83,12 @@ use sum_doubles_fn::SumDoublesFunction;
 
 mod sum_integers_fn;
 use sum_integers_fn::SumIntegersFunction;
+
+mod sum_mixed_fn;
+use sum_mixed_fn::SumMixedFunction;
+
+mod sum_typed_integers_fn;
+use sum_typed_integers_fn::SumTypedIntegersFunction;
 
 /// Formats the given argument `i` in `scope` as a string depending on its `etype`.
 fn format_arg(scope: &Scope<'_>, i: u8, etype: ExprType) -> String {
@@ -117,6 +129,7 @@ pub(super) fn register_all(
         IncrementRequiredIntCommand::new() as Rc<dyn Callable>,
         IsPositiveFunction::new() as Rc<dyn Callable>,
         LastErrorFunction::new() as Rc<dyn Callable>,
+        MaxDoublesFunction::new() as Rc<dyn Callable>,
         MeaningOfLifeFunction::new() as Rc<dyn Callable>,
         OutAnyValueCommand::new(console.clone()) as Rc<dyn Callable>,
         OutAnyValueOptionalCommand::new(console.clone()) as Rc<dyn Callable>,
@@ -124,11 +137,14 @@ pub(super) fn register_all(
         OutOptionalCommand::new(console.clone()) as Rc<dyn Callable>,
         OutPositionalCommand::new(console.clone()) as Rc<dyn Callable>,
         OutRequiredValueCommand::new(console.clone()) as Rc<dyn Callable>,
-        OutSepEndCommand::new(console) as Rc<dyn Callable>,
+        OutSepEndCommand::new(console.clone()) as Rc<dyn Callable>,
+        OutTypedIntegersCommand::new(console) as Rc<dyn Callable>,
         RaiseCommand::new() as Rc<dyn Callable>,
         RaisefFunction::new() as Rc<dyn Callable>,
         SumDoublesFunction::new() as Rc<dyn Callable>,
         SumIntegersFunction::new() as Rc<dyn Callable>,
+        SumMixedFunction::new() as Rc<dyn Callable>,
+        SumTypedIntegersFunction::new() as Rc<dyn Callable>,
     ];
     for cmd in cmds {
         upcalls_by_name.insert(SymbolKey::from(cmd.metadata().name()), cmd);

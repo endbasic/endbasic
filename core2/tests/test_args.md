@@ -870,3 +870,228 @@ OUT_SEP_END 3; 5
 3% ; 
 5%
 ```
+
+# Test: TypedValue repeated doubles with exactly one argument
+
+## Source
+
+```basic
+OUT MAX_DOUBLES(3.5)
+```
+
+## Disassembly
+
+```asm
+0000:   LOADC       R67, 0              ; 1:17
+0001:   UPCALL      0, R66              ; 1:5, MAX_DOUBLES
+0002:   MOVE        R65, R66            ; 1:5
+0003:   LOADI       R64, 257            ; 1:5
+0004:   UPCALL      1, R64              ; 1:1, OUT
+0005:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=3.5#
+```
+
+# Test: TypedValue repeated doubles with multiple arguments
+
+## Source
+
+```basic
+OUT MAX_DOUBLES(3.5, 7.2, 1.8)
+```
+
+## Disassembly
+
+```asm
+0000:   LOADC       R67, 0              ; 1:17
+0001:   LOADC       R68, 1              ; 1:22
+0002:   LOADC       R69, 2              ; 1:27
+0003:   UPCALL      0, R66              ; 1:5, MAX_DOUBLES
+0004:   MOVE        R65, R66            ; 1:5
+0005:   LOADI       R64, 257            ; 1:5
+0006:   UPCALL      1, R64              ; 1:1, OUT
+0007:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=7.2#
+```
+
+# Test: TypedValue repeated doubles coerced from integer
+
+## Source
+
+```basic
+OUT MAX_DOUBLES(3, 5)
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R67, 3              ; 1:17
+0001:   ITOD        R67                 ; 1:17
+0002:   LOADI       R68, 5              ; 1:20
+0003:   ITOD        R68                 ; 1:20
+0004:   UPCALL      0, R66              ; 1:5, MAX_DOUBLES
+0005:   MOVE        R65, R66            ; 1:5
+0006:   LOADI       R64, 257            ; 1:5
+0007:   UPCALL      1, R64              ; 1:1, OUT
+0008:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=5#
+```
+
+# Test: TypedValue repeated integers with no arguments (require_one is false)
+
+## Source
+
+```basic
+OUT SUM_TYPED_INTS()
+```
+
+## Disassembly
+
+```asm
+0000:   UPCALL      0, R66              ; 1:5, SUM_TYPED_INTS
+0001:   MOVE        R65, R66            ; 1:5
+0002:   LOADI       R64, 258            ; 1:5
+0003:   UPCALL      1, R64              ; 1:1, OUT
+0004:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=0%
+```
+
+# Test: TypedValue repeated integers with one argument
+
+## Source
+
+```basic
+OUT SUM_TYPED_INTS(42)
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R67, 42             ; 1:20
+0001:   UPCALL      0, R66              ; 1:5, SUM_TYPED_INTS
+0002:   MOVE        R65, R66            ; 1:5
+0003:   LOADI       R64, 258            ; 1:5
+0004:   UPCALL      1, R64              ; 1:1, OUT
+0005:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=42%
+```
+
+# Test: TypedValue repeated integers with multiple arguments
+
+## Source
+
+```basic
+OUT SUM_TYPED_INTS(3, 2, 7)
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R67, 3              ; 1:20
+0001:   LOADI       R68, 2              ; 1:23
+0002:   LOADI       R69, 7              ; 1:26
+0003:   UPCALL      0, R66              ; 1:5, SUM_TYPED_INTS
+0004:   MOVE        R65, R66            ; 1:5
+0005:   LOADI       R64, 258            ; 1:5
+0006:   UPCALL      1, R64              ; 1:1, OUT
+0007:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=12%
+```
+
+# Test: Mixed singular and repeated TypedValue args
+
+## Source
+
+```basic
+OUT SUM_MIXED(1.5, 3, 2, 7)
+```
+
+## Disassembly
+
+```asm
+0000:   LOADC       R67, 0              ; 1:15
+0001:   LOADI       R68, 3              ; 1:20
+0002:   LOADI       R69, 2              ; 1:23
+0003:   LOADI       R70, 7              ; 1:26
+0004:   UPCALL      0, R66              ; 1:5, SUM_MIXED
+0005:   MOVE        R65, R66            ; 1:5
+0006:   LOADI       R64, 257            ; 1:5
+0007:   UPCALL      1, R64              ; 1:1, OUT
+0008:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=13.5#
+```
+
+# Test: TypedValue repeated integers command with short separators
+
+## Source
+
+```basic
+OUT_TYPED_INTS 3; 2; 7
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R65, 3              ; 1:16
+0001:   LOADI       R64, 274            ; 1:16
+0002:   LOADI       R67, 2              ; 1:19
+0003:   LOADI       R66, 274            ; 1:19
+0004:   LOADI       R69, 7              ; 1:22
+0005:   LOADI       R68, 258            ; 1:22
+0006:   UPCALL      0, R64              ; 1:1, OUT_TYPED_INTS
+0007:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+3% ; 2% ; 7%
+```
+
+# Test: TypedValue repeated integers command rejects non-integer values
+
+## Source
+
+```basic
+OUT_TYPED_INTS 3, "x"
+```
+
+## Compilation errors
+
+```plain
+1:19: STRING is not a number
+```
