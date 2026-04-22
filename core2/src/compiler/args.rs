@@ -174,8 +174,15 @@ pub(super) fn define_new_args(
 
 /// Compiles the arguments of a callable invocation.
 ///
-/// Returns the first register containing the compiled arguments. Arguments are laid out as
-/// pairs of type tag and value registers, allowing the callable to interpret them at runtime.
+/// Returns the first register containing the compiled arguments and the source positions for all
+/// allocated registers.  The register layout depends on the callable's syntax:
+///
+/// * Singular arguments and variable repeated arguments use `VarArgTag` tag registers followed by
+///   optional value registers.  See the `VarArgTag` documentation for details.
+///
+/// * Repeated arguments of type `TypedValue` with `Exactly` separators and `!allow_missing` use
+///   plain value registers without tags, since the type and separator are statically known.  The
+///   callable can use `Scope::nargs()` to determine the total number of register slots.
 ///
 /// The caller *must* invoke `define_new_args` beforehand when compiling arguments for commands.
 /// This separate function is necessary to pre-allocate local variables for any output arguments.
@@ -331,13 +338,20 @@ pub(super) fn compile_args(
         };
     }
 
-    // Variable (repeated) arguments are represented as 1 or 2 consecutive registers.
+    // Variable (repeated) arguments can be represented in two different layouts depending on
+    // the type syntax and separators.
     //
-    // The first register always contains a `VarArgTag`, which indicates the type of
-    // separator following the argument and, if an argument is present, its type.
-    // The second register is only present if there is an argument.
+    // When `use_plain_values` is true (TypedValue + Exactly separators + !allow_missing), each
+    // argument occupies a single register containing only the value.  The type and separator are
+    // known at compile time, so no tags are needed.  The callable uses `Scope::nargs()` to
+    // determine how many repeated values are present, starting from the offset after all
+    // singular arguments.
     //
-    // The caller must iterate over all tags until it finds `ArgSep::End`.
+    // When `use_plain_values` is false, each argument is represented as 1 or 2 consecutive
+    // registers.  The first register always contains a `VarArgTag`, which indicates the type of
+    // separator following the argument and, if an argument is present, its type.  The second
+    // register is only present if there is an argument.  The caller must iterate over all tags
+    // until it finds `ArgSep::End`.
     if let Some(syn) = syntax.repeated.as_ref() {
         let mut min_nargs = syntax.singular.len();
         if syn.require_one {
@@ -347,68 +361,100 @@ pub(super) fn compile_args(
             return Err(Error::CallableSyntax(key_pos, md.as_ref().clone()));
         }
 
-        if arg_iter.peek().is_none() {
-            let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, key_pos))?;
-            arg_linecols.push(key_pos);
-            let tag = bytecode::VarArgTag::Missing(ArgSep::End);
-            codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), key_pos);
-        }
+        let use_plain_values = matches!(syn.type_syn, RepeatedTypeSyntax::TypedValue(_))
+            && !syn.allow_missing
+            && matches!(syn.sep, ArgSepSyntax::Exactly(_));
 
-        while arg_iter.peek().is_some() {
-            let ArgSpan { expr, sep, sep_pos } =
-                arg_iter.next().expect("Args and their syntax must advance in unison");
+        if use_plain_values {
+            while let Some(ArgSpan { expr, sep, sep_pos }) = arg_iter.next() {
+                let vtype = match syn.type_syn {
+                    RepeatedTypeSyntax::TypedValue(vtype) => vtype,
+                    _ => unreachable!(),
+                };
+                let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
+                validate_syn_argsep(&md, &syn.sep, true, arg_iter.peek().is_none(), sep, sep_pos)?;
 
-            let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
-            let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
-            arg_linecols.push(arg_pos);
-            validate_syn_argsep(&md, &syn.sep, true, arg_iter.peek().is_none(), sep, sep_pos)?;
-
-            let tag = match expr {
-                None => {
-                    if !syn.allow_missing {
-                        return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
-                    }
-                    bytecode::VarArgTag::Missing(sep)
-                }
-
-                Some(expr) => match syn.type_syn {
-                    RepeatedTypeSyntax::AnyValue => {
-                        let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
-                        arg_linecols.push(arg_pos);
-                        let etype = compile_expr(codegen, symtable, temp_value, expr)?;
-                        bytecode::VarArgTag::Immediate(sep, etype)
-                    }
-
-                    RepeatedTypeSyntax::TypedValue(vtype) => {
+                match expr {
+                    None => unreachable!("allow_missing is false when using plain values"),
+                    Some(expr) => {
                         let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
                         arg_linecols.push(arg_pos);
                         compile_expr_as_type(codegen, symtable, temp_value, expr, vtype)?;
-                        bytecode::VarArgTag::Immediate(sep, vtype)
                     }
+                }
+            }
+        } else {
+            if arg_iter.peek().is_none() {
+                let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, key_pos))?;
+                arg_linecols.push(key_pos);
+                let tag = bytecode::VarArgTag::Missing(ArgSep::End);
+                codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), key_pos);
+            }
 
-                    RepeatedTypeSyntax::VariableRef => {
-                        let Expr::Symbol(span) = expr else {
+            while arg_iter.peek().is_some() {
+                let ArgSpan { expr, sep, sep_pos } =
+                    arg_iter.next().expect("Args and their syntax must advance in unison");
+
+                let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
+                let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                arg_linecols.push(arg_pos);
+                validate_syn_argsep(&md, &syn.sep, true, arg_iter.peek().is_none(), sep, sep_pos)?;
+
+                let tag = match expr {
+                    None => {
+                        if !syn.allow_missing {
                             return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
-                        };
-
-                        let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
-                            Ok((reg, SymbolPrototype::Scalar(vtype))) => (reg, vtype),
-                            Ok((_, SymbolPrototype::Array(_))) => {
-                                return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
-                            }
-                            Err(syms::Error::UndefinedSymbol(..)) => {
-                                unreachable!("Caller must use define_new_args first for commands");
-                            }
-                            Err(e) => return Err(Error::from_syms(e, span.pos)),
-                        };
-                        let temp = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
-                        arg_linecols.push(arg_pos);
-                        codegen.emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
-                        bytecode::VarArgTag::Pointer(sep)
+                        }
+                        bytecode::VarArgTag::Missing(sep)
                     }
-                },
-            };
-            codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
+
+                    Some(expr) => match syn.type_syn {
+                        RepeatedTypeSyntax::AnyValue => {
+                            let temp_value =
+                                scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                            arg_linecols.push(arg_pos);
+                            let etype = compile_expr(codegen, symtable, temp_value, expr)?;
+                            bytecode::VarArgTag::Immediate(sep, etype)
+                        }
+
+                        RepeatedTypeSyntax::TypedValue(vtype) => {
+                            let temp_value =
+                                scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                            arg_linecols.push(arg_pos);
+                            compile_expr_as_type(codegen, symtable, temp_value, expr, vtype)?;
+                            bytecode::VarArgTag::Immediate(sep, vtype)
+                        }
+
+                        RepeatedTypeSyntax::VariableRef => {
+                            let Expr::Symbol(span) = expr else {
+                                return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
+                            };
+
+                            let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
+                                Ok((reg, SymbolPrototype::Scalar(vtype))) => (reg, vtype),
+                                Ok((_, SymbolPrototype::Array(_))) => {
+                                    return Err(Error::CallableSyntax(
+                                        arg_pos,
+                                        md.as_ref().clone(),
+                                    ));
+                                }
+                                Err(syms::Error::UndefinedSymbol(..)) => {
+                                    unreachable!(
+                                        "Caller must use define_new_args first for commands"
+                                    );
+                                }
+                                Err(e) => return Err(Error::from_syms(e, span.pos)),
+                            };
+                            let temp = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                            arg_linecols.push(arg_pos);
+                            codegen
+                                .emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
+                            bytecode::VarArgTag::Pointer(sep)
+                        }
+                    },
+                };
+                codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
+            }
         }
     }
 
