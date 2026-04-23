@@ -647,6 +647,16 @@ fn deref_string<'a>(
     ptr.resolve_string(constants, heap)
 }
 
+/// Dereferences this register reference as an array and returns its dimensions.
+fn array_dimensions<'a>(regs: &'a [u64], index: usize, heap: &'a [HeapDatum]) -> &'a [usize] {
+    let ptr = DatumPtr::from(regs[index]);
+    let heap_idx = ptr.heap_index();
+    let HeapDatum::Array(a) = &heap[heap_idx] else {
+        panic!("Scalar variable does not point to an array on the heap");
+    };
+    &a.dimensions
+}
+
 /// An immutable reference to a variable (register) in the register file, carrying
 /// its type for runtime validation of dereference operations.
 pub struct RegisterRef<'a, 'vm> {
@@ -679,6 +689,11 @@ impl<'a, 'vm> RegisterRef<'a, 'vm> {
     /// Dereferences this register reference as a string.
     pub fn deref_string(&self) -> &str {
         deref_string(self.scope.regs, self.index, self.vtype, self.scope.constants, self.scope.heap)
+    }
+
+    /// Dereferences this register reference as an array and returns its dimensions.
+    pub fn array_dimensions(&self) -> &[usize] {
+        array_dimensions(self.scope.regs, self.index, self.scope.heap)
     }
 }
 
@@ -720,6 +735,11 @@ impl<'a, 'vm> RegisterRefMut<'a, 'vm> {
     /// Dereferences this register reference as a string.
     pub fn deref_string(&self) -> &str {
         deref_string(self.scope.regs, self.index, self.vtype, self.scope.constants, self.scope.heap)
+    }
+
+    /// Dereferences this register reference as an array and returns its dimensions.
+    pub fn array_dimensions(&self) -> &[usize] {
+        array_dimensions(self.scope.regs, self.index, self.scope.heap)
     }
 
     /// Sets a boolean via this register reference.

@@ -249,8 +249,13 @@ pub(super) fn compile_args(
                     None => return Err(Error::CallableSyntax(key_pos, md.as_ref().clone())),
                     Some(Expr::Symbol(span)) => {
                         let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
-                            Ok((reg, SymbolPrototype::Scalar(vtype))) => (reg, vtype),
-                            Ok((_, SymbolPrototype::Array(_))) => {
+                            Ok((reg, SymbolPrototype::Array(info))) if details.require_array => {
+                                (reg, info.subtype)
+                            }
+                            Ok((reg, SymbolPrototype::Scalar(vtype))) if !details.require_array => {
+                                (reg, vtype)
+                            }
+                            Ok((_, _)) => {
                                 return Err(Error::CallableSyntax(span.pos, md.as_ref().clone()));
                             }
                             Err(e @ syms::Error::UndefinedSymbol(..)) => {
