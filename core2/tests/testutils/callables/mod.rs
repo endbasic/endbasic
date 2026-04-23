@@ -21,6 +21,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+mod array_ndims_fn;
+use array_ndims_fn::ArrayNdimsFunction;
+
 mod concat_fn;
 use concat_fn::ConcatFunction;
 
@@ -122,6 +125,7 @@ pub(super) fn register_all(
     console: Rc<RefCell<String>>,
 ) {
     let cmds = [
+        ArrayNdimsFunction::new() as Rc<dyn Callable>,
         ConcatFunction::new() as Rc<dyn Callable>,
         DefineAndChangeArgsCommand::new() as Rc<dyn Callable>,
         DefineArgCommand::new() as Rc<dyn Callable>,

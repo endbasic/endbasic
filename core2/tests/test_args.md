@@ -508,6 +508,50 @@ OUT i
 0=9%
 ```
 
+# Test: Singular required array reference, array variable
+
+## Source
+
+```basic
+DIM SHARED a(2, 3) AS INTEGER
+OUT ARRAY_NDIMS(a)
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R64, 2              ; 1:14
+0001:   LOADI       R65, 3              ; 1:17
+0002:   ALLOCA      R0, [2]%, R64       ; 1:12
+0003:   LOADRP      R67, INTEGER, R0    ; 2:17
+0004:   UPCALL      0, R66              ; 2:5, ARRAY_NDIMS
+0005:   MOVE        R65, R66            ; 2:5
+0006:   LOADI       R64, 258            ; 2:5
+0007:   UPCALL      1, R64              ; 2:1, OUT
+0008:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=2%
+```
+
+# Test: Singular required array reference, scalar variable
+
+## Source
+
+```basic
+DIM SHARED i
+OUT ARRAY_NDIMS(i)
+```
+
+## Compilation errors
+
+```plain
+2:17: ARRAY_NDIMS expected array
+```
+
 # Test: Singular required reference, variable not defined
 
 ## Source
