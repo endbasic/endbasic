@@ -629,8 +629,13 @@ impl Context {
     /// Implements the `DoubleToInteger` opcode.
     pub(super) fn do_double_to_integer(&mut self, instr: u32) {
         let reg = bytecode::parse_double_to_integer(instr);
-        let dvalue = f64::from_bits(self.get_reg(reg));
-        self.set_reg(reg, dvalue.round() as u64);
+        let dvalue = f64::from_bits(self.get_reg(reg)).round();
+        if dvalue.is_finite() && dvalue >= (i32::MIN as f64) && dvalue <= (i32::MAX as f64) {
+            self.set_reg(reg, (dvalue as i32) as u64);
+        } else {
+            self.set_exception(format!("Cannot cast {} to integer due to overflow", dvalue));
+            return;
+        }
         self.pc += 1;
     }
 
