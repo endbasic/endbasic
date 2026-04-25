@@ -4,6 +4,7 @@ target
 
 *.orig
 *.rej
+*.swp
 *~
 
 # Created by setup-sdl.ps1.
