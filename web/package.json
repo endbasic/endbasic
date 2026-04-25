@@ -16,7 +16,8 @@
         "start:prod": "NODE_ENV=prod npm run _start:release",
         "start:staging": "NODE_ENV=staging npm run _start:release",
         "start:local": "NODE_ENV=local npm run _start:debug",
-        "test": "cargo test && wasm-pack test --headless --firefox",
+        "test:wasm": "GECKODRIVER=./node_modules/.bin/geckodriver CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --target wasm32-unknown-unknown",
+        "test": "cargo test && npm run test:wasm",
         "clean": "rimraf dist pkg"
     },
     "repository": {
@@ -40,6 +41,7 @@
     },
     "devDependencies": {
         "copy-webpack-plugin": "^14.0.0",
+        "geckodriver": "^6.1.0",
         "html-webpack-plugin": "^5.6.3",
         "rimraf": "^6.0.1",
         "webpack": "^5.96.1",
