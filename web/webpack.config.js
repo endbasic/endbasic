@@ -1,7 +1,6 @@
 const path = require("path");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const WasmPackPlugin = require("@wasm-tool/wasm-pack-plugin");
 const { DefinePlugin } = require("webpack");
 
 const distDir = path.resolve(__dirname, "dist");
@@ -66,11 +65,6 @@ module.exports = {
 
         new HtmlWebpackPlugin({
             template: 'src/index.html',
-        }),
-
-        new WasmPackPlugin({
-            crateDirectory: path.resolve(__dirname),
-            outDir: path.join(__dirname, "pkg"),
         }),
 
         new DefinePlugin({
