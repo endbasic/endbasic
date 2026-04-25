@@ -637,19 +637,20 @@ IF a = 5 THEN END
 0001:   LOADI       R64, 259            ; 1:5
 0002:   UPCALL      0, R64              ; 1:1, OUT
 0003:   LOADI       R64, 0              ; 2:5
-0004:   MOVE        R64, R64            ; 4:5
-0005:   LOADI       R65, 1              ; 4:9
-0006:   ADDI        R64, R64, R65       ; 4:7
-0007:   MOVE        R66, R64            ; 5:5
-0008:   LOADI       R65, 258            ; 5:5
-0009:   UPCALL      0, R65              ; 5:1, OUT
-0010:   MOVE        R65, R64            ; 6:4
-0011:   LOADI       R66, 5              ; 6:8
-0012:   CMPEQI      R65, R65, R66       ; 6:6
-0013:   JMPF        R65, 16             ; 6:4
-0014:   LOADI       R65, 0              ; 6:15
-0015:   END         R65                 ; 6:15
-0016:   EOF                             ; 0:0
+0004:   MOVE        R65, R64            ; 4:5
+0005:   LOADI       R66, 1              ; 4:9
+0006:   ADDI        R65, R65, R66       ; 4:7
+0007:   MOVE        R64, R65            ; 4:1
+0008:   MOVE        R66, R64            ; 5:5
+0009:   LOADI       R65, 258            ; 5:5
+0010:   UPCALL      0, R65              ; 5:1, OUT
+0011:   MOVE        R65, R64            ; 6:4
+0012:   LOADI       R66, 5              ; 6:8
+0013:   CMPEQI      R65, R65, R66       ; 6:6
+0014:   JMPF        R65, 17             ; 6:4
+0015:   LOADI       R65, 0              ; 6:15
+0016:   END         R65                 ; 6:15
+0017:   EOF                             ; 0:0
 ```
 
 ## Output (partial)
@@ -673,23 +674,24 @@ OUT "done"
 0001:   LOADI       R64, 259            ; 1:5
 0002:   UPCALL      0, R64              ; 1:1, OUT
 0003:   LOADI       R64, 0              ; 2:5
-0004:   MOVE        R64, R64            ; 4:5
-0005:   LOADI       R65, 1              ; 4:9
-0006:   ADDI        R64, R64, R65       ; 4:7
-0007:   MOVE        R66, R64            ; 5:5
-0008:   LOADI       R65, 258            ; 5:5
-0009:   UPCALL      0, R65              ; 5:1, OUT
-0010:   MOVE        R65, R64            ; 6:4
-0011:   LOADI       R66, 5              ; 6:8
-0012:   CMPEQI      R65, R65, R66       ; 6:6
-0013:   JMPF        R65, 16             ; 6:4
-0014:   LOADI       R65, 0              ; 6:15
-0015:   END         R65                 ; 6:15
-0016:   JUMP        4                   ; 1:6
-0017:   LOADI       R66, 1              ; 2:5
-0018:   LOADI       R65, 259            ; 2:5
-0019:   UPCALL      0, R65              ; 2:1, OUT
-0020:   EOF                             ; 0:0
+0004:   MOVE        R65, R64            ; 4:5
+0005:   LOADI       R66, 1              ; 4:9
+0006:   ADDI        R65, R65, R66       ; 4:7
+0007:   MOVE        R64, R65            ; 4:1
+0008:   MOVE        R66, R64            ; 5:5
+0009:   LOADI       R65, 258            ; 5:5
+0010:   UPCALL      0, R65              ; 5:1, OUT
+0011:   MOVE        R65, R64            ; 6:4
+0012:   LOADI       R66, 5              ; 6:8
+0013:   CMPEQI      R65, R65, R66       ; 6:6
+0014:   JMPF        R65, 17             ; 6:4
+0015:   LOADI       R65, 0              ; 6:15
+0016:   END         R65                 ; 6:15
+0017:   JUMP        4                   ; 1:6
+0018:   LOADI       R66, 1              ; 2:5
+0019:   LOADI       R65, 259            ; 2:5
+0020:   UPCALL      0, R65              ; 2:1, OUT
+0021:   EOF                             ; 0:0
 ```
 
 ## Output (partial)

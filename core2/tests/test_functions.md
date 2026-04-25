@@ -864,17 +864,18 @@ NEXT
 0011:   MOVE        R65, R64            ; 7:5
 0012:   LOADI       R66, 5              ; 7:14
 0013:   CMPLEI      R65, R65, R66       ; 7:11
-0014:   JMPF        R65, 24             ; 7:5
+0014:   JMPF        R65, 25             ; 7:5
 0015:   MOVE        R68, R64            ; 8:20
 0016:   CALL        R67, 1              ; 8:9, MAYBE_EXIT
 0017:   MOVE        R66, R67            ; 8:9
 0018:   LOADI       R65, 258            ; 8:9
 0019:   UPCALL      0, R65              ; 8:5, OUT
-0020:   MOVE        R64, R64            ; 7:5
-0021:   LOADI       R65, 1              ; 7:15
-0022:   ADDI        R64, R64, R65       ; 7:11
-0023:   JUMP        11                  ; 7:5
-0024:   EOF                             ; 0:0
+0020:   MOVE        R65, R64            ; 7:5
+0021:   LOADI       R66, 1              ; 7:15
+0022:   ADDI        R65, R65, R66       ; 7:11
+0023:   MOVE        R64, R65            ; 7:5
+0024:   JUMP        11                  ; 7:5
+0025:   EOF                             ; 0:0
 ```
 
 ## Output
@@ -937,7 +938,7 @@ OUT calls; factorial(5)
 
 ```asm
 0000:   LOADI       R0, 0               ; 1:12
-0001:   JUMP        22                  ; 2:10
+0001:   JUMP        23                  ; 2:10
 
 ;; FACTORIAL (BEGIN)
 0002:   LOADI       R64, 0              ; 2:10
@@ -956,20 +957,21 @@ OUT calls; factorial(5)
 0015:   CALL        R67, 2              ; 3:54, FACTORIAL
 0016:   MOVE        R66, R67            ; 3:54
 0017:   MULI        R64, R64, R66       ; 3:52
-0018:   MOVE        R0, R0              ; 4:13
-0019:   LOADI       R66, 1              ; 4:21
-0020:   ADDI        R0, R0, R66         ; 4:19
-0021:   RETURN                          ; 5:1
+0018:   MOVE        R66, R0             ; 4:13
+0019:   LOADI       R67, 1              ; 4:21
+0020:   ADDI        R66, R66, R67       ; 4:19
+0021:   MOVE        R0, R66             ; 4:5
+0022:   RETURN                          ; 5:1
 ;; FACTORIAL (END)
 
-0022:   MOVE        R65, R0             ; 6:5
-0023:   LOADI       R64, 274            ; 6:5
-0024:   LOADI       R69, 5              ; 6:22
-0025:   CALL        R68, 2              ; 6:12, FACTORIAL
-0026:   MOVE        R67, R68            ; 6:12
-0027:   LOADI       R66, 258            ; 6:12
-0028:   UPCALL      0, R64              ; 6:1, OUT
-0029:   EOF                             ; 0:0
+0023:   MOVE        R65, R0             ; 6:5
+0024:   LOADI       R64, 274            ; 6:5
+0025:   LOADI       R69, 5              ; 6:22
+0026:   CALL        R68, 2              ; 6:12, FACTORIAL
+0027:   MOVE        R67, R68            ; 6:12
+0028:   LOADI       R66, 258            ; 6:12
+0029:   UPCALL      0, R64              ; 6:1, OUT
+0030:   EOF                             ; 0:0
 ```
 
 ## Output

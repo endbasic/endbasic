@@ -107,6 +107,103 @@ a$ = "foo"
 2:1: Incompatible type annotation in a$ reference
 ```
 
+# Test: Assignment can prepend from itself via binary operator
+
+## Source
+
+```basic
+s = "hello"
+s = "." + s
+OUT s
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R64, 0              ; 1:5
+0001:   LOADI       R65, 1              ; 2:5
+0002:   MOVE        R66, R64            ; 2:11
+0003:   CONCAT      R65, R65, R66       ; 2:9
+0004:   MOVE        R64, R65            ; 2:1
+0005:   MOVE        R66, R64            ; 3:5
+0006:   LOADI       R65, 259            ; 3:5
+0007:   UPCALL      0, R65              ; 3:1, OUT
+0008:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=.hello$
+```
+
+# Test: Assignment can modify itself via unary operator
+
+## Source
+
+```basic
+i = 5
+i = -i
+OUT i
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R64, 5              ; 1:5
+0001:   MOVE        R65, R64            ; 2:6
+0002:   NEGI        R65                 ; 2:5
+0003:   MOVE        R64, R65            ; 2:1
+0004:   MOVE        R66, R64            ; 3:5
+0005:   LOADI       R65, 258            ; 3:5
+0006:   UPCALL      0, R65              ; 3:1, OUT
+0007:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=-5%
+```
+
+# Test: Array assignment can modify itself
+
+## Source
+
+```basic
+DIM s(3) AS STRING
+s(1) = "foo"
+s(1) = "." + s(1)
+OUT s(1)
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R65, 3              ; 1:7
+0001:   ALLOCA      R64, [1]$, R65      ; 1:5
+0002:   LOADI       R65, 0              ; 2:8
+0003:   LOADI       R66, 1              ; 2:3
+0004:   STOREA      R64, R65, R66       ; 2:1
+0005:   LOADI       R65, 1              ; 3:8
+0006:   LOADI       R67, 1              ; 3:16
+0007:   LOADA       R66, R64, R67       ; 3:14
+0008:   CONCAT      R65, R65, R66       ; 3:12
+0009:   LOADI       R66, 1              ; 3:3
+0010:   STOREA      R64, R65, R66       ; 3:1
+0011:   LOADI       R67, 1              ; 4:7
+0012:   LOADA       R66, R64, R67       ; 4:5
+0013:   LOADI       R65, 259            ; 4:5
+0014:   UPCALL      0, R65              ; 4:1, OUT
+0015:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=.foo$
+```
+
 # Test: Value type does not match annotation on first assignment
 
 ## Source
