@@ -259,6 +259,7 @@ impl Codegen {
         &mut self,
         image: &Image,
         global_vars: HashMap<SymbolKey, GlobalVarInfo>,
+        program_vars: HashMap<SymbolKey, GlobalVarInfo>,
         data: &[Option<ConstantDatum>],
     ) -> Result<ImageDelta> {
         self.apply_fixups()?;
@@ -303,6 +304,7 @@ impl Codegen {
             instrs: self.instrs[instrs_start..].to_vec(),
             callables,
             global_vars,
+            program_vars,
         })
     }
 
@@ -311,10 +313,11 @@ impl Codegen {
     pub(super) fn build_image(
         &mut self,
         global_vars: HashMap<SymbolKey, GlobalVarInfo>,
+        program_vars: HashMap<SymbolKey, GlobalVarInfo>,
         data: Vec<Option<ConstantDatum>>,
     ) -> Result<Image> {
         let mut image = Image::default();
-        let delta = self.build_image_delta(&image, global_vars, &data)?;
+        let delta = self.build_image_delta(&image, global_vars, program_vars, &data)?;
         image.append(delta);
         Ok(image)
     }

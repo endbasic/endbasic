@@ -519,7 +519,7 @@ mod tests {
         codegen.set_arg_linecols(addr, arg_linecols);
         codegen.emit(bytecode::make_eof(), LineCol { line: 0, col: 0 });
 
-        let image = codegen.build_image(HashMap::default(), vec![])?;
+        let image = codegen.build_image(HashMap::default(), HashMap::default(), vec![])?;
         assert_eq!(
             vec![
                 "0000:   LOADI       R64, 0              ; 1:1".to_owned(),

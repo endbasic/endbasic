@@ -394,6 +394,13 @@ impl<'a> LocalSymtable<'a> {
         self.symtable.iter_globals().map(|(k, v, i)| (k.clone(), v, i))
     }
 
+    /// Iterates over all local variables, yielding `(key, prototype, register_index)` tuples.
+    pub(crate) fn iter_locals(
+        &self,
+    ) -> impl Iterator<Item = (SymbolKey, SymbolPrototype, u8)> + '_ {
+        self.locals.iter().map(|(k, v, i)| (k.clone(), *v, i))
+    }
+
     /// Changes the type of an existing local variable `vref` to `new_etype`.
     ///
     /// This is used for type inference on first assignment.
