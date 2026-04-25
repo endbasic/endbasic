@@ -4,8 +4,10 @@
     "description": "The EndBASIC programming language - web interface",
     "private": true,
     "scripts": {
-        "_build:release": "webpack --mode=production",
-        "_build:debug": "webpack --mode=development",
+        "_wasm:build:release": "cargo build --target wasm32-unknown-unknown --release && wasm-bindgen --target bundler --out-dir pkg --out-name index ../target/wasm32-unknown-unknown/release/endbasic_web.wasm",
+        "_wasm:build:debug": "cargo build --target wasm32-unknown-unknown && wasm-bindgen --target bundler --out-dir pkg --out-name index ../target/wasm32-unknown-unknown/debug/endbasic_web.wasm",
+        "_build:release": "npm run _wasm:build:release && webpack --mode=production",
+        "_build:debug": "npm run _wasm:build:debug && webpack --mode=development",
         "build:prod": "NODE_ENV=prod npm run _build:release",
         "build:staging": "NODE_ENV=staging npm run _build:release",
         "build:local": "NODE_ENV=local npm run _build:debug",
@@ -37,7 +39,6 @@
         "jquery": "3.7.1"
     },
     "devDependencies": {
-        "@wasm-tool/wasm-pack-plugin": "^1.7.0",
         "copy-webpack-plugin": "^14.0.0",
         "html-webpack-plugin": "^5.6.3",
         "rimraf": "^6.0.1",

@@ -28,6 +28,9 @@ nvm install --lts
 set -ux
 
 curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+rustup target add wasm32-unknown-unknown
+wasm_bindgen_version="$(grep '^wasm-bindgen = ' web/Cargo.toml | cut -d '"' -f 2)"
+cargo binstall --no-confirm "wasm-bindgen-cli@${wasm_bindgen_version}"
 
 export NVM_DIR="${HOME}/.nvm"
 [ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
