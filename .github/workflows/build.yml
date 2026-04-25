@@ -25,11 +25,11 @@ jobs:
               with:
                   toolchain: stable
                   target: armv7-unknown-linux-gnueabihf
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
             - run: sudo apt update
             - run: sudo apt install gcc-arm-linux-gnueabihf
             - run: ./.github/workflows/release.sh linux-armv7-rpi
-            - uses: actions/upload-artifact@v4
+            - uses: actions/upload-artifact@v7
               with:
                 name: endbasic-linux-armv7-rpi
                 path: endbasic-linux-armv7-rpi/*
@@ -38,11 +38,11 @@ jobs:
     linux-x86_64-sdl:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: ./.github/workflows/release.sh linux-x86_64-sdl
-            - uses: actions/upload-artifact@v4
+            - uses: actions/upload-artifact@v7
               with:
                 name: endbasic-linux-x86_64-sdl
                 path: endbasic-linux-x86_64-sdl/*
@@ -51,9 +51,9 @@ jobs:
     macos-arm64-sdl:
         runs-on: macos-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
             - run: ./.github/workflows/release.sh macos-arm64-sdl
-            - uses: actions/upload-artifact@v4
+            - uses: actions/upload-artifact@v7
               with:
                 name: endbasic-macos-arm64-sdl
                 path: endbasic-macos-arm64-sdl/*
@@ -62,12 +62,12 @@ jobs:
     windows-x86_64-sdl:
         runs-on: windows-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
             - run: choco install --allow-empty-checksums unzip zip
             - run: ./.github/workflows/setup-sdl.ps1
             - run: ./.github/workflows/release.sh windows-x86_64-sdl
               shell: bash
-            - uses: actions/upload-artifact@v4
+            - uses: actions/upload-artifact@v7
               with:
                 name: endbasic-windows-x86_64-sdl
                 path: endbasic-windows-x86_64-sdl/*
@@ -78,10 +78,10 @@ jobs:
         needs: [linux-armv7-rpi, linux-x86_64-sdl, macos-arm64-sdl, windows-x86_64-sdl]
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
             - run: ./.github/workflows/notes.sh >notes.md || touch notes.md
             - name: Fetch binary artifacts
-              uses: actions/download-artifact@v4
+              uses: actions/download-artifact@v8
               with:
                 path: artifacts
             - name: Create release draft
