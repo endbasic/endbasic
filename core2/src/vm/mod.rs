@@ -397,6 +397,14 @@ impl Vm {
             }
         }
     }
+
+    /// Stops execution of `image` so that the next call to `exec` starts at EOF.
+    ///
+    /// This is useful when external events interrupt execution and the caller wants
+    /// to avoid resuming a partially-run image by mistake.
+    pub fn interrupt(&mut self, image: &Image) {
+        self.park_at_eof(image);
+    }
 }
 
 #[cfg(test)]
@@ -635,6 +643,30 @@ mod tests {
             StopReason::Eof => (),
             _ => panic!("Execution should stop at EOF after appended code"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_interrupt_parks_execution_at_eof() {
+        let data = Rc::from(RefCell::from(vec![]));
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("OUT"), OutCommand::new(data.clone()));
+
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"OUT 1: OUT 2".as_slice()).unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+
+        match vm.exec(&image) {
+            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+            _ => panic!("Execution should stop at first upcall"),
+        }
+        assert_eq!(["1"], *data.borrow().as_slice());
+
+        vm.interrupt(&image);
+        match vm.exec(&image) {
+            StopReason::Eof => (),
+            _ => panic!("Execution should be parked at EOF after interruption"),
+        }
+        assert_eq!(["1"], *data.borrow().as_slice());
     }
 
     #[tokio::test]
