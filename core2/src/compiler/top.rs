@@ -105,48 +105,110 @@ fn static_end_code(expr: &Expr) -> Option<(i32, LineCol)> {
     }
 }
 
+/// Returns true if `expr` references `target_key`.
+fn expr_references_symbol(expr: &Expr, target_key: &SymbolKey) -> bool {
+    let mut stack = vec![expr];
+    while let Some(expr) = stack.pop() {
+        match expr {
+            Expr::Boolean(..) | Expr::Double(..) | Expr::Integer(..) | Expr::Text(..) => {}
+
+            Expr::Symbol(span) => {
+                if SymbolKey::from(&span.vref.name) == *target_key {
+                    return true;
+                }
+            }
+
+            Expr::Negate(span) | Expr::Not(span) => {
+                stack.push(&span.expr);
+            }
+
+            Expr::Call(span) => {
+                for arg in &span.args {
+                    if let Some(arg_expr) = &arg.expr {
+                        stack.push(arg_expr);
+                    }
+                }
+            }
+
+            Expr::Add(span)
+            | Expr::And(span)
+            | Expr::Divide(span)
+            | Expr::Equal(span)
+            | Expr::Greater(span)
+            | Expr::GreaterEqual(span)
+            | Expr::Less(span)
+            | Expr::LessEqual(span)
+            | Expr::Modulo(span)
+            | Expr::Multiply(span)
+            | Expr::NotEqual(span)
+            | Expr::Or(span)
+            | Expr::Power(span)
+            | Expr::ShiftLeft(span)
+            | Expr::ShiftRight(span)
+            | Expr::Subtract(span)
+            | Expr::Xor(span) => {
+                stack.push(&span.lhs);
+                stack.push(&span.rhs);
+            }
+        }
+    }
+    false
+}
+
 /// Compiles an assignment statement `span` into the `codegen` block.
 fn compile_assignment(
     codegen: &mut Codegen,
     symtable: &mut LocalSymtable<'_>,
     span: AssignmentSpan,
 ) -> Result<()> {
-    let vref_pos = span.vref_pos;
+    let AssignmentSpan { vref, vref_pos, expr } = span;
+    let key = SymbolKey::from(&vref.name);
 
-    let (reg, etype) = match symtable.get_local_or_global(&span.vref) {
+    let (reg, etype, was_defined) = match symtable.get_local_or_global(&vref) {
         Ok((_, SymbolPrototype::Array(_))) => {
-            return Err(Error::ArrayUsedAsScalar(vref_pos, span.vref));
+            return Err(Error::ArrayUsedAsScalar(vref_pos, vref));
         }
 
-        Ok((reg, SymbolPrototype::Scalar(etype))) => (reg, Some(etype)),
+        Ok((reg, SymbolPrototype::Scalar(etype))) => (reg, Some(etype), true),
 
         Err(syms::Error::UndefinedSymbol(..)) => {
-            let key = SymbolKey::from(span.vref.name.clone());
             if symtable.get_callable(&key).is_some() {
-                return Err(Error::from_syms(
-                    syms::Error::AlreadyDefined(span.vref.clone()),
-                    span.vref_pos,
-                ));
+                return Err(Error::from_syms(syms::Error::AlreadyDefined(vref.clone()), vref_pos));
             }
             let reg = symtable
                 .put_local(
-                    key,
-                    SymbolPrototype::Scalar(span.vref.ref_type.unwrap_or(ExprType::Integer)),
+                    key.clone(),
+                    SymbolPrototype::Scalar(vref.ref_type.unwrap_or(ExprType::Integer)),
                 )
-                .map_err(|e| Error::from_syms(e, span.vref_pos))?;
-            match span.vref.ref_type {
-                Some(etype) => (reg, Some(etype)),
-                None => (reg, None),
+                .map_err(|e| Error::from_syms(e, vref_pos))?;
+            match vref.ref_type {
+                Some(etype) => (reg, Some(etype), false),
+                None => (reg, None, false),
             }
         }
 
         Err(e) => return Err(Error::from_syms(e, vref_pos)),
     };
 
+    let has_self_reference = was_defined && expr_references_symbol(&expr, &key);
+
     if let Some(etype) = etype {
         // The destination variable already exists.  Try to compile the expression into its target
         // type and fail otherwise with a better error message.
-        match compile_expr_as_type(codegen, &mut symtable.frozen(), reg, span.expr, etype) {
+        let result = if has_self_reference {
+            let mut frozen = symtable.frozen();
+            let mut scope = frozen.temp_scope();
+            let temp = scope.alloc().map_err(|e| Error::from_syms(e, vref_pos))?;
+            let r = compile_expr_as_type(codegen, &mut frozen, temp, expr, etype);
+            if r.is_ok() {
+                codegen.emit(bytecode::make_move(reg, temp), vref_pos);
+            }
+            r
+        } else {
+            compile_expr_as_type(codegen, &mut symtable.frozen(), reg, expr, etype)
+        };
+
+        match result {
             Err(Error::TypeMismatch(pos, actual, expected)) => {
                 return Err(Error::IncompatibleTypesInAssignment(pos, actual, expected));
             }
@@ -157,8 +219,8 @@ fn compile_assignment(
     // The destination variable doesn't exist yet but `symtable.put_local` already inserted it
     // with the default type we gave above as part of assigning it a register.  Use the
     // expression's type to fix up the type in the symbols table.
-    let etype = compile_expr(codegen, &mut symtable.frozen(), reg, span.expr)?;
-    symtable.fixup_local_type(&span.vref, etype).map_err(|e| Error::from_syms(e, vref_pos))
+    let etype = compile_expr(codegen, &mut symtable.frozen(), reg, expr)?;
+    symtable.fixup_local_type(&vref, etype).map_err(|e| Error::from_syms(e, vref_pos))
 }
 
 /// Returns the textual name of `relop` for diagnostics.

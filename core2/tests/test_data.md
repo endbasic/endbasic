@@ -55,13 +55,14 @@ GETDATA
 0009:   MOVE        R65, R64            ; 9:5
 0010:   LOADI       R66, 0              ; 9:14
 0011:   CMPLEI      R65, R65, R66       ; 9:11
-0012:   JMPF        R65, 17             ; 9:5
-0013:   MOVE        R64, R64            ; 9:5
-0014:   LOADI       R65, 1              ; 9:15
-0015:   ADDI        R64, R64, R65       ; 9:11
-0016:   JUMP        9                   ; 9:5
-0017:   UPCALL      0, R65              ; 12:1, GETDATA
-0018:   EOF                             ; 0:0
+0012:   JMPF        R65, 18             ; 9:5
+0013:   MOVE        R65, R64            ; 9:5
+0014:   LOADI       R66, 1              ; 9:15
+0015:   ADDI        R65, R65, R66       ; 9:11
+0016:   MOVE        R64, R65            ; 9:5
+0017:   JUMP        9                   ; 9:5
+0018:   UPCALL      0, R65              ; 12:1, GETDATA
+0019:   EOF                             ; 0:0
 ```
 
 ## Output
