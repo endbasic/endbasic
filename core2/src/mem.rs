@@ -142,6 +142,24 @@ impl ConstantDatum {
             Self::Text(..) => ExprType::Text,
         }
     }
+
+    /// Decodes a raw register `value` of `etype` into a constant datum.
+    pub(crate) fn from_raw(
+        value: u64,
+        etype: ExprType,
+        constants: &[ConstantDatum],
+        heap: &[HeapDatum],
+    ) -> Self {
+        match etype {
+            ExprType::Boolean => Self::Boolean(value != 0),
+            ExprType::Double => Self::Double(f64::from_bits(value)),
+            ExprType::Integer => Self::Integer(value as i32),
+            ExprType::Text => {
+                let ptr = DatumPtr::from(value);
+                Self::Text(ptr.resolve_string(constants, heap).to_owned())
+            }
+        }
+    }
 }
 
 /// A heap-allocated value used at runtime.
@@ -249,6 +267,28 @@ mod tests {
         assert_eq!(
             ConstantDatum::Text("hello".to_owned()),
             ConstantDatum::from("hello".to_owned())
+        );
+    }
+
+    #[test]
+    fn test_constant_datum_from_raw() {
+        assert_eq!(
+            ConstantDatum::Boolean(true),
+            ConstantDatum::from_raw(1, ExprType::Boolean, &[], &[])
+        );
+        assert_eq!(
+            ConstantDatum::Double(3.25),
+            ConstantDatum::from_raw(3.25f64.to_bits(), ExprType::Double, &[], &[])
+        );
+        assert_eq!(
+            ConstantDatum::Integer(-7),
+            ConstantDatum::from_raw((-7i32) as u64, ExprType::Integer, &[], &[])
+        );
+
+        let constants = vec![ConstantDatum::Text("hello".to_owned())];
+        assert_eq!(
+            ConstantDatum::Text("hello".to_owned()),
+            ConstantDatum::from_raw(0, ExprType::Text, &constants, &[])
         );
     }
 }

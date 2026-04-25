@@ -238,6 +238,14 @@ impl Context {
         self.regs[usize::from(index)]
     }
 
+    /// Returns the raw `u64` value stored in program-scope register `index`.
+    ///
+    /// Program-scope variables live in local registers in the outer frame.  Their absolute
+    /// positions in the register file start at `Register::MAX_GLOBAL`.
+    pub(super) fn get_program_reg_raw(&self, index: u8) -> u64 {
+        self.regs[usize::from(Register::MAX_GLOBAL) + usize::from(index)]
+    }
+
     /// Resolves array subscripts and computes the flat index for `arr_reg` with subscripts read
     /// from registers starting at `first_sub_reg`.
     ///

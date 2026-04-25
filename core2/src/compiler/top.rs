@@ -1338,7 +1338,17 @@ pub fn compile(
             (key.clone(), GlobalVarInfo { reg, subtype, ndims })
         })
         .collect();
-    let delta = ctx.codegen.build_image_delta(image, global_vars, &ctx.data)?;
+    let program_vars = symtable
+        .iter_locals()
+        .map(|(key, proto, reg)| {
+            let (subtype, ndims) = match proto {
+                SymbolPrototype::Array(info) => (info.subtype, info.ndims),
+                SymbolPrototype::Scalar(etype) => (etype, 0),
+            };
+            (key.clone(), GlobalVarInfo { reg, subtype, ndims })
+        })
+        .collect();
+    let delta = ctx.codegen.build_image_delta(image, global_vars, program_vars, &ctx.data)?;
     Ok((delta, symtable.save()))
 }
 

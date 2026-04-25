@@ -16,11 +16,10 @@
 
 //! Virtual machine for EndBASIC execution.
 
-use crate::ast::ExprType;
 use crate::bytecode::{ExitCode, Register};
 use crate::callable::{Callable, Scope};
 use crate::compiler::SymbolKey;
-use crate::image::Image;
+use crate::image::{GlobalVarInfo, Image};
 use crate::mem::{ConstantDatum, DatumPtr, HeapDatum};
 use crate::reader::LineCol;
 use crate::{CallError, CallResult};
@@ -129,6 +128,50 @@ pub struct Vm {
 }
 
 impl Vm {
+    /// Returns the scalar value named `key` from `vars`, decoding values from `read_raw`.
+    fn get_scalar_var(
+        &self,
+        image: &Image,
+        key: &SymbolKey,
+        vars: &HashMap<SymbolKey, GlobalVarInfo>,
+        read_raw: fn(&Context, u8) -> u64,
+    ) -> GetGlobalResult<Option<ConstantDatum>> {
+        let Some(info) = vars.get(key) else {
+            return Ok(None);
+        };
+        if info.ndims != 0 {
+            return Err(GetGlobalError::IsArray(key.to_string()));
+        }
+        let raw = read_raw(&self.context, info.reg);
+        Ok(Some(ConstantDatum::from_raw(raw, info.subtype, &image.constants, &self.heap)))
+    }
+
+    /// Returns the array element named `key` from `vars`, decoding values from `read_raw`.
+    fn get_array_var(
+        &self,
+        image: &Image,
+        key: &SymbolKey,
+        vars: &HashMap<SymbolKey, GlobalVarInfo>,
+        subscripts: &[i32],
+        read_raw: fn(&Context, u8) -> u64,
+    ) -> GetGlobalResult<Option<ConstantDatum>> {
+        let Some(info) = vars.get(key) else {
+            return Ok(None);
+        };
+        if info.ndims == 0 {
+            return Err(GetGlobalError::IsScalar(key.to_string()));
+        }
+        let raw = read_raw(&self.context, info.reg);
+        let ptr = DatumPtr::from(raw);
+        let heap_idx = ptr.heap_index();
+        let HeapDatum::Array(a) = &self.heap[heap_idx] else {
+            panic!("Array variable does not point to an array on the heap");
+        };
+        let flat_idx = a.flat_index(subscripts).map_err(GetGlobalError::SubscriptOutOfBounds)?;
+        let v = a.values[flat_idx];
+        Ok(Some(ConstantDatum::from_raw(v, info.subtype, &image.constants, &self.heap)))
+    }
+
     /// Creates a new VM with the given `upcalls_by_name` as the available built-in callables.
     pub fn new(upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>>) -> Self {
         Self {
@@ -253,23 +296,7 @@ impl Vm {
         image: &Image,
         key: &SymbolKey,
     ) -> GetGlobalResult<Option<ConstantDatum>> {
-        let Some(info) = image.debug_info.global_vars.get(key) else {
-            return Ok(None);
-        };
-        if info.ndims != 0 {
-            return Err(GetGlobalError::IsArray(key.to_string()));
-        }
-        let raw = self.context.get_global_reg_raw(info.reg);
-        let datum = match info.subtype {
-            ExprType::Boolean => ConstantDatum::Boolean(raw != 0),
-            ExprType::Double => ConstantDatum::Double(f64::from_bits(raw)),
-            ExprType::Integer => ConstantDatum::Integer(raw as i32),
-            ExprType::Text => {
-                let ptr = DatumPtr::from(raw);
-                ConstantDatum::Text(ptr.resolve_string(&image.constants, &self.heap).to_owned())
-            }
-        };
-        Ok(Some(datum))
+        self.get_scalar_var(image, key, &image.debug_info.global_vars, Context::get_global_reg_raw)
     }
 
     /// Returns the value of an element in the global array variable `key` at the given
@@ -284,30 +311,52 @@ impl Vm {
         key: &SymbolKey,
         subscripts: &[i32],
     ) -> GetGlobalResult<Option<ConstantDatum>> {
-        let Some(info) = image.debug_info.global_vars.get(key) else {
-            return Ok(None);
-        };
-        if info.ndims == 0 {
-            return Err(GetGlobalError::IsScalar(key.to_string()));
-        }
-        let raw = self.context.get_global_reg_raw(info.reg);
-        let ptr = DatumPtr::from(raw);
-        let heap_idx = ptr.heap_index();
-        let HeapDatum::Array(a) = &self.heap[heap_idx] else {
-            panic!("Array variable does not point to an array on the heap");
-        };
-        let flat_idx = a.flat_index(subscripts).map_err(GetGlobalError::SubscriptOutOfBounds)?;
-        let v = a.values[flat_idx];
-        let datum = match info.subtype {
-            ExprType::Boolean => ConstantDatum::Boolean(v != 0),
-            ExprType::Double => ConstantDatum::Double(f64::from_bits(v)),
-            ExprType::Integer => ConstantDatum::Integer(v as i32),
-            ExprType::Text => {
-                let ptr = DatumPtr::from(v);
-                ConstantDatum::Text(ptr.resolve_string(&image.constants, &self.heap).to_owned())
-            }
-        };
-        Ok(Some(datum))
+        self.get_array_var(
+            image,
+            key,
+            &image.debug_info.global_vars,
+            subscripts,
+            Context::get_global_reg_raw,
+        )
+    }
+
+    /// Returns the value of the program-scope scalar variable `key` as a `ConstantDatum`.
+    ///
+    /// Returns `Ok(None)` if the variable is not defined (no image is loaded or the
+    /// variable was not declared).  Returns `Err` if the variable exists but is an
+    /// array; in that case, use `get_program_array` instead.
+    pub fn get_program(
+        &self,
+        image: &Image,
+        key: &SymbolKey,
+    ) -> GetGlobalResult<Option<ConstantDatum>> {
+        self.get_scalar_var(
+            image,
+            key,
+            &image.debug_info.program_vars,
+            Context::get_program_reg_raw,
+        )
+    }
+
+    /// Returns the value of an element in the program-scope array variable `key` at the
+    /// given `subscripts` as a `ConstantDatum`.
+    ///
+    /// Returns `Ok(None)` if the variable is not defined (no image is loaded or the
+    /// variable was not declared).  Returns `Err` if the variable exists but is a scalar
+    /// (use `get_program` instead), or if the subscripts are out of bounds.
+    pub fn get_program_array(
+        &self,
+        image: &Image,
+        key: &SymbolKey,
+        subscripts: &[i32],
+    ) -> GetGlobalResult<Option<ConstantDatum>> {
+        self.get_array_var(
+            image,
+            key,
+            &image.debug_info.program_vars,
+            subscripts,
+            Context::get_program_reg_raw,
+        )
     }
 
     /// Starts or resumes execution of `image`.
@@ -657,5 +706,66 @@ mod tests {
 
         let pos = positions.borrow();
         assert_eq!(&[LineCol { line: 1, col: 13 }], pos.as_slice());
+    }
+
+    #[tokio::test]
+    async fn test_get_program_scalar() {
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image = compiler.compile(&mut b"x = 123".as_slice()).unwrap();
+        let mut vm = Vm::new(HashMap::default());
+        run_to_end(&mut vm, &image).await;
+
+        assert_eq!(
+            Some(ConstantDatum::Integer(123)),
+            vm.get_program(&image, &SymbolKey::from("x")).unwrap()
+        );
+        assert_eq!(None, vm.get_program(&image, &SymbolKey::from("missing")).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_get_program_array() {
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image =
+            compiler.compile(&mut b"DIM arr(2) AS INTEGER: arr(1) = 45".as_slice()).unwrap();
+        let mut vm = Vm::new(HashMap::default());
+        run_to_end(&mut vm, &image).await;
+
+        assert_eq!(
+            Some(ConstantDatum::Integer(45)),
+            vm.get_program_array(&image, &SymbolKey::from("arr"), &[1]).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_program_type_mismatch_errors() {
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image =
+            compiler.compile(&mut b"x = 1: DIM arr(2) AS INTEGER: arr(1) = 45".as_slice()).unwrap();
+        let mut vm = Vm::new(HashMap::default());
+        run_to_end(&mut vm, &image).await;
+
+        match vm.get_program(&image, &SymbolKey::from("arr")) {
+            Err(GetGlobalError::IsArray(name)) => assert_eq!("ARR", name),
+            other => panic!("Unexpected result: {:?}", other),
+        }
+
+        match vm.get_program_array(&image, &SymbolKey::from("x"), &[0]) {
+            Err(GetGlobalError::IsScalar(name)) => assert_eq!("X", name),
+            other => panic!("Unexpected result: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_program_array_out_of_bounds() {
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image =
+            compiler.compile(&mut b"DIM arr(2) AS INTEGER: arr(1) = 45".as_slice()).unwrap();
+        let mut vm = Vm::new(HashMap::default());
+        run_to_end(&mut vm, &image).await;
+
+        match vm.get_program_array(&image, &SymbolKey::from("arr"), &[3]) {
+            Err(GetGlobalError::SubscriptOutOfBounds(_)) => (),
+            other => panic!("Unexpected result: {:?}", other),
+        }
     }
 }

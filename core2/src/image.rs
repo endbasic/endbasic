@@ -136,6 +136,12 @@ pub struct DebugInfo {
     /// This includes both host-pre-defined globals (from `compile_with_globals`) and
     /// globals declared via `DIM SHARED` in the user's program.
     pub(crate) global_vars: HashMap<SymbolKey, GlobalVarInfo>,
+
+    /// Maps program-scope variable names to their register assignments and type information.
+    ///
+    /// Program-scope variables are the outer-most non-global variables in a script.  Their
+    /// registers are local-register indices interpreted relative to the outer frame.
+    pub(crate) program_vars: HashMap<SymbolKey, GlobalVarInfo>,
 }
 
 /// Incremental update to append into an existing `Image`.
@@ -160,6 +166,9 @@ pub(crate) struct ImageDelta {
 
     /// Full global variable metadata for the updated program.
     pub(crate) global_vars: HashMap<SymbolKey, GlobalVarInfo>,
+
+    /// Full program-scope variable metadata for the updated program.
+    pub(crate) program_vars: HashMap<SymbolKey, GlobalVarInfo>,
 }
 
 /// Representation of a compiled EndBASIC program.
@@ -204,6 +213,7 @@ impl Default for Image {
                 }],
                 callables: HashMap::default(),
                 global_vars: HashMap::default(),
+                program_vars: HashMap::default(),
             },
         )
     }
@@ -239,6 +249,7 @@ impl Image {
         self.debug_info.instrs.extend(delta.instrs);
         self.debug_info.callables = delta.callables;
         self.debug_info.global_vars = delta.global_vars;
+        self.debug_info.program_vars = delta.program_vars;
     }
 
     /// Disassembles the image into a textual representation for debugging.
