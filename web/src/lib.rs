@@ -84,7 +84,7 @@ fn do_sleep<T: 'static>(ms: i32, ret: T) -> Pin<Box<dyn Future<Output = T>>> {
     }
 
     Box::pin(async move {
-        let _ = callback; // Must grab ownership so that the closure remains alive until it is used.
+        let _callback = callback; // Must grab ownership so that the closure remains alive until it is used.
         if let Err(e) = timeout_rx.recv().await {
             log_and_panic!("Failed to wait for timeout: {}", e);
         }
