@@ -1,3 +1,9 @@
+
+    EndBASIC X.Y.Z
+    Copyright YYYY-YYYY Julio Merino
+
+    Type HELP for interactive usage information.
+
 [2J[1;1H[?25l[38;5;11m
  EndBASIC tour: Welcome!
 =========================
@@ -589,3 +595,4 @@ you know, to keep me motivated in writing stuff and building this project:
 01ae    LEAVE
 01af    RET                                     # 46:1
 
+End of input by CTRL-D

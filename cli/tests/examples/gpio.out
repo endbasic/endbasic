@@ -1,3 +1,9 @@
+
+    EndBASIC X.Y.Z
+    Copyright YYYY-YYYY Julio Merino
+
+    Type HELP for interactive usage information.
+
 [2J[1;1H[38;5;11m
  GPIO demo
 ===========
@@ -175,3 +181,4 @@ Dumping GPIO trace...
 008d    SETV        I
 008e    JMP         0079
 
+End of input by CTRL-D

@@ -1,3 +1,6 @@
+LOAD "DEMOS:/GUESS.BAS"
+RANDOMIZE 10
+RUN
 100
 3
 10
@@ -11,3 +14,4 @@ yes
 50
 82
 no
+DISASM

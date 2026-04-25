@@ -348,9 +348,9 @@ fn test_cli_version() {
 fn test_example_fibonacci() {
     check(
         bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/fibonacci.bas")],
+        &["--local-drive=memory://", "--interactive"],
         0,
-        Behavior::Null,
+        Behavior::File(src_path("cli/tests/examples/fibonacci.in")),
         Behavior::File(src_path("cli/tests/examples/fibonacci.out")),
         Behavior::Null,
     );
@@ -360,12 +360,7 @@ fn test_example_fibonacci() {
 fn test_example_gpio() {
     check(
         bin_path("endbasic"),
-        &[
-            "--gpio-pins=mock",
-            "--local-drive=memory://",
-            "--interactive",
-            &src_str("cli/tests/examples/gpio.bas"),
-        ],
+        &["--gpio-pins=mock", "--local-drive=memory://", "--interactive"],
         0,
         Behavior::File(src_path("cli/tests/examples/gpio.in")),
         Behavior::File(src_path("cli/tests/examples/gpio.out")),
@@ -377,7 +372,7 @@ fn test_example_gpio() {
 fn test_example_guess() {
     check(
         bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/guess.bas")],
+        &["--local-drive=memory://", "--interactive"],
         0,
         Behavior::File(src_path("cli/tests/examples/guess.in")),
         Behavior::File(src_path("cli/tests/examples/guess.out")),
@@ -389,7 +384,7 @@ fn test_example_guess() {
 fn test_example_hello() {
     check(
         bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/hello.bas")],
+        &["--local-drive=memory://", "--interactive"],
         0,
         Behavior::File(src_path("cli/tests/examples/hello.in")),
         Behavior::File(src_path("cli/tests/examples/hello.out")),
@@ -401,9 +396,9 @@ fn test_example_hello() {
 fn test_example_palette() {
     check(
         bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/palette.bas")],
+        &["--local-drive=memory://", "--interactive"],
         0,
-        Behavior::Null,
+        Behavior::File(src_path("cli/tests/examples/palette.in")),
         Behavior::File(src_path("cli/tests/examples/palette.out")),
         Behavior::Null,
     );
@@ -413,7 +408,7 @@ fn test_example_palette() {
 fn test_example_tour() {
     check(
         bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/examples/tour.bas")],
+        &["--local-drive=memory://", "--interactive"],
         0,
         Behavior::File(src_path("cli/tests/examples/tour.in")),
         Behavior::File(src_path("cli/tests/examples/tour.out")),
