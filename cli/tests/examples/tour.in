@@ -1,3 +1,5 @@
+LOAD "DEMOS:/TOUR.BAS"
+RUN
 
 
 
@@ -8,3 +10,4 @@
 
 
 
+DISASM

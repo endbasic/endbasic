@@ -1,3 +1,9 @@
+
+    EndBASIC X.Y.Z
+    Copyright YYYY-YYYY Julio Merino
+
+    Type HELP for interactive usage information.
+
 Hello,First-Name Last-Name!
 0000    LOADR       NAME                        # 16:27
 0001    PUSH%       1                           # 16:25
@@ -13,3 +19,4 @@ Hello,First-Name Last-Name!
 000b    PUSH%       4                           # 17:7
 000c    CALLB       48 (PRINT), 5               # 17:1
 
+End of input by CTRL-D

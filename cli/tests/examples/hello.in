@@ -1,1 +1,4 @@
+LOAD "DEMOS:/HELLO.BAS"
+RUN
 First-Name Last-Name
+DISASM
