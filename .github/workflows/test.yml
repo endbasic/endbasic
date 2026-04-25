@@ -27,7 +27,7 @@ jobs:
                   # verify any new Clippy warnings that may appear.
                   toolchain: stable
                   components: clippy, rustfmt
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: ./.github/workflows/lint.sh
@@ -41,7 +41,7 @@ jobs:
             TEST_ACCOUNT_2_USERNAME: ${{ secrets.TEST_ACCOUNT_2_USERNAME }}
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: cargo test --package='*' --features=sdl
@@ -56,7 +56,7 @@ jobs:
             TEST_ACCOUNT_2_USERNAME: ${{ secrets.TEST_ACCOUNT_2_USERNAME }}
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
             - run: brew install sdl2 sdl2_ttf
             - run: cargo test --package=endbasic-client -- --include-ignored
             - run: cargo test --package=endbasic-core -- --include-ignored
@@ -80,7 +80,7 @@ jobs:
             TEST_ACCOUNT_2_USERNAME: ${{ secrets.TEST_ACCOUNT_2_USERNAME }}
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
             - run: choco install --allow-empty-checksums unzip
             - run: ./.github/workflows/setup-sdl.ps1
             - run: cargo test --package=endbasic-client -- --include-ignored
@@ -97,5 +97,5 @@ jobs:
     linux-test-no-features:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
             - run: cd std && cargo build --no-default-features
