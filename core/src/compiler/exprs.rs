@@ -106,7 +106,7 @@ fn compile_neg_op(
             instrs.push(Instruction::NegateInteger(span.pos));
             Ok(ExprType::Integer)
         }
-        _ => Err(Error::UnaryOpTypeError(span.pos, "negate", expr_type)),
+        _ => Err(Error::NotANumber(span.pos, expr_type)),
     }
 }
 
