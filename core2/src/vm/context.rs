@@ -320,6 +320,21 @@ impl Context {
         }
     }
 
+    /// Resets all runtime state (registers, frame pointer, call stack, error handler,
+    /// and program counter) to their initial values.
+    ///
+    /// This completely wipes execution context.  Callers that want to preserve the program counter
+    /// (e.g. to continue executing the same image after resetting variables) must save and restore
+    /// it themselves.
+    pub(super) fn clear_runtime_state(&mut self) {
+        self.pc = 0;
+        self.regs.fill(0);
+        self.fp = usize::from(Register::MAX_GLOBAL);
+        self.stop = None;
+        self.err_handler = ErrorHandler::None;
+        self.call_stack.clear();
+    }
+
     /// Starts or resumes execution of `image`.
     ///
     /// Panics if the processor state is out of sync with `image` or if the contents of `image`
