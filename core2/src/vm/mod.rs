@@ -71,8 +71,8 @@ impl<'a> UpcallHandler<'a> {
         match upcall.exec(vm.upcall_scope(image, first_reg, is_function, upcall_pc)).await {
             Ok(()) => Ok(()),
             Err(e) => {
-                let pos_override = match e {
-                    CallError::Syntax(pos, _) => Some(pos),
+                let pos_override = match &e {
+                    CallError::Syntax(pos, _) => Some(*pos),
                     _ => None,
                 };
                 vm.handle_exception(image, upcall_pc, e.to_string(), pos_override);
@@ -424,6 +424,7 @@ mod tests {
     use std::borrow::Cow;
     use std::cell::RefCell;
     use std::collections::HashMap;
+    use std::io;
     use std::rc::Rc;
 
     /// A test callable that captures the source positions of argument register slots.
@@ -475,6 +476,55 @@ mod tests {
                 positions.push(scope.get_pos(i));
             }
             Ok(())
+        }
+    }
+
+    struct ReturnFortyTwoFunction {
+        metadata: Rc<CallableMetadata>,
+    }
+
+    impl ReturnFortyTwoFunction {
+        fn new() -> Rc<Self> {
+            let md = CallableMetadataBuilder::new("RET42")
+                .with_return_type(ExprType::Integer)
+                .with_syntax(&[(&[], None)])
+                .test_build();
+            Rc::from(Self { metadata: md })
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl Callable for ReturnFortyTwoFunction {
+        fn metadata(&self) -> Rc<CallableMetadata> {
+            self.metadata.clone()
+        }
+
+        async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+            scope.return_integer(42)
+        }
+    }
+
+    struct IoErrorCommand {
+        metadata: Rc<CallableMetadata>,
+    }
+
+    impl IoErrorCommand {
+        fn new() -> Rc<Self> {
+            let md = CallableMetadataBuilder::new("IOFAIL")
+                .with_dynamic_syntax(vec![(vec![], None)])
+                .test_build();
+            Rc::from(Self { metadata: md })
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl Callable for IoErrorCommand {
+        fn metadata(&self) -> Rc<CallableMetadata> {
+            self.metadata.clone()
+        }
+
+        async fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+            Err(CallError::from(io::Error::other("mock I/O error")))
         }
     }
 
@@ -642,6 +692,42 @@ mod tests {
         match vm.exec(&image) {
             StopReason::Eof => (),
             _ => panic!("Execution should stop at EOF after appended code"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_exec_upcall_can_return_with_scope_helper() {
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("RET42"), ReturnFortyTwoFunction::new());
+
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"x = RET42".as_slice()).unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+        run_to_end(&mut vm, &image).await;
+
+        assert_eq!(
+            Some(ConstantDatum::Integer(42)),
+            vm.get_program(&image, &SymbolKey::from("x")).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_exec_upcall_io_error_is_reported() {
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("IOFAIL"), IoErrorCommand::new());
+
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"IOFAIL".as_slice()).unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+
+        match vm.exec(&image) {
+            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+            _ => panic!("Execution should stop at upcall"),
+        }
+
+        match vm.exec(&image) {
+            StopReason::Exception(_, msg) => assert_eq!("mock I/O error", msg),
+            _ => panic!("Execution should expose upcall I/O error as exception"),
         }
     }
 

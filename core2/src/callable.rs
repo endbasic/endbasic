@@ -26,6 +26,7 @@ use crate::reader::LineCol;
 use async_trait::async_trait;
 use std::borrow::Cow;
 use std::fmt;
+use std::io;
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 use std::str::Lines;
@@ -33,6 +34,10 @@ use std::str::Lines;
 /// Error types for callable execution.
 #[derive(Debug, thiserror::Error)]
 pub enum CallError {
+    /// I/O error.
+    #[error("{0}")]
+    IoError(#[from] io::Error),
+
     /// Generic error with a static message.
     #[error("{0}")]
     Other(&'static str),
@@ -876,25 +881,41 @@ impl<'a> Scope<'a> {
     }
 
     /// Sets the return value of the function to `b`.
-    pub fn return_boolean(self, b: bool) {
+    ///
+    /// Always returns success.  The returned value is only to support the idiomatic invocation
+    /// `return scope.return_boolean(...)`.
+    pub fn return_boolean(self, b: bool) -> CallResult<()> {
         self.regs[self.fp] = if b { 1 } else { 0 };
+        Ok(())
     }
 
     /// Sets the return value of the function to `d`.
-    pub fn return_double(self, d: f64) {
+    ///
+    /// Always returns success.  The returned value is only to support the idiomatic invocation
+    /// `return scope.return_double(...)`.
+    pub fn return_double(self, d: f64) -> CallResult<()> {
         self.regs[self.fp] = d.to_bits();
+        Ok(())
     }
 
     /// Sets the return value of the function to `i`.
-    pub fn return_integer(self, i: i32) {
+    ///
+    /// Always returns success.  The returned value is only to support the idiomatic invocation
+    /// `return scope.return_integer(...)`.
+    pub fn return_integer(self, i: i32) -> CallResult<()> {
         self.regs[self.fp] = i as u64;
+        Ok(())
     }
 
     /// Sets the return value of the function to `s`.
-    pub fn return_string<S: Into<String>>(self, s: S) {
+    ///
+    /// Always returns success.  The returned value is only to support the idiomatic invocation
+    /// `return scope.return_string(...)`.
+    pub fn return_string<S: Into<String>>(self, s: S) -> CallResult<()> {
         let index = self.heap.len();
         self.heap.push(HeapDatum::Text(s.into()));
         self.regs[self.fp] = DatumPtr::for_heap(unchecked_usize_as_u32(index));
+        Ok(())
     }
 }
 

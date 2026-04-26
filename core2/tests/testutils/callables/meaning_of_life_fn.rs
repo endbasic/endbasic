@@ -43,7 +43,6 @@ impl Callable for MeaningOfLifeFunction {
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
-        scope.return_integer(42);
-        Ok(())
+        scope.return_integer(42)
     }
 }

@@ -66,7 +66,6 @@ impl Callable for MaxDoublesFunction {
             }
             reg += 1;
         }
-        scope.return_double(max);
-        Ok(())
+        scope.return_double(max)
     }
 }

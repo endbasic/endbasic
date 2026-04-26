@@ -70,7 +70,6 @@ impl Callable for SumMixedFunction {
             total += f64::from(scope.get_integer(reg as u8));
             reg += 1;
         }
-        scope.return_double(total);
-        Ok(())
+        scope.return_double(total)
     }
 }

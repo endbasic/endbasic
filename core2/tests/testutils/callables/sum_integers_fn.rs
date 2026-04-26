@@ -74,7 +74,6 @@ impl Callable for SumIntegersFunction {
                 break;
             }
         }
-        scope.return_integer(total);
-        Ok(())
+        scope.return_integer(total)
     }
 }
