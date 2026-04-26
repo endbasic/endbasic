@@ -255,7 +255,7 @@ ERROR: 1:7: BOOLEAN is not a number
  5.53
 -6
  5
-ERROR: 1:7: Integer underflow
+ERROR: 1:7: Integer overflow
  2147483648
 ERROR: 1:7: STRING is not a number
 End of input by CTRL-D

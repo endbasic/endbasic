@@ -162,7 +162,7 @@ pub fn pow_integer(lhs: i32, rhs: i32) -> Result<i32> {
 pub fn neg_integer(i: i32) -> Result<i32> {
     match i.checked_neg() {
         Some(i) => Ok(i),
-        None => Err(Error::new("Integer underflow".to_owned())),
+        None => Err(Error::new("Integer overflow".to_owned())),
     }
 }
 
@@ -320,5 +320,6 @@ mod tests {
     fn test_value_neg_integer() {
         assert_eq!(-6, neg_integer(6).unwrap());
         assert_eq!(5, neg_integer(-5).unwrap());
+        assert_eq!("Integer overflow", format!("{}", neg_integer(i32::MIN).unwrap_err()));
     }
 }
