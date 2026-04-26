@@ -374,7 +374,7 @@ fn compile_expr_symbol(
             let etype = match md.return_type() {
                 Some(etype) => etype,
                 None => {
-                    return Err(Error::NotArrayOrFunction(span.pos, key));
+                    return Err(Error::NotArrayOrFunction(span.pos, span.vref));
                 }
             };
 
@@ -400,7 +400,7 @@ fn compile_expr_symbol(
             let etype = match md.return_type() {
                 Some(etype) => etype,
                 None => {
-                    return Err(Error::NotArrayOrFunction(span.pos, key));
+                    return Err(Error::NotArrayOrFunction(span.pos, span.vref));
                 }
             };
 
@@ -708,7 +708,7 @@ pub(super) fn compile_expr(
                     let vtype = match md.return_type() {
                         Some(vtype) => vtype,
                         None => {
-                            return Err(Error::NotArrayOrFunction(span.vref_pos, key));
+                            return Err(Error::NotArrayOrFunction(span.vref_pos, span.vref));
                         }
                     };
 
@@ -740,7 +740,7 @@ pub(super) fn compile_expr(
                     let vtype = match md.return_type() {
                         Some(vtype) => vtype,
                         None => {
-                            return Err(Error::NotArrayOrFunction(span.vref_pos, key));
+                            return Err(Error::NotArrayOrFunction(span.vref_pos, span.vref));
                         }
                     };
 
@@ -756,7 +756,7 @@ pub(super) fn compile_expr(
                 }
 
                 Some(SymbolPrototype::Variable(_)) => {
-                    Err(Error::NotArrayOrFunction(span.vref_pos, key))
+                    Err(Error::NotArrayOrFunction(span.vref_pos, span.vref))
                 }
 
                 None => Err(Error::UndefinedSymbol(span.vref_pos, span.vref)),
@@ -895,7 +895,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("F").with_return_type(ExprType::Integer))
             .parse("c f")
             .compile()
-            .expect_err("1:3: F is not an array nor a function")
+            .expect_err("1:3: f is not an array nor a function")
             .check();
     }
 
@@ -1008,7 +1008,7 @@ mod tests {
             .define_callable(CallableMetadataBuilder::new("C"))
             .parse("b = c")
             .compile()
-            .expect_err("1:5: C is not an array nor a function")
+            .expect_err("1:5: c is not an array nor a function")
             .check();
     }
 
@@ -1028,7 +1028,7 @@ mod tests {
             )]))
             .parse("c c")
             .compile()
-            .expect_err("1:3: C is not an array nor a function")
+            .expect_err("1:3: c is not an array nor a function")
             .check();
     }
 
@@ -1289,7 +1289,7 @@ mod tests {
             .define("a", SymbolPrototype::Variable(ExprType::Integer))
             .parse("i = a(3)")
             .compile()
-            .expect_err("1:5: A is not an array nor a function")
+            .expect_err("1:5: a is not an array nor a function")
             .check();
     }
 
@@ -1351,7 +1351,7 @@ mod tests {
         Tester::default()
             .parse("i = 3: j = i()")
             .compile()
-            .expect_err("1:12: I is not an array nor a function")
+            .expect_err("1:12: i is not an array nor a function")
             .check();
     }
 }

@@ -75,7 +75,7 @@ pub enum Error {
     NotAVariable(LineCol, VarRef),
 
     #[error("{0}: {1} is not an array nor a function")]
-    NotArrayOrFunction(LineCol, SymbolKey),
+    NotArrayOrFunction(LineCol, VarRef),
 
     #[error("{0}: {1}")]
     ParseError(LineCol, String),
