@@ -47,7 +47,7 @@ impl SumMixedFunction {
                         name: Cow::Borrowed("expr"),
                         type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
                         sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                        require_one: true,
+                        require_one: false,
                         allow_missing: false,
                     }),
                 )])

@@ -215,7 +215,11 @@ pub(super) fn compile_args(
     let input_nargs = span.args.len();
     let mut arg_iter = span.args.into_iter().peekable();
 
-    for syn in syntax.singular.iter() {
+    for (i, syn) in syntax.singular.iter().enumerate() {
+        let end_ok = i + 1 == syntax.singular.len()
+            && input_nargs == syntax.singular.len()
+            && syntax.repeated.as_ref().is_some_and(|syn| !syn.require_one);
+
         match syn {
             SingularArgSyntax::RequiredValue(details, exp_sep) => {
                 let ArgSpan { expr, sep, sep_pos } =
@@ -231,7 +235,7 @@ pub(super) fn compile_args(
                         validate_syn_argsep(
                             &md,
                             exp_sep,
-                            false,
+                            end_ok,
                             arg_iter.peek().is_none(),
                             sep,
                             sep_pos,
@@ -279,7 +283,7 @@ pub(super) fn compile_args(
                         validate_syn_argsep(
                             &md,
                             exp_sep,
-                            false,
+                            end_ok,
                             arg_iter.peek().is_none(),
                             sep,
                             sep_pos,
@@ -313,7 +317,7 @@ pub(super) fn compile_args(
                         bytecode::VarArgTag::Immediate(sep, details.vtype)
                     }
                 };
-                validate_syn_argsep(&md, exp_sep, false, arg_iter.peek().is_none(), sep, sep_pos)?;
+                validate_syn_argsep(&md, exp_sep, end_ok, arg_iter.peek().is_none(), sep, sep_pos)?;
                 codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
             }
 
@@ -344,7 +348,7 @@ pub(super) fn compile_args(
                         bytecode::VarArgTag::Immediate(sep, etype)
                     }
                 };
-                validate_syn_argsep(&md, exp_sep, false, arg_iter.peek().is_none(), sep, sep_pos)?;
+                validate_syn_argsep(&md, exp_sep, end_ok, arg_iter.peek().is_none(), sep, sep_pos)?;
                 codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
             }
         };
