@@ -44,6 +44,12 @@ for outfile in "${@}"; do
     gpio_pins=noop
     local_drive="file://${tmpdir}"
     case "${outfile}" in
+        *autoexec.out)
+            cp "$(dirname "${basfile}")/autoexec.bas" "${tmpdir}/AUTOEXEC.BAS"
+            basfile=""
+            infile="$(dirname "${outfile}")/hello.bas"
+            ;;
+
         *dir.out)
             local_drive="memory://"
             ;;
