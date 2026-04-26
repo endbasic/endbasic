@@ -401,7 +401,7 @@ fn compile_required_ref(
                         ));
                     }
 
-                    Err(Error::NotArrayOrFunction(span.pos, key))
+                    Err(Error::NotArrayOrFunction(span.pos, span.vref))
                 }
             }
         }

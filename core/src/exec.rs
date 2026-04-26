@@ -3532,7 +3532,7 @@ mod tests {
             SUB f: OUT "foo": END SUB
             OUT f
         "#;
-        do_error_test(code, &[], &[], "3:17: F is not an array nor a function");
+        do_error_test(code, &[], &[], "3:17: f is not an array nor a function");
     }
 
     #[test]
