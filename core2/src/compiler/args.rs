@@ -276,11 +276,8 @@ pub(super) fn compile_args(
                                     return Err(Error::from_syms(e, span.pos));
                                 }
                                 let key = SymbolKey::from(&span.vref.name);
-                                if let Some(md) = symtable.get_callable(&key) {
-                                    return Err(Error::CallableSyntax(
-                                        span.pos,
-                                        md.as_ref().clone(),
-                                    ));
+                                if symtable.get_callable(&key).is_some() {
+                                    return Err(Error::NotAFunction(span.pos, span.vref));
                                 }
                                 unreachable!("Caller must use define_new_args first for commands");
                             }
@@ -467,11 +464,8 @@ pub(super) fn compile_args(
                                 }
                                 Err(syms::Error::UndefinedSymbol(..)) => {
                                     let key = SymbolKey::from(&span.vref.name);
-                                    if let Some(md) = symtable.get_callable(&key) {
-                                        return Err(Error::CallableSyntax(
-                                            span.pos,
-                                            md.as_ref().clone(),
-                                        ));
+                                    if symtable.get_callable(&key).is_some() {
+                                        return Err(Error::NotAFunction(span.pos, span.vref));
                                     }
                                     unreachable!(
                                         "Caller must use define_new_args first for commands"

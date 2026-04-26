@@ -223,7 +223,7 @@ x = OUT(1)
 ## Compilation errors
 
 ```plain
-1:5: Cannot call OUT (not a function)
+1:5: OUT is not an array nor a function
 ```
 
 # Test: Using a command as an argless function
@@ -237,7 +237,7 @@ x = OUT
 ## Compilation errors
 
 ```plain
-1:5: Cannot call OUT (not a function)
+1:5: OUT is not an array nor a function
 ```
 
 # Test: Sub name conflicts with existing global variable
@@ -525,7 +525,7 @@ OUT f
 ## Compilation errors
 
 ```plain
-3:5: Cannot call f (not a function)
+3:5: f is not an array nor a function
 ```
 
 # Test: Sub redefines existing function
