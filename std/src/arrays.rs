@@ -277,7 +277,7 @@ mod tests {
 
         Tester::default()
             .run(format!("result = {}(x)", func))
-            .expect_compilation_err("1:17: Undefined symbol X")
+            .expect_compilation_err("1:17: Undefined symbol x")
             .check();
 
         Tester::default()

@@ -90,7 +90,7 @@ pub enum Error {
     UnaryOpTypeError(LineCol, &'static str, ExprType),
 
     #[error("{0}: Undefined symbol {1}")]
-    UndefinedSymbol(LineCol, SymbolKey),
+    UndefinedSymbol(LineCol, VarRef),
 
     #[error("{0}: Unknown label {1}")]
     UnknownLabel(LineCol, String),
@@ -294,7 +294,7 @@ impl SymbolsTable {
 #[cfg_attr(test, derive(Debug, PartialEq))]
 enum Fixup {
     CallAddr(String, LineCol),
-    Call(SymbolKey, LineCol),
+    Call(VarRef, LineCol),
     GotoAddr(String, LineCol),
     OnErrorGotoAddr(String, LineCol),
 }
@@ -459,7 +459,7 @@ impl Compiler {
                 return Err(Error::IndexNonArray(span.vref_pos, span.vref.name));
             }
             None => {
-                return Err(Error::UndefinedSymbol(span.vref_pos, key));
+                return Err(Error::UndefinedSymbol(span.vref_pos, span.vref.clone()));
             }
         };
 
@@ -910,7 +910,7 @@ impl Compiler {
                         return Err(Error::NotACommand(span.vref_pos, span.vref));
                     }
 
-                    None => return Err(Error::UndefinedSymbol(span.vref_pos, key)),
+                    None => return Err(Error::UndefinedSymbol(span.vref_pos, span.vref)),
                 };
 
                 let name_pos = span.vref_pos;
@@ -931,7 +931,7 @@ impl Compiler {
                     }));
                 } else {
                     let call_pc = self.emit(Instruction::Nop);
-                    self.fixups.insert(call_pc, Fixup::Call(key, span.vref_pos));
+                    self.fixups.insert(call_pc, Fixup::Call(span.vref, span.vref_pos));
                 }
             }
 
@@ -1211,9 +1211,10 @@ impl Compiler {
                     Instruction::Call(JumpISpan { addr })
                 }
 
-                Fixup::Call(name, pos) => {
-                    let Some(addr) = callables.get(&name) else {
-                        return Err(Error::UndefinedSymbol(pos, name));
+                Fixup::Call(vref, pos) => {
+                    let key = SymbolKey::from(&vref.name);
+                    let Some(addr) = callables.get(&key) else {
+                        return Err(Error::UndefinedSymbol(pos, vref));
                     };
                     Instruction::Call(JumpISpan { addr: *addr })
                 }
@@ -1563,7 +1564,7 @@ mod tests {
         Tester::default()
             .parse("a(3) = FALSE")
             .compile()
-            .expect_err("1:1: Undefined symbol A")
+            .expect_err("1:1: Undefined symbol a")
             .check();
     }
 

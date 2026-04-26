@@ -1967,7 +1967,7 @@ mod tests {
 
     #[test]
     fn test_array_assignment_errors() {
-        do_simple_error_test("a() = 3\n", "1:1: Undefined symbol A");
+        do_simple_error_test("a() = 3\n", "1:1: Undefined symbol a");
         do_simple_error_test("a = 3\na(0) = 3\n", "2:1: Cannot index non-array a");
         do_simple_error_test(
             "DIM a(2)\na() = 3\n",
@@ -2031,7 +2031,7 @@ mod tests {
     #[test]
     fn test_assignment_errors() {
         do_simple_error_test("a =\n", "1:4: Missing expression in assignment");
-        do_simple_error_test("a = b\n", "1:5: Undefined symbol B");
+        do_simple_error_test("a = b\n", "1:5: Undefined symbol b");
         do_simple_error_test(
             "a = 3\na = TRUE\n",
             "2:1: Cannot assign value of type BOOLEAN to variable of type INTEGER",

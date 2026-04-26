@@ -304,7 +304,7 @@ mod tests {
         tester
             .run("after = 5")
             .expect_var("after", 5)
-            .expect_prints(["AUTOEXEC.BAS failed: 2:5: Undefined symbol UNDEF"])
+            .expect_prints(["AUTOEXEC.BAS failed: 2:5: Undefined symbol undef"])
             .expect_file("MEMORY:/AUTOEXEC.BAS", autoexec)
             .check();
     }

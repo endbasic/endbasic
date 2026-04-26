@@ -931,7 +931,7 @@ This is the first and only topic with just one line.
             tester().add_callable(DoNothingCommand::new()).add_callable(EmptyFunction::new());
 
         t.run(r#"HELP foo bar"#).expect_err("1:10: Unexpected value in expression").check();
-        t.run(r#"HELP foo"#).expect_compilation_err("1:6: Undefined symbol FOO").check();
+        t.run(r#"HELP foo"#).expect_compilation_err("1:6: Undefined symbol foo").check();
 
         t.run(r#"HELP "foo", 3"#)
             .expect_compilation_err("1:1: HELP expected <> | <topic$>")
