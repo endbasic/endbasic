@@ -262,6 +262,13 @@ pub(super) fn compile_args(
                                 if !details.define_undefined {
                                     return Err(Error::from_syms(e, span.pos));
                                 }
+                                let key = SymbolKey::from(&span.vref.name);
+                                if let Some(md) = symtable.get_callable(&key) {
+                                    return Err(Error::CallableSyntax(
+                                        span.pos,
+                                        md.as_ref().clone(),
+                                    ));
+                                }
                                 unreachable!("Caller must use define_new_args first for commands");
                             }
                             Err(e) => return Err(Error::from_syms(e, span.pos)),
