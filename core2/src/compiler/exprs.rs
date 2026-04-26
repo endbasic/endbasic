@@ -617,6 +617,13 @@ pub(super) fn compile_expr(
                     return Err(Error::NotAFunction(span.vref_pos, span.vref));
                 };
 
+                if !span.vref.accepts_callable(Some(etype)) {
+                    return Err(Error::IncompatibleTypeAnnotationInReference(
+                        span.vref_pos,
+                        span.vref,
+                    ));
+                }
+
                 if md.is_argless() {
                     return Err(Error::CallableSyntax(span.vref_pos, md.as_ref().clone()));
                 }
@@ -684,6 +691,10 @@ pub(super) fn compile_expr(
                 let Some(etype) = md.return_type() else {
                     return Err(Error::NotAFunction(span.pos, span.vref));
                 };
+
+                if !span.vref.accepts_callable(Some(etype)) {
+                    return Err(Error::IncompatibleTypeAnnotationInReference(span.pos, span.vref));
+                }
 
                 if !md.is_argless() {
                     return Err(Error::CallableSyntax(span.pos, md.as_ref().clone()));
