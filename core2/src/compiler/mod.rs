@@ -90,8 +90,8 @@ pub enum Error {
     #[error("{0}: I/O error during compilation: {1}")]
     Io(LineCol, io::Error),
 
-    /// Attempt to call something that is not a function.
-    #[error("{0}: Cannot call {1} (not a function)")]
+    /// Attempt to call something that is not an array nor a function.
+    #[error("{0}: {1} is not an array nor a function")]
     NotAFunction(LineCol, VarRef),
 
     /// `EXIT` statement found outside its expected block.

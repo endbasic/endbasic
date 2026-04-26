@@ -578,7 +578,7 @@ DEFINE_ARG OUT
 ## Compilation errors
 
 ```plain
-1:12: OUT expected [arg1 <AS|,|;> .. <AS|,|;> argN]
+1:12: OUT is not an array nor a function
 ```
 
 # Test: Singular required reference, define output variable with default type
@@ -803,7 +803,7 @@ DEFINE_AND_CHANGE_ARGS OUT
 ## Compilation errors
 
 ```plain
-1:24: OUT expected [arg1 <AS|,|;> .. <AS|,|;> argN]
+1:24: OUT is not an array nor a function
 ```
 
 # Test: Repeated references with require_one, invalid first separator

@@ -1097,7 +1097,7 @@ f
 ## Compilation errors
 
 ```plain
-4:1: Cannot call F (not a function)
+4:1: F is not an array nor a function
 ```
 
 # Test: Calling a scalar as a function is an error
@@ -1112,7 +1112,7 @@ OUT f()
 ## Compilation errors
 
 ```plain
-2:5: Cannot call f (not a function)
+2:5: f is not an array nor a function
 ```
 
 # Test: Calling an argless function with incompatible type annotation
@@ -1154,7 +1154,7 @@ MEANING_OF_LIFE
 ## Compilation errors
 
 ```plain
-1:1: Cannot call MEANING_OF_LIFE (not a function)
+1:1: MEANING_OF_LIFE is not an array nor a function
 ```
 
 # Test: Calling a function upcall with arguments as a command is an error
@@ -1168,7 +1168,7 @@ SUM_DOUBLES 1.0, 2.0
 ## Compilation errors
 
 ```plain
-1:1: Cannot call SUM_DOUBLES (not a function)
+1:1: SUM_DOUBLES is not an array nor a function
 ```
 
 # Test: Function redefines existing function

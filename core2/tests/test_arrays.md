@@ -403,7 +403,7 @@ OUT a(1)
 ## Compilation errors
 
 ```plain
-2:5: Cannot call a (not a function)
+2:5: a is not an array nor a function
 ```
 
 # Test: Array dimension too large
