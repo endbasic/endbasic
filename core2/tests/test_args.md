@@ -1168,6 +1168,20 @@ OUT_TYPED_INTS 3; 2; 7
 3% ; 2% ; 7%
 ```
 
+# Test: TypedValue repeated integers command rejects missing values
+
+## Source
+
+```basic
+OUT_TYPED_INTS 3, , 7
+```
+
+## Compilation errors
+
+```plain
+1:19: OUT_TYPED_INTS expected arg1%[ <,|;> .. <,|;> argN%]
+```
+
 # Test: TypedValue repeated integers command rejects non-integer values
 
 ## Source
