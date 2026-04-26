@@ -4,12 +4,12 @@
 
     Type HELP for interactive usage information.
 
-ERROR: 1:4: IF/ELSEIF requires a boolean condition
-ERROR: 1:4: IF/ELSEIF requires a boolean condition
+ERROR: 1:4: Expected BOOLEAN but found INTEGER
+ERROR: 1:4: Expected BOOLEAN but found STRING
 ERROR: 1:15: Cannot <= BOOLEAN and BOOLEAN
-ERROR: 1:7: WHILE requires a boolean condition
-ERROR: 1:16: LOOP requires a boolean condition
-ERROR: 1:16: LOOP requires a boolean condition
-ERROR: 1:10: DO requires a boolean condition
-ERROR: 1:10: DO requires a boolean condition
+ERROR: 1:7: Expected BOOLEAN but found INTEGER
+ERROR: 1:16: Expected BOOLEAN but found INTEGER
+ERROR: 1:16: Expected BOOLEAN but found STRING
+ERROR: 1:10: Expected BOOLEAN but found STRING
+ERROR: 1:10: Expected BOOLEAN but found INTEGER
 End of input by CTRL-D

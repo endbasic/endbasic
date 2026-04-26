@@ -62,9 +62,6 @@ pub enum Error {
     #[error("{0}: EXIT {1} outside of {1}")]
     MisplacedExit(LineCol, &'static str),
 
-    #[error("{0}: {1} requires a boolean condition")]
-    NotABooleanCondition(LineCol, String),
-
     #[error("{0}: {1} is not a command")]
     NotACommand(LineCol, VarRef),
 
@@ -596,7 +593,7 @@ impl Compiler {
 
             DoGuard::PreUntil(guard) => {
                 let start_pc = self.instrs.len();
-                self.compile_expr_guard(guard, "DO")?;
+                self.compile_expr_guard(guard)?;
                 let jump_pc = self.emit(Instruction::Nop);
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
@@ -605,7 +602,7 @@ impl Compiler {
 
             DoGuard::PreWhile(guard) => {
                 let start_pc = self.instrs.len();
-                self.compile_expr_guard(guard, "DO")?;
+                self.compile_expr_guard(guard)?;
                 let jump_pc = self.emit(Instruction::Nop);
                 self.compile_many(span.body)?;
                 end_pc = self.emit(Instruction::Jump(JumpISpan { addr: start_pc }));
@@ -615,14 +612,14 @@ impl Compiler {
             DoGuard::PostUntil(guard) => {
                 let start_pc = self.instrs.len();
                 self.compile_many(span.body)?;
-                self.compile_expr_guard(guard, "LOOP")?;
+                self.compile_expr_guard(guard)?;
                 end_pc = self.emit(Instruction::JumpIfNotTrue(start_pc));
             }
 
             DoGuard::PostWhile(guard) => {
                 let start_pc = self.instrs.len();
                 self.compile_many(span.body)?;
-                self.compile_expr_guard(guard, "LOOP")?;
+                self.compile_expr_guard(guard)?;
                 end_pc = self.emit(Instruction::JumpIfTrue(start_pc));
             }
         }
@@ -706,7 +703,7 @@ impl Compiler {
         while let Some(branch) = next {
             let next2 = iter.next();
 
-            self.compile_expr_guard(branch.guard, "IF/ELSEIF")?;
+            self.compile_expr_guard(branch.guard)?;
             let jump_pc = self.emit(Instruction::Nop);
             self.compile_many(branch.body)?;
 
@@ -813,7 +810,7 @@ impl Compiler {
                     self.compile_many(case.body)?;
                 }
                 Some(guard) => {
-                    self.compile_expr_guard(guard, "SELECT")?;
+                    self.compile_expr_guard(guard)?;
                     let jump_pc = self.emit(Instruction::Nop);
                     self.compile_many(case.body)?;
 
@@ -843,7 +840,7 @@ impl Compiler {
     /// Compiles a `WHILE` loop and appends its instructions to the compilation context.
     fn compile_while(&mut self, span: WhileSpan) -> Result<()> {
         let start_pc = self.instrs.len();
-        self.compile_expr_guard(span.expr, "WHILE")?;
+        self.compile_expr_guard(span.expr)?;
         let jump_pc = self.emit(Instruction::Nop);
 
         self.compile_many(span.body)?;
@@ -873,11 +870,11 @@ impl Compiler {
 
     /// Compiles an expression that guards a conditional statement.  Returns an error if the
     /// expression is invalid or if it does not evaluate to a boolean.
-    fn compile_expr_guard<S: Into<String>>(&mut self, guard: Expr, errmsg: S) -> Result<()> {
+    fn compile_expr_guard(&mut self, guard: Expr) -> Result<()> {
         let pos = guard.start_pos();
         match self.compile_expr(guard)? {
             ExprType::Boolean => Ok(()),
-            _ => Err(Error::NotABooleanCondition(pos, errmsg.into())),
+            etype => Err(Error::TypeMismatch(pos, etype, ExprType::Boolean)),
         }
     }
 
