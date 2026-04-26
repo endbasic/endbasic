@@ -418,6 +418,7 @@ async fn run_image(vm: &mut Vm, image: &Image) -> Result<i32, String> {
                 }
             }
             StopReason::Exception(pos, e) => return Err(format!("{}: {}", pos, e)),
+            StopReason::Yield => (),
         }
     }
 }

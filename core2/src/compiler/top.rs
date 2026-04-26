@@ -643,6 +643,7 @@ fn compile_for(ctx: &mut Context, symtable: &mut LocalSymtable<'_>, span: ForSpa
         compile_expr_as_type(&mut ctx.codegen, &mut frozen, reg, span.end, ExprType::Boolean)?;
         (ctx.codegen.emit(bytecode::make_nop(), cond_pos), reg, cond_pos)
     };
+    ctx.codegen.mark_statement_start(start_pc);
 
     ctx.for_exit_stack.push(vec![]);
 
@@ -1371,6 +1372,7 @@ mod tests {
             StopReason::Eof => {}
             StopReason::Exception(pos, msg) => panic!("exception at {pos}: {msg}"),
             StopReason::Upcall(_) => panic!("unexpected upcall"),
+            StopReason::Yield => unreachable!(),
         }
         let key = SymbolKey::from(name);
         vm.get_global(&image, &key).expect("get_global failed").expect("global not found")

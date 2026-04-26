@@ -95,6 +95,9 @@ pub enum StopReason<'a> {
 
     /// Execution stopped due to an upcall that requires service from the caller.
     Upcall(UpcallHandler<'a>),
+
+    /// Execution stopped to yield control back to the caller.
+    Yield,
 }
 
 /// Virtual machine for EndBASIC program execution.
@@ -407,6 +410,8 @@ impl Vm {
                     self.pending_upcall = Some((index, first_reg, upcall_pc));
                     return StopReason::Upcall(UpcallHandler { vm: self, image });
                 }
+
+                InternalStopReason::Yield => return StopReason::Yield,
             }
         }
     }
@@ -549,6 +554,7 @@ mod tests {
                 StopReason::Eof => break,
                 StopReason::Exception(_, msg) => panic!("Unexpected exception: {}", msg),
                 StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+                StopReason::Yield => (),
             }
         }
     }
@@ -741,6 +747,59 @@ mod tests {
         match vm.exec(&image) {
             StopReason::Exception(_, msg) => assert_eq!("mock I/O error", msg),
             _ => panic!("Execution should expose upcall I/O error as exception"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_exec_yields_on_backward_jump() {
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image = compiler.compile(&mut b"x = 0: DO: x = x + 1: LOOP".as_slice()).unwrap();
+        let mut vm = Vm::new(HashMap::default());
+
+        match vm.exec(&image) {
+            StopReason::Yield => (),
+            _ => panic!("Execution should yield in a loop"),
+        }
+        assert_eq!(
+            Some(ConstantDatum::Integer(1)),
+            vm.get_program(&image, &SymbolKey::from("x")).unwrap()
+        );
+
+        match vm.exec(&image) {
+            StopReason::Yield => (),
+            _ => panic!("Execution should continue yielding in a loop"),
+        }
+        assert_eq!(
+            Some(ConstantDatum::Integer(2)),
+            vm.get_program(&image, &SymbolKey::from("x")).unwrap()
+        );
+
+        vm.interrupt(&image);
+        match vm.exec(&image) {
+            StopReason::Eof => (),
+            _ => panic!("Execution should stop at EOF after interrupt"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_exec_yields_after_gosub_return() {
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image =
+            compiler.compile(&mut b"GOSUB @foo: END\n@foo: x = x + 1: RETURN".as_slice()).unwrap();
+        let mut vm = Vm::new(HashMap::default());
+
+        match vm.exec(&image) {
+            StopReason::Yield => (),
+            _ => panic!("Execution should yield after returning from GOSUB"),
+        }
+        assert_eq!(
+            Some(ConstantDatum::Integer(1)),
+            vm.get_program(&image, &SymbolKey::from("x")).unwrap()
+        );
+
+        match vm.exec(&image) {
+            StopReason::End(code) if code.is_success() => (),
+            _ => panic!("Execution should continue after yield"),
         }
     }
 
