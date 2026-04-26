@@ -1100,6 +1100,21 @@ f
 4:1: Cannot call F (not a function)
 ```
 
+# Test: Calling a scalar as a function is an error
+
+## Source
+
+```basic
+f = 1
+OUT f()
+```
+
+## Compilation errors
+
+```plain
+2:5: Cannot call f (not a function)
+```
+
 # Test: Calling an argless function with incompatible type annotation
 
 ## Source

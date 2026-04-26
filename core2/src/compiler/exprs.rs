@@ -653,7 +653,10 @@ pub(super) fn compile_expr(
                     Ok((arr_reg, SymbolPrototype::Array(info))) => compile_array_access(
                         codegen, symtable, reg, key_pos, arr_reg, &info, span.args,
                     ),
-                    Err(syms::Error::UndefinedSymbol(..)) | Ok((_, SymbolPrototype::Scalar(_))) => {
+                    Ok((_, SymbolPrototype::Scalar(_))) => {
+                        return Err(Error::NotAFunction(span.vref_pos, span.vref));
+                    }
+                    Err(syms::Error::UndefinedSymbol(..)) => {
                         return Err(Error::UndefinedSymbol(span.vref_pos, span.vref));
                     }
                     Err(e) => return Err(Error::from_syms(e, key_pos)),
