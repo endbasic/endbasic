@@ -186,12 +186,25 @@ impl Vm {
         }
     }
 
-    /// Resets any existing execution state.
+    /// Resets any existing execution state, including upcall caches and the program counter.
     pub fn reset(&mut self) {
         self.upcall_names.clear();
         self.upcalls.clear();
         self.heap.clear();
         self.context = Context::default();
+        self.last_error = None;
+        self.pending_exception = None;
+        self.pending_upcall = None;
+    }
+
+    /// Resets runtime state (registers, heap, last error, call stack, program counter) but preserves
+    /// upcall caches so the same image can continue to be executed.
+    ///
+    /// Note: because the program counter is also reset, callers need to either re-set it to a
+    /// specific location or replace the image with one that resumes from the start.
+    pub fn clear(&mut self) {
+        self.heap.clear();
+        self.context.clear_runtime_state();
         self.last_error = None;
         self.pending_exception = None;
         self.pending_upcall = None;
@@ -753,6 +766,51 @@ mod tests {
             _ => panic!("Execution should be parked at EOF after interruption"),
         }
         assert_eq!(["1"], *data.borrow().as_slice());
+    }
+
+    #[tokio::test]
+    async fn test_clear_resets_runtime_state() {
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image = compiler.compile(&mut b"x = 7".as_slice()).unwrap();
+        let mut vm = Vm::new(HashMap::default());
+        run_to_end(&mut vm, &image).await;
+
+        assert_eq!(
+            Some(ConstantDatum::Integer(7)),
+            vm.get_program(&image, &SymbolKey::from("x")).unwrap()
+        );
+
+        vm.clear();
+
+        assert_eq!(
+            Some(ConstantDatum::Integer(0)),
+            vm.get_program(&image, &SymbolKey::from("x")).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clear_preserves_upcall_caches() {
+        let data = Rc::from(RefCell::from(vec![]));
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("OUT"), OutCommand::new(data.clone()));
+
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"OUT 3".as_slice()).unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+
+        match vm.exec(&image) {
+            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+            _ => panic!("Execution should stop at first upcall"),
+        }
+        assert_eq!(["3"], *data.borrow().as_slice());
+
+        vm.clear();
+
+        match vm.exec(&image) {
+            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+            _ => panic!("Execution should still stop at upcall after clear"),
+        }
+        assert_eq!(["3", "3"], *data.borrow().as_slice());
     }
 
     #[tokio::test]
