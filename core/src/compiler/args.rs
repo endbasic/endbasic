@@ -343,7 +343,7 @@ fn compile_required_ref(
             match symtable.get(&key) {
                 None => {
                     if !define_undefined {
-                        return Err(Error::UndefinedSymbol(span.pos, key));
+                        return Err(Error::UndefinedSymbol(span.pos, span.vref));
                     }
                     debug_assert!(!require_array);
 
@@ -1216,7 +1216,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_error(Error::UndefinedSymbol(lc(1, 2), SymbolKey::from("foo")))
+            .exp_error(Error::UndefinedSymbol(lc(1, 2), VarRef::new("foo", None)))
             .check();
     }
 
@@ -1455,7 +1455,7 @@ mod compile_tests {
                 sep: ArgSep::End,
                 sep_pos: lc(1, 5),
             }])
-            .exp_error(Error::UndefinedSymbol(lc(1, 2), SymbolKey::from("foo")))
+            .exp_error(Error::UndefinedSymbol(lc(1, 2), VarRef::new("foo", None)))
             .check();
     }
 

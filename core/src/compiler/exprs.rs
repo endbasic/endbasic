@@ -346,7 +346,7 @@ fn compile_expr_symbol(
 ) -> Result<ExprType> {
     let key = SymbolKey::from(&span.vref.name);
     let (instr, vtype) = match symtable.get(&key) {
-        None => return Err(Error::UndefinedSymbol(span.pos, key)),
+        None => return Err(Error::UndefinedSymbol(span.pos, span.vref)),
 
         Some(SymbolPrototype::Array(atype, _dims)) => {
             if allow_varrefs {
@@ -410,7 +410,7 @@ fn compile_expr_symbol(
 
             let nargs = compile_function_args(md, instrs, fixups, symtable, span.pos, vec![])?;
             debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
-            fixups.insert(instrs.len(), Fixup::Call(key, span.pos));
+            fixups.insert(instrs.len(), Fixup::Call(span.vref.clone(), span.pos));
             (Instruction::Nop, etype)
         }
     };
@@ -751,7 +751,7 @@ pub(super) fn compile_expr(
                     let span_pos = span.vref_pos;
                     compile_function_args(md, instrs, fixups, symtable, span_pos, span.args)?;
                     instrs.push(Instruction::Nop);
-                    fixups.insert(instrs.len() - 1, Fixup::Call(key, span_pos));
+                    fixups.insert(instrs.len() - 1, Fixup::Call(span.vref.clone(), span_pos));
                     Ok(vtype)
                 }
 
@@ -759,7 +759,7 @@ pub(super) fn compile_expr(
                     Err(Error::NotArrayOrFunction(span.vref_pos, key))
                 }
 
-                None => Err(Error::UndefinedSymbol(span.vref_pos, key)),
+                None => Err(Error::UndefinedSymbol(span.vref_pos, span.vref)),
             }
         }
     }
@@ -1280,7 +1280,7 @@ mod tests {
 
     #[test]
     fn test_compile_expr_array_ref_not_defined() {
-        Tester::default().parse("i = a(4)").compile().expect_err("1:5: Undefined symbol A").check();
+        Tester::default().parse("i = a(4)").compile().expect_err("1:5: Undefined symbol a").check();
     }
 
     #[test]

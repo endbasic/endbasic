@@ -858,7 +858,7 @@ mod tests {
             "1:13: INPUT expected <vref> | <[prompt$] <,|;> vref>",
             "INPUT \"foo\" AS bar",
         );
-        check_stmt_err("1:7: Undefined symbol A", "INPUT a + 1 ; b");
+        check_stmt_err("1:7: Undefined symbol a", "INPUT a + 1 ; b");
         Tester::default()
             .run("a = 3: INPUT ; a + 1")
             .expect_compilation_err("1:16: Requires a reference, not a value")
