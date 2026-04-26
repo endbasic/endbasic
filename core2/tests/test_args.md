@@ -1093,6 +1093,31 @@ OUT SUM_TYPED_INTS(3, 2, 7)
 ## Source
 
 ```basic
+OUT SUM_MIXED(1.5)
+```
+
+## Disassembly
+
+```asm
+0000:   LOADC       R67, 0              ; 1:15
+0001:   UPCALL      0, R66              ; 1:5, SUM_MIXED
+0002:   MOVE        R65, R66            ; 1:5
+0003:   LOADI       R64, 257            ; 1:5
+0004:   UPCALL      1, R64              ; 1:1, OUT
+0005:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=1.5#
+```
+
+# Test: Mixed singular and repeated TypedValue args with repeated values
+
+## Source
+
+```basic
 OUT SUM_MIXED(1.5, 3, 2, 7)
 ```
 
