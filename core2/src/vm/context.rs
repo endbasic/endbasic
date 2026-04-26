@@ -44,6 +44,9 @@ pub(super) enum InternalStopReason {
     ///
     /// The fields are: upcall index, first argument register, and the PC of the UPCALL instruction.
     Upcall(u16, Register, Address),
+
+    /// Execution stopped to yield control back to the caller.
+    Yield,
 }
 
 /// Error handler configuration set by `ON ERROR`.
@@ -170,6 +173,9 @@ pub(super) struct Context {
 
     /// Stack of call frames for tracking subroutine and function calls.
     call_stack: Vec<Frame>,
+
+    /// Indicates whether execution should yield once we hit the next statement boundary.
+    yield_pending: bool,
 }
 
 impl Default for Context {
@@ -181,6 +187,7 @@ impl Default for Context {
             err_handler: ErrorHandler::None,
             regs: vec![0; usize::from(Register::MAX)],
             call_stack: vec![],
+            yield_pending: false,
         }
     }
 }
@@ -333,6 +340,7 @@ impl Context {
         self.stop = None;
         self.err_handler = ErrorHandler::None;
         self.call_stack.clear();
+        self.yield_pending = false;
     }
 
     /// Starts or resumes execution of `image`.
@@ -342,6 +350,12 @@ impl Context {
     /// (not stored bytecode) and that the compiler guarantees that the image is valid.
     pub(super) fn exec(&mut self, image: &Image, heap: &mut Vec<HeapDatum>) -> InternalStopReason {
         while self.stop.is_none() {
+            if self.yield_pending && image.debug_info.instrs[self.pc].is_stmt_start {
+                self.yield_pending = false;
+                self.stop = Some(InternalStopReason::Yield);
+                continue;
+            }
+
             let instr = image.code[self.pc];
 
             match opcode_of(instr) {
@@ -776,8 +790,12 @@ impl Context {
 
     /// Implements the `Jump` opcode.
     pub(super) fn do_jump(&mut self, instr: u32) {
+        let old_pc = self.pc;
         let offset = bytecode::parse_jump(instr);
         self.pc = Address::from(offset);
+        if self.pc <= old_pc {
+            self.yield_pending = true;
+        }
     }
 
     /// Implements the `JumpIfFalse` opcode.
@@ -786,7 +804,11 @@ impl Context {
         if self.get_reg(cond_reg) != 0 {
             self.pc += 1;
         } else {
+            let old_pc = self.pc;
             self.pc = Address::from(target);
+            if self.pc <= old_pc {
+                self.yield_pending = true;
+            }
         }
     }
 
@@ -1007,6 +1029,7 @@ impl Context {
         } else {
             self.pc = frame.old_pc + 1;
             self.fp = frame.old_fp;
+            self.yield_pending = true;
         }
     }
 

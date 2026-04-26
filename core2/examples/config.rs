@@ -97,6 +97,8 @@ fn main() {
             eprintln!("Unexpected upcall (no upcalls are registered)");
             std::process::exit(1);
         }
+
+        StopReason::Yield => unreachable!(),
     }
 
     // Query the global variables by key.
