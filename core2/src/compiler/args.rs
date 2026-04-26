@@ -391,7 +391,9 @@ pub(super) fn compile_args(
                 validate_syn_argsep(&md, &syn.sep, true, arg_iter.peek().is_none(), sep, sep_pos)?;
 
                 match expr {
-                    None => unreachable!("allow_missing is false when using plain values"),
+                    None => {
+                        return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
+                    }
                     Some(expr) => {
                         let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
                         arg_linecols.push(arg_pos);
