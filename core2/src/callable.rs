@@ -501,12 +501,12 @@ impl CallableMetadata {
     }
 
     /// Gets the callable's return type.
-    pub(crate) fn return_type(&self) -> Option<ExprType> {
+    pub fn return_type(&self) -> Option<ExprType> {
         self.return_type
     }
 
     /// Gets the callable's syntax specification.
-    pub(crate) fn syntax(&self) -> String {
+    pub fn syntax(&self) -> String {
         fn format_one(cs: &CallableSyntax) -> String {
             let mut syntax = cs.describe();
             if syntax.is_empty() {
@@ -587,20 +587,20 @@ impl CallableMetadata {
     /// Gets the callable's category as a collection of lines.  The first line is the title of the
     /// category, and any extra lines are additional information for it.
     #[allow(unused)]
-    pub(crate) fn category(&self) -> &'static str {
+    pub fn category(&self) -> &'static str {
         self.category
     }
 
     /// Gets the callable's textual description as a collection of lines.  The first line is the
     /// summary of the callable's purpose.
     #[allow(unused)]
-    pub(crate) fn description(&self) -> Lines<'static> {
+    pub fn description(&self) -> Lines<'static> {
         self.description.lines()
     }
 
     /// Returns true if this is a callable that takes no arguments.
     #[allow(unused)]
-    pub(crate) fn is_argless(&self) -> bool {
+    pub fn is_argless(&self) -> bool {
         self.syntaxes.is_empty() || (self.syntaxes.len() == 1 && self.syntaxes[0].is_empty())
     }
 

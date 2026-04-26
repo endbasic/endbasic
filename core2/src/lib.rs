@@ -31,9 +31,12 @@ mod vm;
 pub use ast::{ArgSep, ExprType};
 pub use bytecode::{ExitCode, InvalidExitCodeError, VarArgTag};
 pub use callable::*;
-pub use compiler::{Compiler, GlobalDef, GlobalDefKind, SymbolKey, only_metadata};
+pub use compiler::{
+    Compiler, Error as CompilerError, GlobalDef, GlobalDefKind, SymbolKey, only_metadata,
+};
 pub use image::Image;
 pub use mem::ConstantDatum;
+pub use reader::LineCol;
 pub use vm::{GetGlobalError, GetGlobalResult, StopReason, Vm};
 
 #[cfg(test)]
