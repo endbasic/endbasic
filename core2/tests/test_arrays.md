@@ -403,7 +403,7 @@ OUT a(1)
 ## Compilation errors
 
 ```plain
-2:5: Undefined symbol a
+2:5: Cannot call a (not a function)
 ```
 
 # Test: Array dimension too large

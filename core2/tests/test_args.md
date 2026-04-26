@@ -567,6 +567,23 @@ OUT i
 1:24: Undefined symbol i
 ```
 
+# Test: Singular required reference, callable name as output
+
+## Source
+
+```basic
+DEFINE_ARG OUT
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R64, 0              ; 1:12
+0001:   LOADRP      R65, INTEGER, R64   ; 1:12
+0002:   UPCALL      0, R65              ; 1:1, DEFINE_ARG
+0003:   EOF                             ; 0:0
+```
+
 # Test: Singular required reference, define output variable with default type
 
 ## Source
