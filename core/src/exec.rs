@@ -2373,7 +2373,7 @@ mod tests {
 
     #[test]
     fn test_do_errors() {
-        do_simple_error_test("DO WHILE 2\nLOOP", "1:10: DO requires a boolean condition");
+        do_simple_error_test("DO WHILE 2\nLOOP", "1:10: Expected BOOLEAN but found INTEGER");
     }
 
     #[test]
@@ -2552,7 +2552,7 @@ mod tests {
                 OUT "no match"
             END IF
         "#;
-        do_error_test(code, &["5"], &[], "5:20: IF/ELSEIF requires a boolean condition");
+        do_error_test(code, &["5"], &[], "5:20: Expected BOOLEAN but found STRING");
     }
 
     #[test]
@@ -2565,10 +2565,10 @@ mod tests {
         do_simple_error_test("IF TRUE\nEND IF\nOUT 3", "1:8: No THEN in IF statement");
 
         do_simple_error_test("IF 2\nEND IF", "1:5: No THEN in IF statement");
-        do_simple_error_test("IF 2 THEN\nEND IF", "1:4: IF/ELSEIF requires a boolean condition");
+        do_simple_error_test("IF 2 THEN\nEND IF", "1:4: Expected BOOLEAN but found INTEGER");
         do_simple_error_test(
             "IF FALSE THEN\nELSEIF 2 THEN\nEND IF",
-            "2:8: IF/ELSEIF requires a boolean condition",
+            "2:8: Expected BOOLEAN but found INTEGER",
         );
     }
 
@@ -3223,7 +3223,7 @@ mod tests {
         do_simple_error_test("\n\n\nWHILE 2\n", "4:1: WHILE without WEND");
         do_simple_error_test("WHILE 3\nEND", "1:1: WHILE without WEND");
         do_simple_error_test("WHILE 3\nEND IF", "2:1: END IF without IF");
-        do_simple_error_test("WHILE 2\nWEND", "1:7: WHILE requires a boolean condition");
+        do_simple_error_test("WHILE 2\nWEND", "1:7: Expected BOOLEAN but found INTEGER");
     }
 
     #[test]
