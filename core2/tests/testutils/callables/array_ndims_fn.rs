@@ -58,7 +58,6 @@ impl Callable for ArrayNdimsFunction {
             let typed_ptr = scope.get_ref(0);
             typed_ptr.array_dimensions().len() as i32
         };
-        scope.return_integer(ndims);
-        Ok(())
+        scope.return_integer(ndims)
     }
 }

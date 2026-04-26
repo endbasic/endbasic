@@ -63,7 +63,6 @@ impl Callable for SumTypedIntegersFunction {
             total += scope.get_integer(reg as u8);
             reg += 1;
         }
-        scope.return_integer(total);
-        Ok(())
+        scope.return_integer(total)
     }
 }

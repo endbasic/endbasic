@@ -74,7 +74,6 @@ impl Callable for ConcatFunction {
                 break;
             }
         }
-        scope.return_string(result);
-        Ok(())
+        scope.return_string(result)
     }
 }

@@ -75,7 +75,6 @@ impl Callable for SumDoublesFunction {
                 break;
             }
         }
-        scope.return_double(total);
-        Ok(())
+        scope.return_double(total)
     }
 }
