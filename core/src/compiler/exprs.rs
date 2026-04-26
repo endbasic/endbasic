@@ -85,7 +85,7 @@ fn compile_not_op(
             instrs.push(Instruction::BitwiseNot(span.pos));
             Ok(ExprType::Integer)
         }
-        _ => Err(Error::UnaryOpTypeError(span.pos, "NOT", expr_type)),
+        _ => Err(Error::TypeMismatch(span.pos, expr_type, ExprType::Integer)),
     }
 }
 
@@ -266,24 +266,16 @@ fn compile_shift_binary_op<F: Fn(LineCol) -> Instruction>(
     op_name: &'static str,
 ) -> Result<ExprType> {
     let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
-    match lhs_type {
-        ExprType::Integer => (),
-        _ => {
-            return Err(Error::UnaryOpTypeError(span.pos, op_name, lhs_type));
-        }
-    };
-
     let rhs_type = compile_expr(instrs, fixups, symtable, span.rhs, false)?;
-    match rhs_type {
-        ExprType::Integer => (),
-        _ => {
-            return Err(Error::TypeMismatch(span.pos, rhs_type, ExprType::Integer));
+    match (lhs_type, rhs_type) {
+        (ExprType::Integer, ExprType::Integer) => {
+            instrs.push(make_inst(span.pos));
+            Ok(ExprType::Integer)
         }
-    };
-
-    instrs.push(make_inst(span.pos));
-
-    Ok(ExprType::Integer)
+        (lhs_type, rhs_type) => {
+            Err(Error::BinaryOpTypeError(span.pos, op_name, lhs_type, rhs_type))
+        }
+    }
 }
 
 /// Compiles the evaluation of an expression, appends its instructions to the

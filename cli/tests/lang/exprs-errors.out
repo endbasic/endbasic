@@ -10,7 +10,7 @@ ERROR: 1:7: Undefined symbol X
 ERROR: 1:13: Cannot AND BOOLEAN and INTEGER
 ERROR: 1:13: Cannot OR BOOLEAN and INTEGER
 ERROR: 1:13: Cannot XOR BOOLEAN and INTEGER
-ERROR: 1:7: Cannot NOT DOUBLE
+ERROR: 1:7: Expected INTEGER but found DOUBLE
 >>> Relational operations
 ERROR: 1:13: Cannot = BOOLEAN and INTEGER
 ERROR: 1:13: Cannot <> BOOLEAN and INTEGER

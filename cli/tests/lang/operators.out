@@ -42,7 +42,7 @@ ERROR: 1:11: Cannot OR DOUBLE and DOUBLE
 ERROR: 1:11: Cannot XOR DOUBLE and DOUBLE
 >>> Test bitwise NOT
 -1
-ERROR: 1:7: Cannot NOT DOUBLE
+ERROR: 1:7: Expected INTEGER but found DOUBLE
 >>> Test bitwise shift left
  12
 -268435456
@@ -52,12 +52,12 @@ ERROR: 1:7: Cannot NOT DOUBLE
  0
  0
  0
-ERROR: 1:13: Cannot << BOOLEAN
-ERROR: 1:13: Cannot << BOOLEAN
-ERROR: 1:11: Cannot << DOUBLE
-ERROR: 1:13: Cannot << STRING
-ERROR: 1:9: Expected INTEGER but found BOOLEAN
-ERROR: 1:9: Expected INTEGER but found DOUBLE
+ERROR: 1:13: Cannot << BOOLEAN and BOOLEAN
+ERROR: 1:13: Cannot << BOOLEAN and INTEGER
+ERROR: 1:11: Cannot << DOUBLE and INTEGER
+ERROR: 1:13: Cannot << STRING and INTEGER
+ERROR: 1:9: Cannot << INTEGER and BOOLEAN
+ERROR: 1:9: Cannot << INTEGER and DOUBLE
 ERROR: 1:9: Number of bits to << (-1) must be positive
 >>> Test bitwise shift right
  3
@@ -72,12 +72,12 @@ ERROR: 1:9: Number of bits to << (-1) must be positive
  0
 -1
 -1
-ERROR: 1:13: Cannot >> BOOLEAN
-ERROR: 1:13: Cannot >> BOOLEAN
-ERROR: 1:11: Cannot >> DOUBLE
-ERROR: 1:13: Cannot >> STRING
-ERROR: 1:9: Expected INTEGER but found BOOLEAN
-ERROR: 1:9: Expected INTEGER but found DOUBLE
+ERROR: 1:13: Cannot >> BOOLEAN and BOOLEAN
+ERROR: 1:13: Cannot >> BOOLEAN and INTEGER
+ERROR: 1:11: Cannot >> DOUBLE and INTEGER
+ERROR: 1:13: Cannot >> STRING and INTEGER
+ERROR: 1:9: Cannot >> INTEGER and BOOLEAN
+ERROR: 1:9: Cannot >> INTEGER and DOUBLE
 ERROR: 1:9: Number of bits to >> (-1) must be positive
 >>> Test = types
 TRUE
