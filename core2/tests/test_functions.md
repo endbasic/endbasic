@@ -1100,6 +1100,34 @@ f
 4:1: Cannot call F (not a function)
 ```
 
+# Test: Calling an argless function with incompatible type annotation
+
+## Source
+
+```basic
+OUT MEANING_OF_LIFE$
+```
+
+## Compilation errors
+
+```plain
+1:5: Incompatible type annotation in MEANING_OF_LIFE$ reference
+```
+
+# Test: Calling a function with incompatible type annotation
+
+## Source
+
+```basic
+OUT SUM_DOUBLES$(1.0, 2.0)
+```
+
+## Compilation errors
+
+```plain
+1:5: Incompatible type annotation in SUM_DOUBLES$ reference
+```
+
 # Test: Calling an argless function upcall as a command is an error
 
 ## Source
