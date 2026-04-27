@@ -148,6 +148,38 @@ pub enum Error {
 }
 
 impl Error {
+    /// Splits a textual error message into its source position and message.
+    ///
+    /// TODO(jmmv): This is a hack to support the current needs of std and allow migrating its
+    /// code to this new implementation.  Once migrated, revisit this.
+    fn split_display_message(&self) -> (LineCol, String) {
+        let display = self.to_string();
+        let mut parts = display.splitn(3, ':');
+        let line = parts
+            .next()
+            .expect("CompilerError display always has line")
+            .parse()
+            .expect("CompilerError line is always numeric");
+        let col = parts
+            .next()
+            .expect("CompilerError display always has column")
+            .parse()
+            .expect("CompilerError column is always numeric");
+        let message =
+            parts.next().expect("CompilerError display always has message").trim_start().to_owned();
+        (LineCol { line, col }, message)
+    }
+
+    /// Returns the source position where this compilation error happened.
+    pub fn pos(&self) -> LineCol {
+        self.split_display_message().0
+    }
+
+    /// Returns this error's message without the source position prefix.
+    pub fn message_without_pos(&self) -> String {
+        self.split_display_message().1
+    }
+
     /// Annotates an invalid `END` exit code error with a source position.
     fn from_bytecode_invalid_exit_code(value: InvalidExitCodeError, pos: LineCol) -> Self {
         Self::InvalidEndCode(pos, value.to_string())
@@ -229,5 +261,27 @@ impl Compiler {
         self.symtable = new_symtable;
         self.program_scope = snapshot;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_pos_and_message_without_pos() {
+        let err = Error::Parse(LineCol { line: 3, col: 15 }, "Invalid token".to_owned());
+
+        assert_eq!(LineCol { line: 3, col: 15 }, err.pos());
+        assert_eq!("Invalid token", err.message_without_pos());
+    }
+
+    #[test]
+    fn test_error_message_without_pos_preserves_colons() {
+        let err =
+            Error::Parse(LineCol { line: 4, col: 9 }, "Expected INTEGER: got STRING".to_owned());
+
+        assert_eq!(LineCol { line: 4, col: 9 }, err.pos());
+        assert_eq!("Expected INTEGER: got STRING", err.message_without_pos());
     }
 }
