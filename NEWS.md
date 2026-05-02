@@ -14,7 +14,8 @@ for the time being.**
 
 STILL UNDER DEVELOPMENT; NOT RELEASED YET.
 
-*   No changes recorded.
+*   Issue #278: Added a `Cargo.lock` file and pinned the Rust version to allow
+    for reproducible builds.
 
 ## Changes in version 0.12.0
 
