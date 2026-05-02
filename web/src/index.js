@@ -28,9 +28,17 @@ var isAndroid = /\bAndroid\b/i.test(UA);
 var buildId = endbasic_web.get_build_id();
 $('#build-id').text(buildId);
 
+function addIssueBodyTemplate(url, template) {
+    if (url.indexOf("?") == -1) {
+        return url + "?body=" + encodeURIComponent(template);
+    }
+    return url + "&body=" + encodeURIComponent(template);
+}
+
 var template = "Build ID: " + buildId;
-$('#report-issue').attr(
-    "href", "https://github.com/endbasic/endbasic/issues/new?body=" + template);
+$('#source-code').attr("href", __SOURCE_CODE_URL__);
+$('#license').attr("href", __LICENSE_URL__);
+$('#report-issue').attr("href", addIssueBodyTemplate(__ISSUES_URL__, template));
 
 let terminal = document.getElementById('terminal');
 

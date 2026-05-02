@@ -9,14 +9,33 @@ function getServiceUrl() {
     var node_env = process.env.NODE_ENV;
     switch (node_env) {
         case "prod":
-            return "'https://service.endbasic.dev/'";
+            return "https://service.endbasic.dev/";
         case "staging":
-            return "'https://service-staging.endbasic.dev/'";
+            return "https://service-staging.endbasic.dev/";
         case "local":
-            return "'http://localhost:7071/'";
+            return "http://localhost:7071/";
         default:
             throw new Error("Invalid NODE_ENV VALUE: " + node_env);
     }
+}
+
+function getStringEnvVar(name, fallback) {
+    if (process.env[name]) {
+        return process.env[name];
+    }
+    return fallback;
+}
+
+function getSourceCodeUrl() {
+    return getStringEnvVar("SOURCE_CODE_URL", "https://github.com/endbasic/endbasic");
+}
+
+function getLicenseUrl() {
+    return getStringEnvVar("LICENSE_URL", "https://www.gnu.org/licenses/agpl-3.0.html");
+}
+
+function getIssuesUrl() {
+    return getStringEnvVar("ISSUES_URL", "https://github.com/endbasic/endbasic/issues/new");
 }
 
 module.exports = {
@@ -68,7 +87,10 @@ module.exports = {
         }),
 
         new DefinePlugin({
-            __SERVICE_URL__: getServiceUrl()
+            __SERVICE_URL__: JSON.stringify(getServiceUrl()),
+            __SOURCE_CODE_URL__: JSON.stringify(getSourceCodeUrl()),
+            __LICENSE_URL__: JSON.stringify(getLicenseUrl()),
+            __ISSUES_URL__: JSON.stringify(getIssuesUrl())
         })
     ],
 };

@@ -28,3 +28,14 @@ a minimal web interface to it.
 Visit the following address for a live deployment of the EndBASIC interpreter!
 
 > https://repl.endbasic.dev/
+
+## AGPLv3 deployment metadata
+
+When producing a web build, you can customize the compliance and support links
+embedded in the footer:
+
+* `SOURCE_CODE_URL`: URL where users can fetch corresponding source code.
+* `LICENSE_URL`: URL to the license text presented to users.
+* `ISSUES_URL`: URL where users can report issues.
+
+These are optional and default to the upstream EndBASIC URLs.
