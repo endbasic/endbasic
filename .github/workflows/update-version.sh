@@ -63,7 +63,7 @@ main() {
         replace README.md -E "/releases\/tag/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
         replace README.md -E "/released on/s/[0-9]{4}-[0-9]{2}-[0-9]{2}/${date}/g"
 
-        replace NEWS.md -E "/Changes in.*X\\.Y\\.Z/s/[X0-9]+\\.[Y0-9]+\\.[Z0-9]+/${version}/g"
+        replace NEWS.md -E "/Changes in.*[0-9]+\\.[0-9]+\\.99/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
         replace NEWS.md -E "/STILL UNDER DEVELOPMENT/s/^.*$/**Released on ${date}.**/g"
 
         replace .github/workflows/deploy-release.yml \

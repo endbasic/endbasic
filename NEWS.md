@@ -10,9 +10,9 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
-## Changes in version 0.11.99
+## Changes in version 0.12.0
 
-STILL UNDER DEVELOPMENT; NOT RELEASED YET.
+**Released on 2026-05-02.**
 
 *   Cleaned up internal error handling, which changes how errors returned from
     commands and functions are displayed to the user.
