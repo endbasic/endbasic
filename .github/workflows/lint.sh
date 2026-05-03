@@ -24,6 +24,7 @@ check_do_not_submit() {
         [ "${f}" != . ] || continue
         [ "${f}" != .. ] || continue
         [ "${f}" != .git ] || continue
+        [ "${f}" != target ] || continue
 
         if grep -R '[D]O NOT SUBMIT' "${f}"; then
             echo "Submit blocked by" "DO" "NOT" "SUBMIT" 1>&2
