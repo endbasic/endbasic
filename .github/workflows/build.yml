@@ -107,22 +107,12 @@ jobs:
                 linux-armv7-rpi linux-x86_64-sdl macos-arm64-sdl windows-x86_64-sdl
                 >>"$GITHUB_OUTPUT"
             - name: Create release draft
-              id: create_release
-              uses: ncipollo/release-action@v1
-              with:
-                  name: Release ${{ github.ref }}
-                  bodyFile: ./notes.md
-                  draft: true
-                  prerelease: false
-                  token: ${{ secrets.GITHUB_TOKEN }}
-            - name: Upload zip artifacts
-              id: upload_zips
               uses: ncipollo/release-action@v1
               with:
                   allowUpdates: true
-                  omitBody: true
-                  omitName: true
                   replacesArtifacts: false
+                  name: Release ${{ github.ref }}
+                  bodyFile: ./notes.md
                   draft: true
                   prerelease: false
                   artifacts: ${{ steps.assets.outputs.artifacts }}
