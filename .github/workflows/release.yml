@@ -24,16 +24,24 @@ on:
 jobs:
     cargo-package:
         runs-on: ubuntu-latest
+        env:
+            RUSTC_WRAPPER: "sccache"
+            SCCACHE_GHA_ENABLED: "true"
         steps:
             - uses: actions/checkout@v6
+            - uses: mozilla-actions/sccache-action@v0.0.10
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: ./.github/workflows/package.sh
 
     cargo-install:
         runs-on: ubuntu-latest
+        env:
+            RUSTC_WRAPPER: "sccache"
+            SCCACHE_GHA_ENABLED: "true"
         steps:
             - uses: actions/checkout@v6
+            - uses: mozilla-actions/sccache-action@v0.0.10
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: ./.github/workflows/install.sh
