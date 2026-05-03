@@ -12,7 +12,7 @@ for the time being.**
 
 ## Changes in version 0.12.1
 
-STILL UNDER DEVELOPMENT; NOT RELEASED YET.
+**Released on 2026-05-03.**
 
 *   Issue #278: Added a `Cargo.lock` file and pinned the Rust version to allow
     for reproducible builds.
