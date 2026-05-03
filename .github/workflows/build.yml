@@ -100,6 +100,12 @@ jobs:
               uses: actions/download-artifact@v8
               with:
                 path: artifacts
+            - name: Collect release assets
+              id: assets
+              run: >
+                ./.github/workflows/release-assets.sh
+                linux-armv7-rpi linux-x86_64-sdl macos-arm64-sdl windows-x86_64-sdl
+                >>"$GITHUB_OUTPUT"
             - name: Create release draft
               id: create_release
               uses: ncipollo/release-action@v1
@@ -119,6 +125,6 @@ jobs:
                   replacesArtifacts: false
                   draft: true
                   prerelease: false
-                  artifacts: "artifacts/*/*.zip"
+                  artifacts: ${{ steps.assets.outputs.artifacts }}
                   artifactContentType: application/zip
                   token: ${{ secrets.GITHUB_TOKEN }}
