@@ -20,8 +20,12 @@ on: push
 jobs:
     lint:
         runs-on: ubuntu-latest
+        env:
+            RUSTC_WRAPPER: "sccache"
+            SCCACHE_GHA_ENABLED: "true"
         steps:
             - uses: actions/checkout@v6
+            - uses: mozilla-actions/sccache-action@v0.0.10
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: rustup component add clippy rustfmt
@@ -30,6 +34,8 @@ jobs:
     linux-test:
         runs-on: ubuntu-latest
         env:
+            RUSTC_WRAPPER: "sccache"
+            SCCACHE_GHA_ENABLED: "true"
             SERVICE_URL: ${{ secrets.SERVICE_URL }}
             TEST_ACCOUNT_1_USERNAME: ${{ secrets.TEST_ACCOUNT_1_USERNAME }}
             TEST_ACCOUNT_1_PASSWORD: ${{ secrets.TEST_ACCOUNT_1_PASSWORD }}
@@ -37,6 +43,7 @@ jobs:
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v6
+            - uses: mozilla-actions/sccache-action@v0.0.10
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
             - run: cargo test --package='*' --features=sdl
@@ -45,6 +52,8 @@ jobs:
     macos-test:
         runs-on: macos-latest
         env:
+            RUSTC_WRAPPER: "sccache"
+            SCCACHE_GHA_ENABLED: "true"
             SERVICE_URL: ${{ secrets.SERVICE_URL }}
             TEST_ACCOUNT_1_USERNAME: ${{ secrets.TEST_ACCOUNT_1_USERNAME }}
             TEST_ACCOUNT_1_PASSWORD: ${{ secrets.TEST_ACCOUNT_1_PASSWORD }}
@@ -52,6 +61,7 @@ jobs:
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v6
+            - uses: mozilla-actions/sccache-action@v0.0.10
             - run: brew install sdl2 sdl2_ttf
             - run: cargo test --package=endbasic-client -- --include-ignored
             - run: cargo test --package=endbasic-core -- --include-ignored
@@ -69,6 +79,8 @@ jobs:
     windows-test:
         runs-on: windows-latest
         env:
+            RUSTC_WRAPPER: "sccache"
+            SCCACHE_GHA_ENABLED: "true"
             SERVICE_URL: ${{ secrets.SERVICE_URL }}
             TEST_ACCOUNT_1_USERNAME: ${{ secrets.TEST_ACCOUNT_1_USERNAME }}
             TEST_ACCOUNT_1_PASSWORD: ${{ secrets.TEST_ACCOUNT_1_PASSWORD }}
@@ -76,6 +88,7 @@ jobs:
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v6
+            - uses: mozilla-actions/sccache-action@v0.0.10
             - run: choco install --allow-empty-checksums unzip
             - run: ./.github/workflows/setup-sdl.ps1
             - run: cargo test --package=endbasic-client -- --include-ignored
@@ -91,6 +104,10 @@ jobs:
 
     linux-test-no-features:
         runs-on: ubuntu-latest
+        env:
+            RUSTC_WRAPPER: "sccache"
+            SCCACHE_GHA_ENABLED: "true"
         steps:
             - uses: actions/checkout@v6
+            - uses: mozilla-actions/sccache-action@v0.0.10
             - run: cd std && cargo build --no-default-features
