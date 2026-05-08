@@ -20,11 +20,10 @@ use crate::host::{self, Request, Response};
 use async_channel::Sender;
 use async_trait::async_trait;
 use endbasic_std::Signal;
-use endbasic_std::console::{
-    CharsXY, ClearType, Console, Key, PixelsXY, Resolution, SizeInPixels, remove_control_chars,
-};
+use endbasic_std::console::graphics::InputOps;
+use endbasic_std::console::{Key, RGB, Resolution};
+use endbasic_std::gfx::lcd::{AsByteSlice, Lcd, LcdSize, LcdXY};
 use std::io;
-use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
 use std::thread::{self, JoinHandle};
 
@@ -36,59 +35,35 @@ pub(crate) struct SdlConsole {
     handle: Option<JoinHandle<()>>,
     request_tx: SyncSender<Request>,
     response_rx: Receiver<Response>,
-    on_key_rx: Receiver<Key>,
-    fg_color: Option<u8>,
-    bg_color: Option<u8>,
-    alt_backup: Option<(Option<u8>, Option<u8>)>,
+    info: (LcdSize, usize),
 }
 
 impl SdlConsole {
     /// Initializes a new SDL console.
     ///
-    /// The console is sized to `resolution` pixels and its default colors are set to
-    /// `default_fg_color` and `default_bg_color`.  Also loads the desired font from `font_path` at
-    /// `font_size` and uses it to calculate the size of the console in characters.
+    /// The console is sized to `resolution` pixels.  Uses `glyph_size` to calculate the size of the
+    /// console in characters.
     ///
     /// There can only be one active `SdlConsole` at any given time given that this initializes and
     /// owns the SDL context.
     pub(crate) fn new(
         resolution: Resolution,
-        default_fg_color: Option<u8>,
-        default_bg_color: Option<u8>,
-        font_path: PathBuf,
-        font_size: u16,
+        glyph_size: LcdSize,
         signals_tx: Sender<Signal>,
-    ) -> io::Result<Self> {
+    ) -> io::Result<(Self, Receiver<Key>)> {
         let (request_tx, request_rx) = mpsc::sync_channel(1);
         let (response_tx, response_rx) = mpsc::sync_channel(1);
         let (on_key_tx, on_key_rx) = mpsc::channel();
         let handle = thread::spawn(move || {
-            host::run(
-                resolution,
-                default_fg_color,
-                default_bg_color,
-                font_path,
-                font_size,
-                request_rx,
-                response_tx,
-                on_key_tx,
-                signals_tx,
-            );
+            host::run(resolution, glyph_size, request_rx, response_tx, on_key_tx, signals_tx);
         });
 
         // Wait for the console to be up and running.  We must do this for error propagation but
         // also to ensure that the caller can free up the local temporary font resources, if any.
         match response_rx.recv().expect("Channel must be alive") {
-            Response::Empty(Ok(())) => Ok(Self {
-                handle: Some(handle),
-                request_tx,
-                response_rx,
-                on_key_rx,
-                fg_color: None,
-                bg_color: None,
-                alt_backup: None,
-            }),
-            Response::Empty(Err(e)) => Err(e),
+            Response::Info(info) => {
+                Ok((Self { handle: Some(handle), request_tx, response_rx, info }, on_key_rx))
+            }
             r => panic!("Unexpected response {:?}", r),
         }
     }
@@ -116,144 +91,51 @@ impl Drop for SdlConsole {
     }
 }
 
+/// Number of bytes per pixel as supported by this implementation.
+pub(super) const PIXEL_BYTES: usize = 4;
+
+/// Data for one pixel encoded as RGB888 with an alpha channel.
+#[derive(Clone, Copy)]
+pub(super) struct SdlPixel(pub [u8; PIXEL_BYTES]);
+
+impl AsByteSlice for SdlPixel {
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl Lcd for SdlConsole {
+    type Pixel = SdlPixel;
+
+    fn encode(&self, rgb: RGB) -> Self::Pixel {
+        SdlPixel([rgb.0, rgb.1, rgb.2, 255])
+    }
+
+    fn info(&self) -> (LcdSize, usize) {
+        self.info
+    }
+
+    fn set_data(&mut self, x1y1: LcdXY, x2y2: LcdXY, data: &[u8]) -> io::Result<()> {
+        self.call(Request::SetData(x1y1, x2y2, data.to_vec()))
+    }
+}
+
+pub(crate) struct SdlInput(pub(crate) Receiver<Key>);
+
 #[async_trait(?Send)]
-impl Console for SdlConsole {
-    fn clear(&mut self, how: ClearType) -> io::Result<()> {
-        self.call(Request::Clear(how))
-    }
-
-    fn color(&self) -> (Option<u8>, Option<u8>) {
-        (self.fg_color, self.bg_color)
-    }
-
-    fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()> {
-        self.call(Request::SetColor(fg, bg))?;
-        self.fg_color = fg;
-        self.bg_color = bg;
-        Ok(())
-    }
-
-    fn enter_alt(&mut self) -> io::Result<()> {
-        if self.alt_backup.is_some() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Cannot nest alternate screens",
-            ));
-        }
-
-        self.alt_backup = Some((self.fg_color, self.bg_color));
-
-        self.call(Request::EnterAlt)
-    }
-
-    fn hide_cursor(&mut self) -> io::Result<()> {
-        self.call(Request::HideCursor)
-    }
-
-    fn is_interactive(&self) -> bool {
-        true
-    }
-
-    fn leave_alt(&mut self) -> io::Result<()> {
-        let alt_backup = match self.alt_backup.take() {
-            Some(t) => t,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Cannot leave alternate screen; not entered",
-                ));
-            }
-        };
-
-        self.call(Request::LeaveAlt)?;
-
-        (self.fg_color, self.bg_color) = alt_backup;
-        Ok(())
-    }
-
-    fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
-        self.call(Request::Locate(pos))
-    }
-
-    fn move_within_line(&mut self, off: i16) -> io::Result<()> {
-        self.call(Request::MoveWithinLine(off))
-    }
-
-    fn print(&mut self, text: &str) -> io::Result<()> {
-        let text = remove_control_chars(text);
-        self.call(Request::Print(text))
-    }
-
+impl InputOps for SdlInput {
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
-        match self.on_key_rx.try_recv() {
+        match self.0.try_recv() {
             Ok(k) => Ok(Some(k)),
             Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Disconnected) => panic!("Channel must be alive"),
+            Err(TryRecvError::Disconnected) => Ok(Some(Key::Eof)),
         }
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
-        Ok(self.on_key_rx.recv().expect("Channel must be alive"))
-    }
-
-    fn show_cursor(&mut self) -> io::Result<()> {
-        self.call(Request::ShowCursor)
-    }
-
-    fn size_chars(&self) -> io::Result<CharsXY> {
-        self.request_tx.send(Request::SizeChars).expect("Channel must be alive");
-        match self.response_rx.recv().expect("Channel must be alive") {
-            Response::SizeChars(size) => Ok(size),
-            _ => panic!("Unexpected response type"),
-        }
-    }
-
-    fn size_pixels(&self) -> io::Result<SizeInPixels> {
-        self.request_tx.send(Request::SizePixels).expect("Channel must be alive");
-        match self.response_rx.recv().expect("Channel must be alive") {
-            Response::SizePixels(size) => Ok(size),
-            _ => panic!("Unexpected response type"),
-        }
-    }
-
-    fn write(&mut self, text: &str) -> io::Result<()> {
-        let text = remove_control_chars(text);
-        self.call(Request::Write(text))
-    }
-
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        self.call(Request::DrawCircle(center, radius))
-    }
-
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        self.call(Request::DrawCircleFilled(center, radius))
-    }
-
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        self.call(Request::DrawLine(x1y1, x2y2))
-    }
-
-    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
-        self.call(Request::DrawPixel(xy))
-    }
-
-    fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        self.call(Request::DrawRect(x1y1, x2y2))
-    }
-
-    fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        self.call(Request::DrawRectFilled(x1y1, x2y2))
-    }
-
-    fn sync_now(&mut self) -> io::Result<()> {
-        self.call(Request::SyncNow)
-    }
-
-    fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {
-        self.request_tx.send(Request::SetSync(enabled)).expect("Channel must be alive");
-        match self.response_rx.recv().expect("Channel must be alive") {
-            Response::SetSync(result) => result,
-            _ => panic!("Unexpected response type"),
+        match self.0.recv() {
+            Ok(k) => Ok(k),
+            Err(_) => Ok(Key::Eof),
         }
     }
 }

@@ -14,7 +14,8 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
 
-*   No changes recorded.
+*   Modified the SDL console to use the same rasterization primitives as
+    the LCD for full font rendering control.
 
 ## Changes in version 0.12.99
 

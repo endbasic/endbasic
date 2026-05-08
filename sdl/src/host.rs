@@ -19,19 +19,15 @@
 //! All communication with this thread happens via channels to ensure all SDL operations are invoked
 //! from a single thread.
 
-use crate::font::{MonospacedFont, font_error_to_io_error};
 use crate::string_error_to_io_error;
-use async_trait::async_trait;
 use endbasic_std::Signal;
-use endbasic_std::console::drawing::{draw_circle, draw_circle_filled};
-use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
-use endbasic_std::console::{
-    CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, RGB, Resolution, SizeInPixels,
-};
+use endbasic_std::console::graphics::{ClampedInto, ClampedMul};
+use endbasic_std::console::{CharsXY, Key, Resolution, SizeInPixels};
+use endbasic_std::gfx::lcd::{LcdSize, LcdXY, to_xy_size};
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
-use sdl2::pixels::{Color, PixelFormatEnum};
-use sdl2::rect::{Point, Rect};
+use sdl2::pixels::PixelFormatEnum;
+use sdl2::rect::Rect;
 use sdl2::render::{SurfaceCanvas, TextureCreator, TextureValueError, UpdateTextureError};
 use sdl2::surface::{Surface, SurfaceContext};
 use sdl2::video::{Window, WindowBuildError};
@@ -42,7 +38,6 @@ use std::fmt::{self, Write};
 use std::io;
 #[cfg(test)]
 use std::path::Path;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError};
 use std::thread;
@@ -99,24 +94,30 @@ fn window_build_error_to_io_error(e: WindowBuildError) -> io::Error {
     io::Error::new(kind, e)
 }
 
-/// Constructs an SDL `Point` from a `PixelsXY`.
-fn point_xy(xy: PixelsXY) -> Point {
-    Point::new(i32::from(xy.x), i32::from(xy.y))
+/// Constructs an SDL `Rect` from an `LcdXY` `origin` and an `LcdSize` `size`.
+fn rect_origin_size(origin: LcdXY, size: LcdSize) -> Rect {
+    if cfg!(debug_assertions) {
+        Rect::new(
+            i32::try_from(origin.x).expect("Origin X must fit in i32"),
+            i32::try_from(origin.y).expect("Origin Y must fit in i32"),
+            u32::try_from(size.width).expect("Width must fit in u32"),
+            u32::try_from(size.height).expect("Height must fit in u32"),
+        )
+    } else {
+        Rect::new(origin.x as i32, origin.y as i32, size.width as u32, size.height as u32)
+    }
 }
 
-/// Constructs an SDL `Rect` from a `PixelsXY` `origin` and a `PixelsSize` `size`.
-fn rect_origin_size(origin: PixelsXY, size: SizeInPixels) -> Rect {
-    Rect::new(
-        i32::from(origin.x),
-        i32::from(origin.y),
-        u32::from(size.width),
-        u32::from(size.height),
+/// Computes the number of characters that fit within the given pixels `area`.
+fn chars_in_area(glyph_size: LcdSize, area: SizeInPixels) -> CharsXY {
+    CharsXY::new(
+        area.width
+            .checked_div(u16::try_from(glyph_size.width).expect("Glyph width must fit in u16"))
+            .expect("Glyph size tested for non-zero during init"),
+        area.height
+            .checked_div(u16::try_from(glyph_size.height).expect("Glyph height must fit in u16"))
+            .expect("Glyph size tested for non-zero during init"),
     )
-}
-
-/// Converts our own `RGB` type to an SDL `Color`.
-fn rgb_to_color(rgb: RGB) -> Color {
-    Color::RGB(rgb.0, rgb.1, rgb.2)
 }
 
 /// Given an SDL `event`, converts it to a `Key` event if it is a key press; otherwise, returns
@@ -186,9 +187,6 @@ struct Context {
     #[cfg_attr(not(test), allow(unused))]
     sdl: Sdl,
 
-    /// Monospaced font to use in the console.
-    font: MonospacedFont<'static>,
-
     /// Event pump to read keyboard events from.
     event_pump: EventPump,
 
@@ -207,26 +205,17 @@ struct Context {
 
     /// Size of the console in pixels.
     size_pixels: SizeInPixels,
-
-    /// Size of the console in characters.  This is derived from `size_pixels` and the `font` glyph
-    /// metrics.
-    size_chars: CharsXY,
-
-    /// Current draw color.  Used only to track if we need to update the context.
-    draw_color: RGB,
 }
 
 impl Context {
     /// Initializes a new SDL console.
     ///
-    /// The console is sized to `resolution` pixels.  Also loads the desired font from
-    /// `font_path` at `font_size` and uses it to calculate the size of the console in characters.
+    /// The console is sized to `resolution` pixels.  Uses `glyph_size` to calculate the size of the
+    /// console in characters.
     ///
     /// There can only be one active `SdlConsole` at any given time given that this initializes and
     /// owns the SDL context.
-    fn new(resolution: Resolution, font_path: PathBuf, font_size: u16) -> io::Result<Self> {
-        let font = MonospacedFont::load(&font_path, font_size)?;
-
+    fn new(resolution: Resolution, glyph_size: LcdSize) -> io::Result<Self> {
         let sdl = sdl2::init().map_err(string_error_to_io_error)?;
         let event_pump = sdl.event_pump().map_err(string_error_to_io_error)?;
         let video = sdl.video().map_err(string_error_to_io_error)?;
@@ -259,7 +248,7 @@ impl Context {
             let (width, height) = window.drawable_size();
             SizeInPixels::new(width.clamped_into(), height.clamped_into())
         };
-        let size_chars = font.chars_in_area(size_pixels);
+        let size_chars = chars_in_area(glyph_size, size_pixels);
 
         write!(
             &mut title,
@@ -270,51 +259,17 @@ impl Context {
         window.set_title(&title).expect("There should have been no NULLs in the formatted title");
 
         let pixel_format = window.window_pixel_format();
+
         let surface =
             Surface::new(u32::from(size_pixels.width), u32::from(size_pixels.height), pixel_format)
                 .map_err(string_error_to_io_error)?;
-        let mut canvas = surface.into_canvas().map_err(string_error_to_io_error)?;
+        let canvas = surface.into_canvas().map_err(string_error_to_io_error)?;
         let texture_creator = canvas.texture_creator();
 
-        let draw_color = RGB::default();
-        canvas.set_draw_color(rgb_to_color(draw_color));
-
-        Ok(Self {
-            sdl,
-            font,
-            event_pump,
-            window,
-            canvas,
-            pixel_format,
-            texture_creator,
-            size_pixels,
-            size_chars,
-            draw_color,
-        })
-    }
-}
-
-impl RasterOps for Context {
-    type ID = (Vec<u8>, SizeInPixels);
-
-    fn get_info(&self) -> RasterInfo {
-        RasterInfo {
-            size_chars: self.size_chars,
-            size_pixels: self.size_pixels,
-            glyph_size: self.font.glyph_size,
-        }
-    }
-
-    fn set_draw_color(&mut self, color: RGB) {
-        if self.draw_color != color {
-            self.canvas.set_draw_color(rgb_to_color(color));
-            self.draw_color = color;
-        }
-    }
-
-    fn clear(&mut self) -> io::Result<()> {
-        self.canvas.clear();
-        Ok(())
+        let mut ctx =
+            Self { sdl, event_pump, window, canvas, pixel_format, texture_creator, size_pixels };
+        ctx.present_canvas()?;
+        Ok(ctx)
     }
 
     fn present_canvas(&mut self) -> io::Result<()> {
@@ -327,30 +282,15 @@ impl RasterOps for Context {
         window_surface.finish().map_err(string_error_to_io_error)
     }
 
-    fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<Self::ID> {
-        let rect = rect_origin_size(xy, size);
-        let data = match self.canvas.read_pixels(rect, self.pixel_format) {
-            Ok(data) => data,
-            Err(e) if e == "Can't read outside the current viewport" => {
-                // The SDL read pixels operation intersects the requested rect with the viewport.
-                // However, SDL2-compat does not like it when the two don't intersect at all.
-                // Fake the response so that our SDL2 code remains compatible with SDL2-compat.
-                vec![
-                    0;
-                    usize::from(size.width)
-                        * usize::from(size.height)
-                        * self.pixel_format.byte_size_per_pixel()
-                ]
-            }
-            Err(e) => {
-                return Err(string_error_to_io_error(e));
-            }
-        };
-        Ok((data, size))
+    fn get_info(&self) -> (LcdSize, usize) {
+        let size = self.size_pixels;
+        let pixel_size = self.pixel_format.byte_size_per_pixel();
+        (LcdSize { width: usize::from(size.width), height: usize::from(size.height) }, pixel_size)
     }
 
-    fn put_pixels(&mut self, xy: PixelsXY, (data, size): &Self::ID) -> io::Result<()> {
-        let rect = rect_origin_size(xy, *size);
+    fn set_data(&mut self, x1y1: LcdXY, x2y2: LcdXY, data: &[u8]) -> io::Result<()> {
+        let (xy, size) = to_xy_size(x1y1, x2y2);
+        let rect = rect_origin_size(xy, size);
         let mut texture = self
             .texture_creator
             .create_texture_static(None, rect.width(), rect.height())
@@ -362,85 +302,9 @@ impl RasterOps for Context {
         }
         .clamped_mul(self.pixel_format.byte_size_per_pixel());
         texture.update(None, data, width).map_err(update_texture_error_to_io_error)?;
-        self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)
-    }
-
-    fn move_pixels(
-        &mut self,
-        x1y1: PixelsXY,
-        x2y2: PixelsXY,
-        size: SizeInPixels,
-    ) -> io::Result<()> {
-        let shifted = {
-            let src = self.canvas.surface();
-            let mut temp = Surface::new(src.width(), src.height(), self.pixel_format)
-                .map_err(string_error_to_io_error)?;
-            let src_rect = rect_origin_size(x1y1, size);
-            let dst_rect = rect_origin_size(x2y2, size);
-            temp.fill_rect(src_rect, rgb_to_color(self.draw_color))
-                .map_err(string_error_to_io_error)?;
-            src.blit(src_rect, &mut temp, dst_rect).map_err(string_error_to_io_error)?;
-            temp
-        };
-        shifted.blit(None, self.canvas.surface_mut(), None).map_err(string_error_to_io_error)?;
-        Ok(())
-    }
-
-    fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
-        debug_assert!(!text.is_empty(), "SDL does not like empty strings");
-
-        let len = match u16::try_from(text.chars().count()) {
-            Ok(v) => v,
-            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "String too long")),
-        };
-
-        let rect = Rect::new(
-            i32::from(xy.x),
-            i32::from(xy.y),
-            len.clamped_mul(self.font.glyph_size.width),
-            u32::from(self.font.glyph_size.height),
-        );
-
-        let surface =
-            self.font.font.render(text).blended(self.draw_color).map_err(font_error_to_io_error)?;
-        let texture = self
-            .texture_creator
-            .create_texture_from_surface(&surface)
-            .map_err(texture_value_error_to_io_error)?;
-        self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)
-    }
-
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        draw_circle(self, center, radius)
-    }
-
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        draw_circle_filled(self, center, radius)
-    }
-
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        if x1y1 == x2y2 {
-            // Paper over differences between platforms.  On Linux, this would paint a single dot,
-            // but on Windows, it paints nothing.  For consistency with drawing a circle of radius
-            // 0, and for consistency with the web interface, avoid painting anything here.
-            return Ok(());
-        }
-
-        self.canvas.draw_line(point_xy(x1y1), point_xy(x2y2)).map_err(string_error_to_io_error)
-    }
-
-    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
-        self.canvas.draw_point(point_xy(xy)).map_err(string_error_to_io_error)
-    }
-
-    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
-        let rect = rect_origin_size(xy, size);
-        self.canvas.draw_rect(rect).map_err(string_error_to_io_error)
-    }
-
-    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
-        let rect = rect_origin_size(xy, size);
-        self.canvas.fill_rect(rect).map_err(string_error_to_io_error)
+        self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)?;
+        drop(texture);
+        self.present_canvas()
     }
 }
 
@@ -452,15 +316,18 @@ impl SharedContext {
         (*self.0).borrow_mut().event_pump.poll_event()
     }
 
+    fn get_info(&self) -> (LcdSize, usize) {
+        (*self.0).borrow().get_info()
+    }
+
+    fn set_data(&mut self, x1y1: LcdXY, x2y2: LcdXY, data: &[u8]) -> io::Result<()> {
+        (*self.0).borrow_mut().set_data(x1y1, x2y2, data)
+    }
+
     #[cfg(test)]
     fn push_event(&mut self, ev: Event) -> io::Result<()> {
         let event_ss = (*self.0).borrow().sdl.event().map_err(string_error_to_io_error)?;
         event_ss.push_event(ev).map_err(string_error_to_io_error)
-    }
-
-    #[cfg(test)]
-    fn raw_write(&mut self, text: &str, xy: PixelsXY) -> io::Result<()> {
-        (*self.0).borrow_mut().write_text(xy, text)
     }
 
     #[cfg(test)]
@@ -471,100 +338,14 @@ impl SharedContext {
     }
 }
 
-impl RasterOps for SharedContext {
-    type ID = (Vec<u8>, SizeInPixels);
-
-    fn get_info(&self) -> RasterInfo {
-        self.0.borrow().get_info()
-    }
-
-    fn set_draw_color(&mut self, color: RGB) {
-        (*self.0).borrow_mut().set_draw_color(color)
-    }
-
-    fn clear(&mut self) -> io::Result<()> {
-        (*self.0).borrow_mut().clear()
-    }
-
-    fn present_canvas(&mut self) -> io::Result<()> {
-        (*self.0).borrow_mut().present_canvas()
-    }
-
-    fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<Self::ID> {
-        (*self.0).borrow_mut().read_pixels(xy, size)
-    }
-
-    fn put_pixels(&mut self, xy: PixelsXY, data: &Self::ID) -> io::Result<()> {
-        (*self.0).borrow_mut().put_pixels(xy, data)
-    }
-
-    fn move_pixels(
-        &mut self,
-        x1y1: PixelsXY,
-        x2y2: PixelsXY,
-        size: SizeInPixels,
-    ) -> io::Result<()> {
-        (*self.0).borrow_mut().move_pixels(x1y1, x2y2, size)
-    }
-
-    fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
-        (*self.0).borrow_mut().write_text(xy, text)
-    }
-
-    fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_circle(center, radius)
-    }
-
-    fn draw_circle_filled(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_circle_filled(center, radius)
-    }
-
-    fn draw_line(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_line(x1y1, x2y2)
-    }
-
-    fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_pixel(xy)
-    }
-
-    fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_rect(xy, size)
-    }
-
-    fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
-        (*self.0).borrow_mut().draw_rect_filled(xy, size)
-    }
-}
-
 /// Representation of requests that the console host can handle.
 pub(crate) enum Request {
     Exit,
 
-    Clear(ClearType),
-    SetColor(Option<u8>, Option<u8>),
-    EnterAlt,
-    HideCursor,
-    LeaveAlt,
-    Locate(CharsXY),
-    MoveWithinLine(i16),
-    Print(String),
-    ShowCursor,
-    SizeChars,
-    SizePixels,
-    Write(String),
-    DrawCircle(PixelsXY, u16),
-    DrawCircleFilled(PixelsXY, u16),
-    DrawLine(PixelsXY, PixelsXY),
-    DrawPixel(PixelsXY),
-    DrawRect(PixelsXY, PixelsXY),
-    DrawRectFilled(PixelsXY, PixelsXY),
-    SyncNow,
-    SetSync(bool),
+    SetData(LcdXY, LcdXY, Vec<u8>),
 
     #[cfg(test)]
     PushEvent(Event),
-    #[cfg(test)]
-    RawWrite(String, PixelsXY),
     #[cfg(test)]
     SaveBmp(PathBuf),
 }
@@ -573,42 +354,20 @@ pub(crate) enum Request {
 #[derive(Debug)]
 pub(crate) enum Response {
     Empty(io::Result<()>),
-    SizeChars(CharsXY),
-    SizePixels(SizeInPixels),
-    SetSync(io::Result<bool>),
-}
-
-/// Implementation of `InputOps` that should never be used.
-// TODO(jmmv): This is necessary because the host-level console implementation requires these
-// methods to be present but the input operations are handled in the client-side console.  This
-// might mean we need a better design.
-struct NoopInputOps {}
-
-#[async_trait(?Send)]
-impl InputOps for NoopInputOps {
-    async fn poll_key(&mut self) -> io::Result<Option<Key>> {
-        unreachable!();
-    }
-
-    async fn read_key(&mut self) -> io::Result<Key> {
-        unreachable!();
-    }
+    Info((LcdSize, usize)),
 }
 
 /// Runs the main graphics loop.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run(
     resolution: Resolution,
-    default_fg_color: Option<u8>,
-    default_bg_color: Option<u8>,
-    font_path: PathBuf,
-    font_size: u16,
+    glyph_size: LcdSize,
     request_rx: Receiver<Request>,
     response_tx: SyncSender<Response>,
     on_key_tx: Sender<Key>,
     signals_tx: async_channel::Sender<Signal>,
 ) {
-    let ctx = match Context::new(resolution, font_path, font_size) {
+    let ctx = match Context::new(resolution, glyph_size) {
         Ok(ctx) => ctx,
         Err(e) => {
             response_tx.send(Response::Empty(Err(e))).expect("Channel must be alive");
@@ -616,14 +375,9 @@ pub(crate) fn run(
         }
     };
 
-    let info = ctx.get_info();
     let mut ctx = SharedContext(Rc::from(RefCell::from(ctx)));
 
-    let input = NoopInputOps {};
-    let mut console = GraphicsConsole::new(input, ctx.clone(), default_fg_color, default_bg_color)
-        .expect("Console initialization must succeed");
-
-    response_tx.send(Response::Empty(Ok(()))).expect("Channel must be alive");
+    response_tx.send(Response::Info(ctx.get_info())).expect("Channel must be alive");
 
     let mut budget = LOOP_POLL_BUDGET;
     loop {
@@ -634,38 +388,12 @@ pub(crate) fn run(
                 let response = match request {
                     Request::Exit => break,
 
-                    Request::Clear(how) => Response::Empty(console.clear(how)),
-                    Request::SetColor(fg, bg) => Response::Empty(console.set_color(fg, bg)),
-                    Request::EnterAlt => Response::Empty(console.enter_alt()),
-                    Request::HideCursor => Response::Empty(console.hide_cursor()),
-                    Request::LeaveAlt => Response::Empty(console.leave_alt()),
-                    Request::Locate(pos) => Response::Empty(console.locate(pos)),
-                    Request::MoveWithinLine(off) => Response::Empty(console.move_within_line(off)),
-                    Request::Print(text) => Response::Empty(console.print(&text)),
-                    Request::ShowCursor => Response::Empty(console.show_cursor()),
-                    Request::SizeChars => Response::SizeChars(info.size_chars),
-                    Request::SizePixels => Response::SizePixels(info.size_pixels),
-                    Request::Write(text) => Response::Empty(console.write(&text)),
-                    Request::DrawCircle(center, radius) => {
-                        Response::Empty(console.draw_circle(center, radius))
+                    Request::SetData(x1y1, x2y2, data) => {
+                        Response::Empty(ctx.set_data(x1y1, x2y2, &data))
                     }
-                    Request::DrawCircleFilled(center, radius) => {
-                        Response::Empty(console.draw_circle_filled(center, radius))
-                    }
-                    Request::DrawLine(x1y1, x2y2) => Response::Empty(console.draw_line(x1y1, x2y2)),
-                    Request::DrawPixel(xy) => Response::Empty(console.draw_pixel(xy)),
-                    Request::DrawRect(x1y1, x2y2) => Response::Empty(console.draw_rect(x1y1, x2y2)),
-                    Request::DrawRectFilled(x1y1, x2y2) => {
-                        Response::Empty(console.draw_rect_filled(x1y1, x2y2))
-                    }
-                    Request::SyncNow => Response::Empty(console.sync_now()),
-                    Request::SetSync(enabled) => Response::SetSync(console.set_sync(enabled)),
 
                     #[cfg(test)]
                     Request::PushEvent(ev) => Response::Empty(ctx.push_event(ev)),
-
-                    #[cfg(test)]
-                    Request::RawWrite(text, start) => Response::Empty(ctx.raw_write(&text, start)),
 
                     #[cfg(test)]
                     Request::SaveBmp(path) => Response::Empty(ctx.save_bmp(&path)),

@@ -27,7 +27,7 @@ jobs:
             - uses: actions/checkout@v6
             - uses: mozilla-actions/sccache-action@v0.0.10
             - run: sudo apt update
-            - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
+            - run: sudo apt install libsdl2-dev
             - run: rustup component add clippy rustfmt
             - run: ./.github/workflows/lint.sh
 
@@ -45,7 +45,7 @@ jobs:
             - uses: actions/checkout@v6
             - uses: mozilla-actions/sccache-action@v0.0.10
             - run: sudo apt update
-            - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
+            - run: sudo apt install libsdl2-dev
             - run: cargo test --package='*' --features=sdl
                    -- --include-ignored --skip sdl_console
 
@@ -62,7 +62,7 @@ jobs:
         steps:
             - uses: actions/checkout@v6
             - uses: mozilla-actions/sccache-action@v0.0.10
-            - run: brew install sdl2 sdl2_ttf
+            - run: brew install sdl2
             - run: cargo test --package=endbasic-client -- --include-ignored
             - run: cargo test --package=endbasic-core -- --include-ignored
             - run: cargo test --package=endbasic-std -- --include-ignored

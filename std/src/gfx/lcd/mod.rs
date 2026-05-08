@@ -68,8 +68,8 @@ pub struct LcdXY {
 }
 
 /// Represents a size that fits in the LCD space.
-#[derive(Clone, Copy)]
-#[cfg_attr(test, derive(Debug, PartialEq))]
+#[derive(Clone, Copy, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct LcdSize {
     /// The width.
     pub width: usize,
