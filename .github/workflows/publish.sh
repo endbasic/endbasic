@@ -28,7 +28,11 @@ nvm install --lts
 set -ux
 
 rustup target add wasm32-unknown-unknown
-wasm_bindgen_version="$(grep '^wasm-bindgen = ' web/Cargo.toml | cut -d '"' -f 2)"
+wasm_bindgen_version="$(
+    grep -A1 '^name = "wasm-bindgen"$' Cargo.lock \
+        | grep '^version' \
+        | cut -d '"' -f 2
+)"
 cargo binstall --no-confirm "wasm-bindgen-cli@${wasm_bindgen_version}"
 
 export NVM_DIR="${HOME}/.nvm"
