@@ -25,6 +25,9 @@ pub use font_5x8::FONT_5X8;
 mod font_16x16;
 pub use font_16x16::FONT_16X16;
 
+mod font_vt220;
+pub use font_vt220::FONT_VT220;
+
 /// Representation of a font.
 pub struct Font {
     /// The name of the font.
@@ -67,6 +70,7 @@ impl Fonts {
         let mut fonts = HashMap::default();
         fonts.insert(FONT_5X8.name, &FONT_5X8);
         fonts.insert(FONT_16X16.name, &FONT_16X16);
+        fonts.insert(FONT_VT220.name, &FONT_VT220);
         Self(fonts)
     }
 
