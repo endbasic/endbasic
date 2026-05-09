@@ -103,6 +103,10 @@ fn read_sources(path: &Path) -> io::Result<Tests> {
     for line in reader.lines() {
         let line = line?;
 
+        // Deal with CRLF.  I'd do this on Windows only, but keeping it unconditional helps
+        // with cross-platform testing (per the unit tests below).
+        let line = line.trim_end_matches('\r');
+
         if let Some(stripped) = line.strip_prefix("# Test: ") {
             finish_source(&mut sources, &mut source);
             if let Some(name) = current_test.take() {
@@ -116,7 +120,7 @@ fn read_sources(path: &Path) -> io::Result<Tests> {
                 io::ErrorKind::InvalidData,
                 format!("Unexpected section header {}", line),
             ));
-        } else if is_source_header(&line) {
+        } else if is_source_header(line) {
             current_section = Section::Source;
             continue;
         } else if line.starts_with("## ") {
@@ -140,7 +144,7 @@ fn read_sources(path: &Path) -> io::Result<Tests> {
         }
 
         if let Some(source) = source.as_mut() {
-            source.push_str(&line);
+            source.push_str(line);
             source.push('\n');
         }
     }
@@ -282,6 +286,43 @@ Third line
     Ok(())
 }
 
+#[test]
+fn test_read_sources_crlf() -> io::Result<()> {
+    let mut file = NamedTempFile::new()?;
+    write!(
+        file,
+        "junk\r\n# Test: first\r\n\r\n## Source\r\n\r\n```basic\r\nFirst line\r\n\r\nSecond line\r\n```\r\n"
+    )?;
+    file.flush()?;
+
+    assert_eq!(
+        [Test { name: "first".to_owned(), sources: vec!["First line\n\nSecond line".to_owned()] }],
+        read_sources(file.path())?.as_slice()
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_read_sources_crlf_many_tests() -> io::Result<()> {
+    let mut file = NamedTempFile::new()?;
+    write!(
+        file,
+        "junk\r\n# Test: first\r\n\r\n## Source\r\n\r\n```basic\r\nOne\r\n```\r\n\r\n# Test: second\r\n\r\n## Source\r\n\r\n```basic\r\nTwo\r\n```\r\n"
+    )?;
+    file.flush()?;
+
+    assert_eq!(
+        [
+            Test { name: "first".to_owned(), sources: vec!["One".to_owned()] },
+            Test { name: "second".to_owned(), sources: vec!["Two".to_owned()] },
+        ],
+        read_sources(file.path())?.as_slice()
+    );
+
+    Ok(())
+}
+
 /// Collection of section markers for a golden file.
 struct Labels {
     source: &'static str,
@@ -406,6 +447,54 @@ fn test_diff_different() -> io::Result<()> {
     Ok(())
 }
 
+/// Obtains the line ending used in `golden` file.
+fn line_ending_for(golden: &Path) -> io::Result<&'static str> {
+    let text = fs::read_to_string(golden)?;
+    if text.contains("\r\n") { Ok("\r\n") } else { Ok("\n") }
+}
+
+#[test]
+fn test_line_ending_for_crlf() -> io::Result<()> {
+    let mut file = NamedTempFile::new()?;
+    write!(file, "Line 1\r\nLine 2\r\n")?;
+    file.flush()?;
+
+    assert_eq!("\r\n", line_ending_for(file.path())?);
+    Ok(())
+}
+
+/// Rewrites `path` file with to use `line_ending`.
+///
+/// This is "inefficient" (not that it matters in this specific scenario) but it helps keep
+/// `generate()` simple _and_ it also allows us to validate CRLF behavior outside of Windows.
+fn rewrite_with_line_ending(path: &Path, line_ending: &str) -> io::Result<()> {
+    if line_ending == "\n" {
+        return Ok(());
+    }
+
+    let text = fs::read_to_string(path)?;
+    let normalized = text.replace("\r\n", "\n");
+    let rewritten = normalized.replace('\n', line_ending);
+    fs::write(path, rewritten)
+}
+
+#[test]
+fn test_rewrite_with_line_ending() -> io::Result<()> {
+    let mut file = NamedTempFile::new()?;
+    write!(file, "Line 1\nLine 2\n")?;
+    file.flush()?;
+
+    rewrite_with_line_ending(file.path(), "\r\n")?;
+    let data = fs::read(file.path())?;
+    assert!(data.windows(2).any(|w| w == b"\r\n"));
+    for i in 0..data.len() {
+        if data[i] == b'\n' {
+            assert!(i > 0 && data[i - 1] == b'\r');
+        }
+    }
+    Ok(())
+}
+
 /// Executes `image` through completion in `vm`, and converts the result into an exit code.
 async fn run_image(vm: &mut Vm, image: &Image) -> Result<i32, String> {
     loop {
@@ -502,10 +591,12 @@ async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()
 /// Executes the test described in the `core2/tests/<name>.md` file.
 pub(super) async fn run_one_test(name: &'static str) -> io::Result<()> {
     let golden = src_path(&format!("core2/tests/{}.md", name));
+    let line_ending = line_ending_for(&golden)?;
 
     let mut generated = NamedTempFile::new()?;
     regenerate(&golden, &mut generated).await?;
     generated.flush()?;
+    rewrite_with_line_ending(generated.path(), line_ending)?;
 
     let diff = diff(&golden, generated.path())?;
     if !diff.is_empty() {
