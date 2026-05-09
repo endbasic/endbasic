@@ -183,7 +183,7 @@ fn setup_console(
             endbasic_rpi::spi_bus_open,
             endbasic_terminal::TerminalConsole::from_stdio(signals_tx)?,
             spec,
-            &endbasic_std::gfx::lcd::fonts::all_fonts(),
+            &endbasic_std::gfx::lcd::fonts::Fonts::all(),
         )?;
         Ok(Rc::from(RefCell::from(console)))
     }

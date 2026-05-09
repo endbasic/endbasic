@@ -17,6 +17,7 @@
 
 use crate::gfx::lcd::LcdSize;
 use std::collections::HashMap;
+use std::io;
 
 mod font_5x8;
 pub(crate) use font_5x8::FONT_5X8;
@@ -58,14 +59,31 @@ impl Font {
 }
 
 /// Registry of all available fonts.
-pub type Fonts = HashMap<&'static str, &'static Font>;
+pub struct Fonts(HashMap<&'static str, &'static Font>);
 
-/// Obtains a mapping of all available fonts.
-pub fn all_fonts() -> Fonts {
-    let mut fonts = Fonts::default();
-    fonts.insert(FONT_5X8.name, &FONT_5X8);
-    fonts.insert(FONT_16X16.name, &FONT_16X16);
-    fonts
+impl Fonts {
+    /// Obtains a mapping of all available fonts.
+    pub fn all() -> Self {
+        let mut fonts = HashMap::default();
+        fonts.insert(FONT_5X8.name, &FONT_5X8);
+        fonts.insert(FONT_16X16.name, &FONT_16X16);
+        Self(fonts)
+    }
+
+    /// Gets a font by `name`, ensuring that it's present.
+    pub fn get(&self, name: &str) -> io::Result<&'static Font> {
+        match self.0.get(name) {
+            Some(font) => Ok(*font),
+            None => {
+                let mut valid = self.0.keys().copied().collect::<Vec<&'static str>>();
+                valid.sort();
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Unknown font: {}; valid names are: {}", name, valid.join(", ")),
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(test)]

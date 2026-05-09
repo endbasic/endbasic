@@ -27,8 +27,7 @@ use async_channel::{Receiver, TryRecvError};
 use async_trait::async_trait;
 use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
-    CharsXY, ClearType, Console, ConsoleSpec, GraphicsConsole, Key, ParseError, PixelsXY, RGB,
-    SizeInPixels,
+    CharsXY, ClearType, Console, ConsoleSpec, GraphicsConsole, Key, PixelsXY, RGB, SizeInPixels,
 };
 use endbasic_std::gfx::lcd::fonts::Fonts;
 use endbasic_std::gfx::lcd::{BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel, to_xy_size};
@@ -486,19 +485,7 @@ where
     let default_bg_color = spec.take_keyed_flag::<u8>("bg_color")?;
 
     let font_name = spec.take_keyed_flag_str("font").unwrap_or("5x8");
-    let font = match fonts.get(font_name) {
-        Some(font) => font,
-        None => {
-            let mut valid = fonts.keys().copied().collect::<Vec<&'static str>>();
-            valid.sort();
-            return Err(ParseError(format!(
-                "Unknown font: {}; valid names are: {}",
-                font_name,
-                valid.join(", ")
-            ))
-            .into());
-        }
-    };
+    let font = fonts.get(font_name)?;
 
     let pins = Arc::from(Mutex::from(pins));
     let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
