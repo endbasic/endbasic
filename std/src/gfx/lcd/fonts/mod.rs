@@ -21,10 +21,10 @@ use std::collections::HashMap;
 use std::io;
 
 mod font_5x8;
-pub(crate) use font_5x8::FONT_5X8;
+pub use font_5x8::FONT_5X8;
 
 mod font_16x16;
-pub(crate) use font_16x16::FONT_16X16;
+pub use font_16x16::FONT_16X16;
 
 /// Representation of a font.
 pub struct Font {

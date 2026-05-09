@@ -321,7 +321,7 @@ const DATA: &[u8] = &[
 ];
 
 /// Square 16x16 font.
-pub(crate) const FONT_16X16: Font = Font {
+pub const FONT_16X16: Font = Font {
     name: "16x16",
     glyph_size: LcdSize { width: WIDTH, height: HEIGHT },
     stride: 2,
