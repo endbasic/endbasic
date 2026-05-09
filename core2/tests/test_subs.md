@@ -718,3 +718,49 @@ DECLARE FUNCTION foo
 ```plain
 2:18: Cannot redefine foo%
 ```
+
+# Test: Deep recursive subroutine with parameter
+
+## Source
+
+```basic
+SUB recurse(n%)
+    IF n > 0 THEN
+        recurse n - 1
+    END IF
+END SUB
+
+recurse 1000
+OUT 123
+```
+
+## Disassembly
+
+```asm
+0000:   JUMP        10                  ; 1:5
+
+;; RECURSE (BEGIN)
+0001:   MOVE        R65, R64            ; 2:8
+0002:   LOADI       R66, 0              ; 2:12
+0003:   CMPGTI      R65, R65, R66       ; 2:10
+0004:   JMPF        R65, 9              ; 2:8
+0005:   MOVE        R65, R64            ; 3:17
+0006:   LOADI       R66, 1              ; 3:21
+0007:   SUBI        R65, R65, R66       ; 3:19
+0008:   CALL        R65, 1              ; 3:9, RECURSE
+0009:   RETURN                          ; 5:1
+;; RECURSE (END)
+
+0010:   LOADI       R64, 1000           ; 7:9
+0011:   CALL        R64, 1              ; 7:1, RECURSE
+0012:   LOADI       R65, 123            ; 8:5
+0013:   LOADI       R64, 258            ; 8:5
+0014:   UPCALL      0, R64              ; 8:1, OUT
+0015:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=123%
+```

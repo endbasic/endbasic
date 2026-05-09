@@ -193,26 +193,31 @@ impl Default for Context {
 }
 
 impl Context {
-    /// Gets the value of register `reg`.
-    ///
-    /// Panics if the register is invalid.
-    fn get_reg(&self, reg: Register) -> u64 {
+    /// Computes the absolute index in `regs` for `reg`.
+    fn reg_index(&self, reg: Register) -> usize {
         let (is_global, index) = reg.to_parts();
         let mut index = usize::from(index);
         if !is_global {
             index += self.fp;
         }
-        self.regs[index]
+        index
+    }
+
+    /// Gets the value of register `reg`.
+    ///
+    /// Panics if the register is invalid.
+    fn get_reg(&self, reg: Register) -> u64 {
+        let index = self.reg_index(reg);
+        self.regs.get(index).copied().unwrap_or(0)
     }
 
     /// Sets the value of register `reg` to `value`.
     ///
     /// Panics if the register is invalid.
     fn set_reg(&mut self, reg: Register, value: u64) {
-        let (is_global, index) = reg.to_parts();
-        let mut index = usize::from(index);
-        if !is_global {
-            index += self.fp;
+        let index = self.reg_index(reg);
+        if index >= self.regs.len() {
+            self.regs.resize(index + 1, 0);
         }
         self.regs[index] = value;
     }
