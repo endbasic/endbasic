@@ -24,7 +24,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 
 use async_channel::{Receiver, Sender, TryRecvError};
-use endbasic_core2::{
+use endbasic_core::{
     CallError, Callable, CallableMetadata, Compiler, CompilerError, GlobalDef, Image, LineCol,
     StopReason, SymbolKey, Vm,
 };

@@ -1,17 +1,18 @@
 // EndBASIC
 // Copyright 2020 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Character-based reader for an input stream with position tracking.
 
@@ -22,13 +23,13 @@ use std::io::{self, BufRead};
 /// Tab length used to compute the current position within a line when encountering a tab character.
 const TAB_LENGTH: usize = 8;
 
-/// Representation of a position within a stream.
+/// A position within a source stream, represented as line and column numbers.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LineCol {
-    /// Line number.
+    /// Line number, starting from 1.
     pub line: usize,
 
-    /// Column number.
+    /// Column number, starting from 1.
     pub col: usize,
 }
 
@@ -38,47 +39,45 @@ impl fmt::Display for LineCol {
     }
 }
 
+/// A character along with its position in the source stream.
 #[derive(Debug)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub struct CharSpan {
-    /// Character in this span.
+    /// The character value.
     pub(crate) ch: char,
 
-    /// Position where this character starts.
+    /// The position where this character appears in the source.
     pub(crate) pos: LineCol,
 }
 
-/// Possible types of buffered data in the reader.
+/// State of buffered data in the character reader.
 enum Pending {
-    /// Initial state of the reader where no data has been buffered yet.
+    /// Initial state where no data has been buffered yet.
     Unknown,
 
-    /// Intermediate state where the reader holds a line of text, broken down by character, and an
-    /// index to the character to return on the next read.
+    /// Holds a buffered line of characters and the index of the next character to return.
     Chars(Vec<char>, usize),
 
-    /// Terminal state of the reader due to an EOF condition.
+    /// Terminal state indicating end-of-file has been reached.
     Eof,
 
-    /// Terminal state of the reader due to an error.  If not `None`, this contains the original
-    /// error that caused the problem.  Otherwise, that error was already consumed (and thus
-    /// reaching this case indicates a problem in the caller) so we return an invalid state.
+    /// Terminal state indicating an I/O error occurred.  Contains the original error if not yet
+    /// consumed, or `None` if the error was already returned to the caller.
     Error(Option<io::Error>),
 }
 
-/// Wraps `io::Read` to offer an iterator over characters.
+/// Wraps an `io::Read` to provide an iterator over characters with position tracking.
 pub struct CharReader<'a> {
-    /// The wrapper reader from which to reach characters.
+    /// The buffered reader wrapping the input stream.
     reader: io::BufReader<&'a mut dyn io::Read>,
 
-    /// Current state of any buffered data.
+    /// Current state of buffered character data.
     pending: Pending,
 
-    /// If not none, contains the character read by `peek`, which will be consumed by the next call
-    /// to `read`.
+    /// If set, contains the result of a peek operation to be returned by the next `next()` call.
     peeked: Option<Option<io::Result<CharSpan>>>,
 
-    /// Line and column number of the next character to be read.
+    /// Position of the next character to be read.
     next_pos: LineCol,
 }
 
@@ -125,6 +124,7 @@ impl<'a> CharReader<'a> {
 impl Iterator for CharReader<'_> {
     type Item = io::Result<CharSpan>;
 
+    /// Returns the next character in the input stream.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(peeked) = self.peeked.take() {
             return peeked;

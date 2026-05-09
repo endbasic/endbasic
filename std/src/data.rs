@@ -19,7 +19,7 @@
 use crate::numerics::double_to_integer;
 use crate::{Clearable, MachineBuilder};
 use async_trait::async_trait;
-use endbasic_core2::{
+use endbasic_core::{
     ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
     CallableMetadataBuilder, ConstantDatum, ExprType, RepeatedSyntax, RepeatedTypeSyntax, Scope,
     VarArgTag,

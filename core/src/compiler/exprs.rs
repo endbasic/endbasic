@@ -1,792 +1,750 @@
 // EndBASIC
-// Copyright 2024 Julio Merino
+// Copyright 2026 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Functions to convert expressions into bytecode.
 
-use super::{Error, ExprType, Fixup, Result, SymbolPrototype, SymbolsTable};
-use crate::ast::*;
-use crate::bytecode::*;
-use crate::compiler::compile_function_args;
-use crate::parser::argspans_to_exprs;
+use crate::ast::{Expr, ExprType};
+use crate::bytecode::{self, Register};
+use crate::compiler::args::compile_args;
+use crate::compiler::codegen::{Codegen, Fixup};
+use crate::compiler::syms::{self, SymbolKey, SymbolPrototype, TempScope, TempSymtable};
+use crate::compiler::{Error, Result};
+use crate::mem::ConstantDatum;
 use crate::reader::LineCol;
-use crate::syms::SymbolKey;
-use std::collections::HashMap;
 
-/// Adjusts `src` fixups by -1 if `adjust` is true else leaves them as is, and then merges the
-/// results into `dest`.
-fn merge_fixups(dest: &mut HashMap<Address, Fixup>, src: HashMap<Address, Fixup>, adjust: bool) {
-    let expected_size = dest.len() + src.len();
-    if !adjust {
-        dest.extend(src);
-    } else {
-        for (pc, fixup) in src {
-            let previous = dest.insert(pc - 1, fixup);
-            debug_assert!(previous.is_none());
+/// Compiles `exprs` into consecutive integer registers allocated from `scope` and returns the
+/// first register.  The caller must guarantee that `exprs` is non-empty.
+pub(super) fn compile_integer_exprs(
+    codegen: &mut Codegen,
+    symtable: &mut TempSymtable<'_, '_>,
+    scope: &mut TempScope,
+    pos: LineCol,
+    exprs: impl Iterator<Item = Expr>,
+) -> Result<Register> {
+    let mut first_reg = None;
+    for expr in exprs {
+        let reg = scope.alloc().map_err(|e| Error::from_syms(e, pos))?;
+        if first_reg.is_none() {
+            first_reg = Some(reg);
         }
+        compile_expr_as_type(codegen, symtable, reg, expr, ExprType::Integer)?;
     }
-    debug_assert_eq!(dest.len(), expected_size);
+    Ok(first_reg.expect("Must have at least one expression"))
 }
 
-/// Compiles the indices used to address an array.
-pub(super) fn compile_array_indices(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    exp_nargs: usize,
-    args: Vec<Expr>,
-    name_pos: LineCol,
-) -> Result<()> {
-    if exp_nargs != args.len() {
-        return Err(Error::ArrayIndexSubscriptsError(name_pos, args.len(), exp_nargs));
-    }
-
-    for arg in args.into_iter().rev() {
-        let arg_pos = arg.start_pos();
-        match compile_expr(instrs, fixups, symtable, arg, false)? {
-            ExprType::Integer => (),
-            ExprType::Double => {
-                instrs.push(Instruction::DoubleToInteger);
-            }
-            itype => {
-                return Err(Error::NotANumber(arg_pos, itype));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Compiles a logical or bitwise unary operator and appends its instructions to `instrs`.
-fn compile_not_op(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    span: UnaryOpSpan,
+/// Compiles an array element access expression into `reg`.
+fn compile_array_access(
+    codegen: &mut Codegen,
+    symtable: &mut TempSymtable<'_, '_>,
+    reg: Register,
+    key_pos: LineCol,
+    arr_reg: Register,
+    info: &syms::ArrayInfo,
+    args: Vec<crate::ast::ArgSpan>,
 ) -> Result<ExprType> {
-    let expr_type = compile_expr(instrs, fixups, symtable, span.expr, false)?;
-    match expr_type {
-        ExprType::Boolean => {
-            instrs.push(Instruction::LogicalNot(span.pos));
-            Ok(ExprType::Boolean)
-        }
-        ExprType::Integer => {
-            instrs.push(Instruction::BitwiseNot(span.pos));
-            Ok(ExprType::Integer)
-        }
-        _ => Err(Error::TypeMismatch(span.pos, expr_type, ExprType::Integer)),
+    if args.len() != info.ndims {
+        return Err(Error::WrongNumberOfSubscripts(key_pos, info.ndims, args.len()));
     }
+
+    let mut outer_scope = symtable.temp_scope();
+    let first_sub_reg = compile_integer_exprs(
+        codegen,
+        symtable,
+        &mut outer_scope,
+        key_pos,
+        args.into_iter().map(|a| a.expr.expect("Array subscripts must have expressions")),
+    )?;
+    codegen.emit(bytecode::make_load_array(reg, arr_reg, first_sub_reg), key_pos);
+    Ok(info.subtype)
 }
 
-/// Compiles a negate operator and appends its instructions to `instrs`.
-fn compile_neg_op(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    span: UnaryOpSpan,
-) -> Result<ExprType> {
-    let expr_type = compile_expr(instrs, fixups, symtable, span.expr, false)?;
-    match expr_type {
-        ExprType::Double => {
-            instrs.push(Instruction::NegateDouble(span.pos));
-            Ok(ExprType::Double)
-        }
-        ExprType::Integer => {
-            instrs.push(Instruction::NegateInteger(span.pos));
-            Ok(ExprType::Integer)
-        }
-        _ => Err(Error::NotANumber(span.pos, expr_type)),
-    }
+/// The type of unary operation waiting to be applied.
+enum PendingUnaryKind {
+    Negate,
+    Not,
 }
 
-/// Compiles a logical binary operator and appends its instructions to `instrs`.
-fn compile_logical_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) -> Instruction>(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    logical_make_inst: F1,
-    bitwise_make_inst: F2,
-    span: BinaryOpSpan,
+/// A pending unary operation waiting to be applied.
+struct PendingUnaryOp {
+    pos: LineCol,
+    kind: PendingUnaryKind,
+    make_boolean: Option<fn(Register, Register, Register) -> u32>,
+    make_integer: fn(Register) -> u32,
+    make_double: Option<fn(Register) -> u32>,
+}
+
+/// A pending binary operation waiting to be applied.
+struct PendingBinaryOp {
+    pos: LineCol,
+    rhs: Expr,
     op_name: &'static str,
-) -> Result<ExprType> {
-    let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
-    let rhs_type = compile_expr(instrs, fixups, symtable, span.rhs, false)?;
-    match (lhs_type, rhs_type) {
-        (ExprType::Boolean, ExprType::Boolean) => {
-            instrs.push(logical_make_inst(span.pos));
-            Ok(ExprType::Boolean)
-        }
-        (ExprType::Integer, ExprType::Integer) => {
-            instrs.push(bitwise_make_inst(span.pos));
-            Ok(ExprType::Integer)
-        }
-        (_, _) => Err(Error::BinaryOpTypeError(span.pos, op_name, lhs_type, rhs_type)),
-    }
+    make_boolean: Option<fn(Register, Register, Register) -> u32>,
+    make_double: Option<fn(Register, Register, Register) -> u32>,
+    make_integer: fn(Register, Register, Register) -> u32,
+    make_text: Option<fn(Register, Register, Register) -> u32>,
 }
 
-/// Compiles an equality binary operator and appends its instructions to `instrs`.
-#[allow(clippy::too_many_arguments)]
-fn compile_equality_binary_op<
-    F1: Fn(LineCol) -> Instruction,
-    F2: Fn(LineCol) -> Instruction,
-    F3: Fn(LineCol) -> Instruction,
-    F4: Fn(LineCol) -> Instruction,
->(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    boolean_make_inst: F1,
-    double_make_inst: F2,
-    integer_make_inst: F3,
-    text_make_inst: F4,
-    span: BinaryOpSpan,
+/// A pending relational operation waiting to be applied.
+struct PendingRelationalOp {
+    pos: LineCol,
+    rhs: Expr,
     op_name: &'static str,
-) -> Result<ExprType> {
-    let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
-    let pc = instrs.len();
-    instrs.push(Instruction::Nop);
-
-    let mut keep_nop = false;
-    let mut extra_fixups = HashMap::default();
-    let rhs_type = compile_expr(instrs, &mut extra_fixups, symtable, span.rhs, false)?;
-    let result = match (lhs_type, rhs_type) {
-        (lhs_type, rhs_type) if lhs_type == rhs_type => lhs_type,
-
-        (ExprType::Double, ExprType::Integer) => {
-            instrs.push(Instruction::IntegerToDouble);
-            ExprType::Double
-        }
-
-        (ExprType::Integer, ExprType::Double) => {
-            instrs[pc] = Instruction::IntegerToDouble;
-            keep_nop = true;
-            ExprType::Double
-        }
-
-        (_, _) => {
-            return Err(Error::BinaryOpTypeError(span.pos, op_name, lhs_type, rhs_type));
-        }
-    };
-
-    if !keep_nop {
-        let nop = instrs.remove(pc);
-        debug_assert_eq!(std::mem::discriminant(&Instruction::Nop), std::mem::discriminant(&nop));
-    }
-    merge_fixups(fixups, extra_fixups, !keep_nop);
-
-    match result {
-        ExprType::Boolean => instrs.push(boolean_make_inst(span.pos)),
-        ExprType::Double => instrs.push(double_make_inst(span.pos)),
-        ExprType::Integer => instrs.push(integer_make_inst(span.pos)),
-        ExprType::Text => instrs.push(text_make_inst(span.pos)),
-    };
-
-    Ok(ExprType::Boolean)
+    make_boolean: Option<fn(Register, Register, Register) -> u32>,
+    make_double: Option<fn(Register, Register, Register) -> u32>,
+    make_integer: Option<fn(Register, Register, Register) -> u32>,
+    make_text: Option<fn(Register, Register, Register) -> u32>,
 }
 
-/// Compiles a relational binary operator and appends its instructions to `instrs`.
-#[allow(clippy::too_many_arguments)]
-fn compile_relational_binary_op<
-    F1: Fn(LineCol) -> Instruction,
-    F2: Fn(LineCol) -> Instruction,
-    F3: Fn(LineCol) -> Instruction,
->(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    double_make_inst: F1,
-    integer_make_inst: F2,
-    text_make_inst: F3,
-    span: BinaryOpSpan,
-    op_name: &'static str,
-) -> Result<ExprType> {
-    let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
-    let pc = instrs.len();
-    instrs.push(Instruction::Nop);
-
-    let mut keep_nop = false;
-    let mut extra_fixups = HashMap::default();
-    let rhs_type = compile_expr(instrs, &mut extra_fixups, symtable, span.rhs, false)?;
-    let result = match (lhs_type, rhs_type) {
-        // Boolean is explicitly excluded here.
-        (ExprType::Double, ExprType::Double) => ExprType::Double,
-        (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
-        (ExprType::Text, ExprType::Text) => ExprType::Text,
-
-        (ExprType::Double, ExprType::Integer) => {
-            instrs.push(Instruction::IntegerToDouble);
-            ExprType::Double
-        }
-
-        (ExprType::Integer, ExprType::Double) => {
-            instrs[pc] = Instruction::IntegerToDouble;
-            keep_nop = true;
-            ExprType::Double
-        }
-
-        (_, _) => {
-            return Err(Error::BinaryOpTypeError(span.pos, op_name, lhs_type, rhs_type));
-        }
-    };
-
-    if !keep_nop {
-        let nop = instrs.remove(pc);
-        debug_assert_eq!(std::mem::discriminant(&Instruction::Nop), std::mem::discriminant(&nop));
-    }
-    merge_fixups(fixups, extra_fixups, !keep_nop);
-
-    match result {
-        ExprType::Boolean => unreachable!("Filtered out above"),
-        ExprType::Double => instrs.push(double_make_inst(span.pos)),
-        ExprType::Integer => instrs.push(integer_make_inst(span.pos)),
-        ExprType::Text => instrs.push(text_make_inst(span.pos)),
-    };
-
-    Ok(ExprType::Boolean)
+/// A pending expression operation waiting to be applied, used to flatten expression chains
+/// and avoid recursive calls during processing.
+enum PendingOp {
+    Unary(PendingUnaryOp),
+    Binary(PendingBinaryOp),
+    Relational(PendingRelationalOp),
 }
 
-/// Compiles a binary shift operator and appends its instructions to `instrs`.
-fn compile_shift_binary_op<F: Fn(LineCol) -> Instruction>(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    make_inst: F,
-    span: BinaryOpSpan,
-    op_name: &'static str,
-) -> Result<ExprType> {
-    let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
-    let rhs_type = compile_expr(instrs, fixups, symtable, span.rhs, false)?;
-    match (lhs_type, rhs_type) {
-        (ExprType::Integer, ExprType::Integer) => {
-            instrs.push(make_inst(span.pos));
-            Ok(ExprType::Integer)
-        }
-        (lhs_type, rhs_type) => {
-            Err(Error::BinaryOpTypeError(span.pos, op_name, lhs_type, rhs_type))
-        }
-    }
-}
-
-/// Compiles the evaluation of an expression, appends its instructions to the
-/// Compiles a binary operator and appends its instructions to `instrs`.
-fn compile_arithmetic_binary_op<F1: Fn(LineCol) -> Instruction, F2: Fn(LineCol) -> Instruction>(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    double_make_inst: F1,
-    integer_make_inst: F2,
-    span: BinaryOpSpan,
-    op_name: &'static str,
-) -> Result<ExprType> {
-    let lhs_type = compile_expr(instrs, fixups, symtable, span.lhs, false)?;
-    let pc = instrs.len();
-    instrs.push(Instruction::Nop);
-
-    let mut keep_nop = false;
-    let mut extra_fixups = HashMap::default();
-    let rhs_type = compile_expr(instrs, &mut extra_fixups, symtable, span.rhs, false)?;
-    let result = match (lhs_type, rhs_type) {
-        (ExprType::Double, ExprType::Double) => ExprType::Double,
-        (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
-        (ExprType::Text, ExprType::Text) if op_name == "+" => ExprType::Text,
-
-        (ExprType::Double, ExprType::Integer) => {
-            instrs.push(Instruction::IntegerToDouble);
-            ExprType::Double
-        }
-
-        (ExprType::Integer, ExprType::Double) => {
-            instrs[pc] = Instruction::IntegerToDouble;
-            keep_nop = true;
-            ExprType::Double
-        }
-
-        (_, _) => {
-            return Err(Error::BinaryOpTypeError(span.pos, op_name, lhs_type, rhs_type));
-        }
-    };
-
-    if !keep_nop {
-        let nop = instrs.remove(pc);
-        debug_assert_eq!(std::mem::discriminant(&Instruction::Nop), std::mem::discriminant(&nop));
-    }
-    merge_fixups(fixups, extra_fixups, !keep_nop);
-
-    match result {
-        ExprType::Boolean => unreachable!("Filtered out above"),
-        ExprType::Double => instrs.push(double_make_inst(span.pos)),
-        ExprType::Integer => instrs.push(integer_make_inst(span.pos)),
-        ExprType::Text => {
-            debug_assert_eq!("+", op_name, "Filtered out above");
-            instrs.push(Instruction::ConcatStrings(span.pos))
-        }
-    };
-
-    Ok(result)
-}
-
-/// Compiles the load of a symbol in the context of an expression.
-fn compile_expr_symbol(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    span: SymbolSpan,
-    allow_varrefs: bool,
-) -> Result<ExprType> {
-    let key = SymbolKey::from(&span.vref.name);
-    let (instr, vtype) = match symtable.get(&key) {
-        None => return Err(Error::UndefinedSymbol(span.pos, span.vref)),
-
-        Some(SymbolPrototype::Array(atype, _dims)) => {
-            if allow_varrefs {
-                (Instruction::LoadRef(key, *atype, span.pos), *atype)
-            } else {
-                return Err(Error::NotAVariable(span.pos, span.vref));
-            }
-        }
-
-        Some(SymbolPrototype::Variable(vtype)) => {
-            if allow_varrefs {
-                (Instruction::LoadRef(key, *vtype, span.pos), *vtype)
-            } else {
-                let instr = match vtype {
-                    ExprType::Boolean => Instruction::LoadBoolean,
-                    ExprType::Double => Instruction::LoadDouble,
-                    ExprType::Integer => Instruction::LoadInteger,
-                    ExprType::Text => Instruction::LoadString,
-                };
-                (instr(key, span.pos), *vtype)
-            }
-        }
-
-        Some(SymbolPrototype::BuiltinCallable(md, upcall_index)) => {
-            let etype = match md.return_type() {
-                Some(etype) => etype,
-                None => {
-                    return Err(Error::NotArrayOrFunction(span.pos, span.vref));
-                }
-            };
-
-            if !md.is_argless() {
-                return Err(Error::CallableSyntaxError(span.pos, md.clone()));
-            }
-
-            let nargs = compile_function_args(md, instrs, fixups, symtable, span.pos, vec![])?;
-            debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
-            (
-                Instruction::FunctionCall(FunctionCallISpan {
-                    name: key,
-                    name_pos: span.pos,
-                    upcall_index: *upcall_index,
-                    return_type: etype,
-                    nargs: 0,
-                }),
-                etype,
-            )
-        }
-
-        Some(SymbolPrototype::Callable(md)) => {
-            let etype = match md.return_type() {
-                Some(etype) => etype,
-                None => {
-                    return Err(Error::NotArrayOrFunction(span.pos, span.vref));
-                }
-            };
-
-            if !md.is_argless() {
-                return Err(Error::CallableSyntaxError(span.pos, md.clone()));
-            }
-
-            let nargs = compile_function_args(md, instrs, fixups, symtable, span.pos, vec![])?;
-            debug_assert_eq!(0, nargs, "Argless compiler must have returned zero arguments");
-            fixups.insert(instrs.len(), Fixup::Call(span.vref.clone(), span.pos));
-            (Instruction::Nop, etype)
-        }
-    };
-    if !span.vref.accepts(vtype) {
-        return Err(Error::IncompatibleTypeAnnotationInReference(span.pos, span.vref));
-    }
-    instrs.push(instr);
-    Ok(vtype)
-}
-
-/// Compiles an array access.
-fn compile_array_ref(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    span: CallSpan,
-    key: SymbolKey,
-    vtype: ExprType,
-    dimensions: usize,
-) -> Result<ExprType> {
-    let exprs = argspans_to_exprs(span.args);
-    let nargs = exprs.len();
-    compile_array_indices(instrs, fixups, symtable, dimensions, exprs, span.vref_pos)?;
-
-    if !span.vref.accepts(vtype) {
-        return Err(Error::IncompatibleTypeAnnotationInReference(span.vref_pos, span.vref));
-    }
-    instrs.push(Instruction::ArrayLoad(key, span.vref_pos, nargs));
-    Ok(vtype)
-}
-
-/// Compiles the evaluation of an expression, appends its instructions to `instrs`, and returns
-/// the type of the compiled expression.
+/// Peels the expression chain into a vector of pending ops to avoid deep recursion.
 ///
-/// `allow_varrefs` should be true for top-level expression compilations within function arguments.
-/// In that specific case, we must leave bare variable and array references unevaluated because we
-/// don't know if the function wants to take the reference or the value.
-pub(super) fn compile_expr(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    expr: Expr,
-    allow_varrefs: bool,
+/// Returns the input `expr` holding the innermost non-op expression and the list of
+/// pending ops.
+fn peel_ops(mut expr: Expr) -> (Expr, Vec<PendingOp>) {
+    let mut pending: Vec<PendingOp> = vec![];
+    loop {
+        match expr {
+            Expr::Add(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "+",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_add_double),
+                    make_integer: bytecode::make_add_integer,
+                    make_text: Some(bytecode::make_concat),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::And(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "AND",
+                    make_boolean: Some(bytecode::make_bitwise_and),
+                    make_double: None,
+                    make_integer: bytecode::make_bitwise_and,
+                    make_text: None,
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Divide(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "/",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_divide_double),
+                    make_integer: bytecode::make_divide_integer,
+                    make_text: None,
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Equal(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "=",
+                    make_boolean: Some(bytecode::make_equal_boolean),
+                    make_double: Some(bytecode::make_equal_double),
+                    make_integer: Some(bytecode::make_equal_integer),
+                    make_text: Some(bytecode::make_equal_text),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Greater(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: ">",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_greater_double),
+                    make_integer: Some(bytecode::make_greater_integer),
+                    make_text: Some(bytecode::make_greater_text),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::GreaterEqual(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: ">=",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_greater_equal_double),
+                    make_integer: Some(bytecode::make_greater_equal_integer),
+                    make_text: Some(bytecode::make_greater_equal_text),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Less(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "<",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_less_double),
+                    make_integer: Some(bytecode::make_less_integer),
+                    make_text: Some(bytecode::make_less_text),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::LessEqual(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "<=",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_less_equal_double),
+                    make_integer: Some(bytecode::make_less_equal_integer),
+                    make_text: Some(bytecode::make_less_equal_text),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Modulo(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "MOD",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_modulo_double),
+                    make_integer: bytecode::make_modulo_integer,
+                    make_text: None,
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Multiply(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "*",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_multiply_double),
+                    make_integer: bytecode::make_multiply_integer,
+                    make_text: None,
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Negate(span) => {
+                let span = *span;
+                pending.push(PendingOp::Unary(PendingUnaryOp {
+                    pos: span.pos,
+                    kind: PendingUnaryKind::Negate,
+                    make_boolean: None,
+                    make_integer: bytecode::make_negate_integer,
+                    make_double: Some(bytecode::make_negate_double),
+                }));
+                expr = span.expr;
+            }
+
+            Expr::Not(span) => {
+                let span = *span;
+                pending.push(PendingOp::Unary(PendingUnaryOp {
+                    pos: span.pos,
+                    kind: PendingUnaryKind::Not,
+                    make_boolean: Some(bytecode::make_bitwise_xor),
+                    make_integer: bytecode::make_bitwise_not,
+                    make_double: None,
+                }));
+                expr = span.expr;
+            }
+
+            Expr::NotEqual(span) => {
+                let span = *span;
+                pending.push(PendingOp::Relational(PendingRelationalOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "<>",
+                    make_boolean: Some(bytecode::make_not_equal_boolean),
+                    make_double: Some(bytecode::make_not_equal_double),
+                    make_integer: Some(bytecode::make_not_equal_integer),
+                    make_text: Some(bytecode::make_not_equal_text),
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Or(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "OR",
+                    make_boolean: Some(bytecode::make_bitwise_or),
+                    make_double: None,
+                    make_integer: bytecode::make_bitwise_or,
+                    make_text: None,
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Power(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "^",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_power_double),
+                    make_integer: bytecode::make_power_integer,
+                    make_text: None,
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::ShiftLeft(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "<<",
+                    make_boolean: None,
+                    make_double: None,
+                    make_integer: bytecode::make_shift_left,
+                    make_text: None,
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::ShiftRight(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: ">>",
+                    make_boolean: None,
+                    make_double: None,
+                    make_integer: bytecode::make_shift_right,
+                    make_text: None,
+                }));
+                expr = span.lhs;
+            }
+            Expr::Subtract(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "-",
+                    make_boolean: None,
+                    make_double: Some(bytecode::make_subtract_double),
+                    make_integer: bytecode::make_subtract_integer,
+                    make_text: None,
+                }));
+                expr = span.lhs;
+            }
+
+            Expr::Xor(span) => {
+                let span = *span;
+                pending.push(PendingOp::Binary(PendingBinaryOp {
+                    pos: span.pos,
+                    rhs: span.rhs,
+                    op_name: "XOR",
+                    make_boolean: Some(bytecode::make_bitwise_xor),
+                    make_double: None,
+                    make_integer: bytecode::make_bitwise_xor,
+                    make_text: None,
+                }));
+                expr = span.lhs;
+            }
+
+            _ => break,
+        }
+    }
+    (expr, pending)
+}
+
+/// Emits a cast in `reg` to convert from `from` to `to` if these are numerical types.
+///
+/// Returns true if the conversion is valid, regardless of whether a cast was needed.
+fn cast_numerical_type(
+    codegen: &mut Codegen,
+    reg: Register,
+    from: ExprType,
+    to: ExprType,
+    pos: LineCol,
+) -> bool {
+    match (from, to) {
+        (ExprType::Double, ExprType::Integer) => {
+            codegen.emit(bytecode::make_double_to_integer(reg), pos);
+            true
+        }
+        (ExprType::Integer, ExprType::Double) => {
+            codegen.emit(bytecode::make_integer_to_double(reg), pos);
+            true
+        }
+        (ExprType::Double, ExprType::Double) | (ExprType::Integer, ExprType::Integer) => true,
+        _ => false,
+    }
+}
+
+/// Resolves the numeric operand type for a binary operation and emits any required casts.
+fn resolve_numeric_binary_type(
+    codegen: &mut Codegen,
+    reg: Register,
+    etype: ExprType,
+    rtemp: Register,
+    rtype: ExprType,
+    rpos: LineCol,
+    op_pos: LineCol,
+) -> Option<ExprType> {
+    match (etype, rtype) {
+        (ExprType::Double, ExprType::Double) => Some(ExprType::Double),
+        (ExprType::Integer, ExprType::Integer) => Some(ExprType::Integer),
+        (ExprType::Double, ExprType::Integer) => {
+            let cast_ok =
+                cast_numerical_type(codegen, rtemp, ExprType::Integer, ExprType::Double, rpos);
+            debug_assert!(cast_ok);
+            Some(ExprType::Double)
+        }
+        (ExprType::Integer, ExprType::Double) => {
+            let cast_ok =
+                cast_numerical_type(codegen, reg, ExprType::Integer, ExprType::Double, op_pos);
+            debug_assert!(cast_ok);
+            Some(ExprType::Double)
+        }
+        _ => None,
+    }
+}
+
+/// Processes `pending` binary ops from innermost to outermost, using `reg` as the
+/// accumulator.
+///
+/// This avoids the deep recursion that would arise if we compiled binary op chains
+/// by recursing on the lhs.
+fn compile_pending_ops(
+    codegen: &mut Codegen,
+    symtable: &mut TempSymtable<'_, '_>,
+    reg: Register,
+    mut etype: ExprType,
+    mut pending: Vec<PendingOp>,
 ) -> Result<ExprType> {
-    match expr {
+    while let Some(op) = pending.pop() {
+        match op {
+            PendingOp::Unary(op) => {
+                let result_type = match etype {
+                    ExprType::Boolean if op.make_boolean.is_some() => ExprType::Boolean,
+                    ExprType::Double if op.make_double.is_some() => ExprType::Double,
+                    ExprType::Integer => ExprType::Integer,
+                    _ => match op.kind {
+                        PendingUnaryKind::Negate => return Err(Error::NotANumber(op.pos, etype)),
+                        PendingUnaryKind::Not => {
+                            return Err(Error::TypeMismatch(op.pos, etype, ExprType::Integer));
+                        }
+                    },
+                };
+                match result_type {
+                    ExprType::Boolean => {
+                        let mut scope = symtable.temp_scope();
+                        let temp = scope.alloc().map_err(|e| Error::from_syms(e, op.pos))?;
+                        codegen.emit_value(temp, ConstantDatum::Integer(1), op.pos)?;
+                        codegen.emit(op.make_boolean.unwrap()(reg, reg, temp), op.pos);
+                    }
+                    ExprType::Double => {
+                        codegen.emit(op.make_double.unwrap()(reg), op.pos);
+                    }
+                    ExprType::Integer => {
+                        codegen.emit((op.make_integer)(reg), op.pos);
+                    }
+                    ExprType::Text => unreachable!(),
+                }
+                etype = result_type;
+            }
+            PendingOp::Binary(op) => {
+                let rpos = op.rhs.start_pos();
+                let mut scope = symtable.temp_scope();
+                let rtemp = scope.alloc().map_err(|e| Error::from_syms(e, rpos))?;
+                let rtype = compile_expr(codegen, symtable, rtemp, op.rhs)?;
+
+                let result_type = match (etype, rtype) {
+                    (ExprType::Boolean, ExprType::Boolean) if op.make_boolean.is_some() => {
+                        ExprType::Boolean
+                    }
+                    (ExprType::Text, ExprType::Text) if op.make_text.is_some() => ExprType::Text,
+                    (_, _) if op.make_double.is_some() => {
+                        match resolve_numeric_binary_type(
+                            codegen, reg, etype, rtemp, rtype, rpos, op.pos,
+                        ) {
+                            Some(v) => v,
+                            None => {
+                                return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype));
+                            }
+                        }
+                    }
+                    (ExprType::Integer, ExprType::Integer) => ExprType::Integer,
+                    _ => return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype)),
+                };
+
+                match result_type {
+                    ExprType::Boolean => {
+                        codegen.emit(op.make_boolean.unwrap()(reg, reg, rtemp), op.pos);
+                    }
+                    ExprType::Double => {
+                        codegen.emit(op.make_double.unwrap()(reg, reg, rtemp), op.pos);
+                    }
+                    ExprType::Integer => {
+                        codegen.emit((op.make_integer)(reg, reg, rtemp), op.pos);
+                    }
+                    ExprType::Text => {
+                        codegen.emit(op.make_text.unwrap()(reg, reg, rtemp), op.pos);
+                    }
+                }
+                etype = result_type;
+            }
+
+            PendingOp::Relational(op) => {
+                let rpos = op.rhs.start_pos();
+                let mut scope = symtable.temp_scope();
+                let rtemp = scope.alloc().map_err(|e| Error::from_syms(e, rpos))?;
+                let rtype = compile_expr(codegen, symtable, rtemp, op.rhs)?;
+
+                let make_opcode = match (etype, rtype) {
+                    (ExprType::Boolean, ExprType::Boolean) if op.make_boolean.is_some() => {
+                        op.make_boolean.unwrap()
+                    }
+
+                    (ExprType::Text, ExprType::Text) if op.make_text.is_some() => {
+                        op.make_text.unwrap()
+                    }
+
+                    (_, _) if op.make_double.is_some() || op.make_integer.is_some() => {
+                        match resolve_numeric_binary_type(
+                            codegen, reg, etype, rtemp, rtype, rpos, op.pos,
+                        ) {
+                            Some(ExprType::Double) => op.make_double.expect("Must exist"),
+                            Some(ExprType::Integer) => op.make_integer.expect("Must exist"),
+                            _ => {
+                                return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype));
+                            }
+                        }
+                    }
+
+                    _ => return Err(Error::BinaryOpType(op.pos, op.op_name, etype, rtype)),
+                };
+
+                codegen.emit(make_opcode(reg, reg, rtemp), op.pos);
+                etype = ExprType::Boolean;
+            }
+        }
+    }
+
+    Ok(etype)
+}
+
+/// Compiles a single expression `expr` and leaves its value in `reg`.
+///
+/// For left-recursive binary operations (like `a + b + c`), this function iterates rather
+/// than recurses so that very long expression chains do not overflow the call stack.
+pub(super) fn compile_expr(
+    codegen: &mut Codegen,
+    symtable: &mut TempSymtable<'_, '_>,
+    reg: Register,
+    expr: Expr,
+) -> Result<ExprType> {
+    let (expr, pending) = peel_ops(expr);
+
+    let etype = match expr {
+        Expr::Add(..)
+        | Expr::And(..)
+        | Expr::Divide(..)
+        | Expr::Equal(..)
+        | Expr::Greater(..)
+        | Expr::GreaterEqual(..)
+        | Expr::Less(..)
+        | Expr::LessEqual(..)
+        | Expr::Modulo(..)
+        | Expr::Multiply(..)
+        | Expr::Negate(..)
+        | Expr::Not(..)
+        | Expr::NotEqual(..)
+        | Expr::Or(..)
+        | Expr::Power(..)
+        | Expr::ShiftLeft(..)
+        | Expr::ShiftRight(..)
+        | Expr::Subtract(..)
+        | Expr::Xor(..) => unreachable!("Peeled by peel_ops"),
+
         Expr::Boolean(span) => {
-            instrs.push(Instruction::PushBoolean(span.value, span.pos));
+            codegen.emit_value(reg, ConstantDatum::Boolean(span.value), span.pos)?;
             Ok(ExprType::Boolean)
+        }
+
+        Expr::Call(span) => {
+            let key = SymbolKey::from(&span.vref.name);
+            let key_pos = span.vref_pos;
+
+            if let Some(md) = symtable.get_callable(&key) {
+                let md = md.clone();
+
+                let Some(etype) = md.return_type() else {
+                    return Err(Error::NotAFunction(span.vref_pos, span.vref));
+                };
+
+                if !span.vref.accepts_callable(Some(etype)) {
+                    return Err(Error::IncompatibleTypeAnnotationInReference(
+                        span.vref_pos,
+                        span.vref,
+                    ));
+                }
+
+                if md.is_argless() {
+                    return Err(Error::CallableSyntax(span.vref_pos, md.as_ref().clone()));
+                }
+
+                let is_user_defined = md.is_user_defined();
+                let mut call_scope = symtable.temp_scope();
+                let ret_reg = call_scope.alloc().map_err(|e| Error::from_syms(e, key_pos))?;
+                let (_first_temp, arg_linecols) =
+                    compile_args(span, md.clone(), symtable, codegen)?;
+
+                if is_user_defined {
+                    let addr = codegen.emit(bytecode::make_nop(), key_pos);
+                    codegen.set_arg_linecols(addr, arg_linecols);
+                    codegen.add_fixup(addr, Fixup::Call(ret_reg, key));
+                } else {
+                    let upcall = codegen.get_upcall(key, Some(etype), key_pos)?;
+                    let addr = codegen.emit(bytecode::make_upcall(upcall, ret_reg), key_pos);
+                    codegen.set_arg_linecols(addr, arg_linecols);
+                }
+                if reg != ret_reg {
+                    codegen.emit(bytecode::make_move(reg, ret_reg), key_pos);
+                }
+
+                Ok(etype)
+            } else {
+                match symtable.get_local_or_global(&span.vref) {
+                    Ok((arr_reg, SymbolPrototype::Array(info))) => compile_array_access(
+                        codegen, symtable, reg, key_pos, arr_reg, &info, span.args,
+                    ),
+                    Ok((_, SymbolPrototype::Scalar(_))) => {
+                        return Err(Error::NotAFunction(span.vref_pos, span.vref));
+                    }
+                    Err(syms::Error::UndefinedSymbol(..)) => {
+                        return Err(Error::UndefinedSymbol(span.vref_pos, span.vref));
+                    }
+                    Err(e) => return Err(Error::from_syms(e, key_pos)),
+                }
+            }
         }
 
         Expr::Double(span) => {
-            instrs.push(Instruction::PushDouble(span.value, span.pos));
+            codegen.emit_value(reg, ConstantDatum::Double(span.value), span.pos)?;
             Ok(ExprType::Double)
         }
 
         Expr::Integer(span) => {
-            instrs.push(Instruction::PushInteger(span.value, span.pos));
+            codegen.emit_value(reg, ConstantDatum::Integer(span.value), span.pos)?;
             Ok(ExprType::Integer)
         }
 
+        Expr::Symbol(span) => match symtable.get_local_or_global(&span.vref) {
+            Ok((local, SymbolPrototype::Scalar(etype))) => {
+                codegen.emit(bytecode::make_move(reg, local), span.pos);
+                Ok(etype)
+            }
+
+            Ok((_, SymbolPrototype::Array(_))) => {
+                Err(Error::ArrayUsedAsScalar(span.pos, span.vref))
+            }
+
+            Err(syms::Error::UndefinedSymbol(..)) => {
+                let key = SymbolKey::from(&span.vref.name);
+
+                let Some(md) = symtable.get_callable(&key) else {
+                    return Err(Error::UndefinedSymbol(span.pos, span.vref));
+                };
+
+                let Some(etype) = md.return_type() else {
+                    return Err(Error::NotAFunction(span.pos, span.vref));
+                };
+
+                if !span.vref.accepts_callable(Some(etype)) {
+                    return Err(Error::IncompatibleTypeAnnotationInReference(span.pos, span.vref));
+                }
+
+                if !md.is_argless() {
+                    return Err(Error::CallableSyntax(span.pos, md.as_ref().clone()));
+                }
+
+                if md.is_user_defined() {
+                    let addr = codegen.emit(bytecode::make_nop(), span.pos);
+                    codegen.add_fixup(addr, Fixup::Call(reg, key));
+                } else {
+                    let upcall = codegen.get_upcall(key, Some(etype), span.pos)?;
+                    let (is_global, _) = reg.to_parts();
+                    if is_global {
+                        let mut scope = symtable.temp_scope();
+                        let temp = scope.alloc().map_err(|e| Error::from_syms(e, span.pos))?;
+                        codegen.emit(bytecode::make_upcall(upcall, temp), span.pos);
+                        codegen.emit(bytecode::make_move(reg, temp), span.pos);
+                    } else {
+                        codegen.emit(bytecode::make_upcall(upcall, reg), span.pos);
+                    }
+                }
+                Ok(etype)
+            }
+
+            Err(e) => Err(Error::from_syms(e, span.pos)),
+        },
+
         Expr::Text(span) => {
-            instrs.push(Instruction::PushString(span.value, span.pos));
+            codegen.emit_value(reg, ConstantDatum::Text(span.value), span.pos)?;
             Ok(ExprType::Text)
         }
+    }?;
 
-        Expr::Symbol(span) => compile_expr_symbol(instrs, fixups, symtable, span, allow_varrefs),
-
-        Expr::And(span) => compile_logical_binary_op(
-            instrs,
-            fixups,
-            symtable,
-            Instruction::LogicalAnd,
-            Instruction::BitwiseAnd,
-            *span,
-            "AND",
-        ),
-
-        Expr::Or(span) => compile_logical_binary_op(
-            instrs,
-            fixups,
-            symtable,
-            Instruction::LogicalOr,
-            Instruction::BitwiseOr,
-            *span,
-            "OR",
-        ),
-
-        Expr::Xor(span) => compile_logical_binary_op(
-            instrs,
-            fixups,
-            symtable,
-            Instruction::LogicalXor,
-            Instruction::BitwiseXor,
-            *span,
-            "XOR",
-        ),
-
-        Expr::Not(span) => compile_not_op(instrs, fixups, symtable, *span),
-
-        Expr::ShiftLeft(span) => {
-            let result = compile_shift_binary_op(
-                instrs,
-                fixups,
-                symtable,
-                Instruction::ShiftLeft,
-                *span,
-                "<<",
-            )?;
-            debug_assert_eq!(ExprType::Integer, result);
-            Ok(result)
-        }
-
-        Expr::ShiftRight(span) => {
-            let result = compile_shift_binary_op(
-                instrs,
-                fixups,
-                symtable,
-                Instruction::ShiftRight,
-                *span,
-                ">>",
-            )?;
-            debug_assert_eq!(ExprType::Integer, result);
-            Ok(result)
-        }
-
-        Expr::Equal(span) => {
-            let result = compile_equality_binary_op(
-                instrs,
-                fixups,
-                symtable,
-                Instruction::EqualBooleans,
-                Instruction::EqualDoubles,
-                Instruction::EqualIntegers,
-                Instruction::EqualStrings,
-                *span,
-                "=",
-            )?;
-            debug_assert_eq!(ExprType::Boolean, result);
-            Ok(result)
-        }
-
-        Expr::NotEqual(span) => {
-            let result = compile_equality_binary_op(
-                instrs,
-                fixups,
-                symtable,
-                Instruction::NotEqualBooleans,
-                Instruction::NotEqualDoubles,
-                Instruction::NotEqualIntegers,
-                Instruction::NotEqualStrings,
-                *span,
-                "<>",
-            )?;
-            debug_assert_eq!(ExprType::Boolean, result);
-            Ok(result)
-        }
-
-        Expr::Less(span) => {
-            let result = compile_relational_binary_op(
-                instrs,
-                fixups,
-                symtable,
-                Instruction::LessDoubles,
-                Instruction::LessIntegers,
-                Instruction::LessStrings,
-                *span,
-                "<",
-            )?;
-            debug_assert_eq!(ExprType::Boolean, result);
-            Ok(result)
-        }
-
-        Expr::LessEqual(span) => {
-            let result = compile_relational_binary_op(
-                instrs,
-                fixups,
-                symtable,
-                Instruction::LessEqualDoubles,
-                Instruction::LessEqualIntegers,
-                Instruction::LessEqualStrings,
-                *span,
-                "<=",
-            )?;
-            debug_assert_eq!(ExprType::Boolean, result);
-            Ok(result)
-        }
-
-        Expr::Greater(span) => {
-            let result = compile_relational_binary_op(
-                instrs,
-                fixups,
-                symtable,
-                Instruction::GreaterDoubles,
-                Instruction::GreaterIntegers,
-                Instruction::GreaterStrings,
-                *span,
-                ">",
-            )?;
-            debug_assert_eq!(ExprType::Boolean, result);
-            Ok(result)
-        }
-
-        Expr::GreaterEqual(span) => {
-            let result = compile_relational_binary_op(
-                instrs,
-                fixups,
-                symtable,
-                Instruction::GreaterEqualDoubles,
-                Instruction::GreaterEqualIntegers,
-                Instruction::GreaterEqualStrings,
-                *span,
-                ">=",
-            )?;
-            debug_assert_eq!(ExprType::Boolean, result);
-            Ok(result)
-        }
-
-        Expr::Add(span) => Ok(compile_arithmetic_binary_op(
-            instrs,
-            fixups,
-            symtable,
-            Instruction::AddDoubles,
-            Instruction::AddIntegers,
-            *span,
-            "+",
-        )?),
-
-        Expr::Subtract(span) => Ok(compile_arithmetic_binary_op(
-            instrs,
-            fixups,
-            symtable,
-            Instruction::SubtractDoubles,
-            Instruction::SubtractIntegers,
-            *span,
-            "-",
-        )?),
-
-        Expr::Multiply(span) => Ok(compile_arithmetic_binary_op(
-            instrs,
-            fixups,
-            symtable,
-            Instruction::MultiplyDoubles,
-            Instruction::MultiplyIntegers,
-            *span,
-            "*",
-        )?),
-
-        Expr::Divide(span) => Ok(compile_arithmetic_binary_op(
-            instrs,
-            fixups,
-            symtable,
-            Instruction::DivideDoubles,
-            Instruction::DivideIntegers,
-            *span,
-            "/",
-        )?),
-
-        Expr::Modulo(span) => Ok(compile_arithmetic_binary_op(
-            instrs,
-            fixups,
-            symtable,
-            Instruction::ModuloDoubles,
-            Instruction::ModuloIntegers,
-            *span,
-            "MOD",
-        )?),
-
-        Expr::Power(span) => Ok(compile_arithmetic_binary_op(
-            instrs,
-            fixups,
-            symtable,
-            Instruction::PowerDoubles,
-            Instruction::PowerIntegers,
-            *span,
-            "^",
-        )?),
-
-        Expr::Negate(span) => Ok(compile_neg_op(instrs, fixups, symtable, *span)?),
-
-        Expr::Call(span) => {
-            let key = SymbolKey::from(&span.vref.name);
-            match symtable.get(&key) {
-                Some(SymbolPrototype::Array(vtype, dims)) => {
-                    compile_array_ref(instrs, fixups, symtable, span, key, *vtype, *dims)
-                }
-
-                Some(SymbolPrototype::BuiltinCallable(md, upcall_index)) => {
-                    if !span.vref.accepts_callable(md.return_type()) {
-                        return Err(Error::IncompatibleTypeAnnotationInReference(
-                            span.vref_pos,
-                            span.vref,
-                        ));
-                    }
-
-                    let vtype = match md.return_type() {
-                        Some(vtype) => vtype,
-                        None => {
-                            return Err(Error::NotArrayOrFunction(span.vref_pos, span.vref));
-                        }
-                    };
-
-                    if md.is_argless() {
-                        return Err(Error::CallableSyntaxError(span.vref_pos, md.clone()));
-                    }
-
-                    let span_pos = span.vref_pos;
-                    let nargs =
-                        compile_function_args(md, instrs, fixups, symtable, span_pos, span.args)?;
-                    instrs.push(Instruction::FunctionCall(FunctionCallISpan {
-                        name: key,
-                        name_pos: span_pos,
-                        upcall_index: *upcall_index,
-                        return_type: vtype,
-                        nargs,
-                    }));
-                    Ok(vtype)
-                }
-
-                Some(SymbolPrototype::Callable(md)) => {
-                    if !span.vref.accepts_callable(md.return_type()) {
-                        return Err(Error::IncompatibleTypeAnnotationInReference(
-                            span.vref_pos,
-                            span.vref,
-                        ));
-                    }
-
-                    let vtype = match md.return_type() {
-                        Some(vtype) => vtype,
-                        None => {
-                            return Err(Error::NotArrayOrFunction(span.vref_pos, span.vref));
-                        }
-                    };
-
-                    if md.is_argless() {
-                        return Err(Error::CallableSyntaxError(span.vref_pos, md.clone()));
-                    }
-
-                    let span_pos = span.vref_pos;
-                    compile_function_args(md, instrs, fixups, symtable, span_pos, span.args)?;
-                    instrs.push(Instruction::Nop);
-                    fixups.insert(instrs.len() - 1, Fixup::Call(span.vref.clone(), span_pos));
-                    Ok(vtype)
-                }
-
-                Some(SymbolPrototype::Variable(_)) => {
-                    Err(Error::NotArrayOrFunction(span.vref_pos, span.vref))
-                }
-
-                None => Err(Error::UndefinedSymbol(span.vref_pos, span.vref)),
-            }
-        }
-    }
+    compile_pending_ops(codegen, symtable, reg, etype, pending)
 }
 
 /// Compiles a single expression, expecting it to be of a `target` type.  Applies casts if
 /// possible.
 pub(super) fn compile_expr_as_type(
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
+    codegen: &mut Codegen,
+    symtable: &mut TempSymtable<'_, '_>,
+    reg: Register,
     expr: Expr,
     target: ExprType,
 ) -> Result<()> {
     let epos = expr.start_pos();
-    let etype = compile_expr(instrs, fixups, symtable, expr, false)?;
-    if etype == ExprType::Double && target.is_numerical() {
-        if target == ExprType::Integer {
-            instrs.push(Instruction::DoubleToInteger);
-        }
-        Ok(())
-    } else if etype == ExprType::Integer && target.is_numerical() {
-        if target == ExprType::Double {
-            instrs.push(Instruction::IntegerToDouble);
-        }
-        Ok(())
-    } else if etype == target {
+    let etype = compile_expr(codegen, symtable, reg, expr)?;
+    if etype == target || cast_numerical_type(codegen, reg, etype, target, epos) {
         Ok(())
     } else {
         if target.is_numerical() {
@@ -794,564 +752,5 @@ pub(super) fn compile_expr_as_type(
         } else {
             Err(Error::TypeMismatch(epos, etype, target))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::bytecode::{BuiltinCallISpan, FunctionCallISpan};
-    use crate::compiler::{
-        ArgSepSyntax, RepeatedSyntax, RepeatedTypeSyntax, RequiredRefSyntax, RequiredValueSyntax,
-        SingularArgSyntax, testutils::*,
-    };
-    use crate::syms::CallableMetadataBuilder;
-    use std::borrow::Cow;
-
-    #[test]
-    fn test_compile_expr_literals() {
-        Tester::default()
-            .parse("b = TRUE\nd = 2.3\ni = 5\nt = \"foo\"")
-            .compile()
-            .expect_instr(0, Instruction::PushBoolean(true, lc(1, 5)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("b")))
-            .expect_instr(2, Instruction::PushDouble(2.3, lc(2, 5)))
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("d")))
-            .expect_instr(4, Instruction::PushInteger(5, lc(3, 5)))
-            .expect_instr(5, Instruction::Assign(SymbolKey::from("i")))
-            .expect_instr(6, Instruction::PushString("foo".to_owned(), lc(4, 5)))
-            .expect_instr(7, Instruction::Assign(SymbolKey::from("t")))
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_varrefs_are_evaluated() {
-        Tester::default()
-            .define("j", SymbolPrototype::Variable(ExprType::Integer))
-            .parse("i = j")
-            .compile()
-            .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 5)))
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_argless_call_ok() {
-        Tester::default()
-            .define_callable(CallableMetadataBuilder::new("F").with_return_type(ExprType::Integer))
-            .parse("i = f")
-            .compile()
-            .expect_instr(
-                0,
-                Instruction::FunctionCall(FunctionCallISpan {
-                    name: SymbolKey::from("f"),
-                    name_pos: lc(1, 5),
-                    upcall_index: 0,
-                    return_type: ExprType::Integer,
-                    nargs: 0,
-                }),
-            )
-            .expect_instr(1, Instruction::Assign(SymbolKey::from("i")))
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_argless_call_not_argless() {
-        Tester::default()
-            .define_callable(
-                CallableMetadataBuilder::new("F").with_return_type(ExprType::Integer).with_syntax(
-                    &[(
-                        &[SingularArgSyntax::RequiredValue(
-                            RequiredValueSyntax {
-                                name: Cow::Borrowed("i"),
-                                vtype: ExprType::Integer,
-                            },
-                            ArgSepSyntax::End,
-                        )],
-                        None,
-                    )],
-                ),
-            )
-            .parse("i = f")
-            .compile()
-            .expect_err("1:5: F expected i%")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_ref_argless_not_allowed() {
-        Tester::default()
-            .define_callable(CallableMetadataBuilder::new("C").with_syntax(&[(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("x"),
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )]))
-            .define_callable(CallableMetadataBuilder::new("F").with_return_type(ExprType::Integer))
-            .parse("c f")
-            .compile()
-            .expect_err("1:3: f is not an array nor a function")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_bad_annotation_in_varref() {
-        Tester::default()
-            .parse("a = 3: b = a$ + 1")
-            .compile()
-            .expect_err("1:12: Incompatible type annotation in a$ reference")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_bad_annotation_in_argless_call() {
-        Tester::default()
-            .define_callable(CallableMetadataBuilder::new("F").with_return_type(ExprType::Integer))
-            .parse("a = f$ + 1")
-            .compile()
-            .expect_err("1:5: Incompatible type annotation in f$ reference")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_ref_bad_annotation_in_varref() {
-        Tester::default()
-            .define_callable(CallableMetadataBuilder::new("C").with_syntax(&[(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("x"),
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )]))
-            .parse("a = 3: c a$")
-            .compile()
-            .expect_err("1:10: Incompatible type annotation in a$ reference")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_ref_bad_annotation_in_argless_call() {
-        Tester::default()
-            .define_callable(CallableMetadataBuilder::new("C").with_syntax(&[(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("x"),
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )]))
-            .define_callable(CallableMetadataBuilder::new("F").with_return_type(ExprType::Integer))
-            .parse("c f$")
-            .compile()
-            .expect_err("1:3: Incompatible type annotation in f$ reference")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_try_load_array_as_var() {
-        Tester::default()
-            .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer, 2))
-            .parse("b = a")
-            .compile()
-            .expect_err("1:5: a is not a variable")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_ref_try_load_array_as_var() {
-        Tester::default()
-            .define(SymbolKey::from("a"), SymbolPrototype::Array(ExprType::Integer, 1))
-            .define_callable(CallableMetadataBuilder::new("C").with_syntax(&[(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("x"),
-                        require_array: true,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )]))
-            .parse("c a")
-            .compile()
-            .expect_instr(
-                0,
-                Instruction::LoadRef(SymbolKey::from("a"), ExprType::Integer, lc(1, 3)),
-            )
-            .expect_instr(
-                1,
-                Instruction::BuiltinCall(BuiltinCallISpan {
-                    name: SymbolKey::from("C"),
-                    name_pos: lc(1, 1),
-                    upcall_index: 0,
-                    nargs: 1,
-                }),
-            )
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_try_load_command_as_var() {
-        Tester::default()
-            .define_callable(CallableMetadataBuilder::new("C"))
-            .parse("b = c")
-            .compile()
-            .expect_err("1:5: c is not an array nor a function")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_ref_try_load_command_as_var() {
-        Tester::default()
-            .define_callable(CallableMetadataBuilder::new("C").with_syntax(&[(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("x"),
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )]))
-            .parse("c c")
-            .compile()
-            .expect_err("1:3: c is not an array nor a function")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_logical_ops() {
-        Tester::default()
-            .define("x", SymbolPrototype::Variable(ExprType::Boolean))
-            .define("y", SymbolPrototype::Variable(ExprType::Boolean))
-            .define("z", SymbolPrototype::Variable(ExprType::Boolean))
-            .parse("b = true OR x AND y XOR NOT z")
-            .compile()
-            .expect_instr(0, Instruction::PushBoolean(true, lc(1, 5)))
-            .expect_instr(1, Instruction::LoadBoolean(SymbolKey::from("x"), lc(1, 13)))
-            .expect_instr(2, Instruction::LogicalOr(lc(1, 10)))
-            .expect_instr(3, Instruction::LoadBoolean(SymbolKey::from("y"), lc(1, 19)))
-            .expect_instr(4, Instruction::LogicalAnd(lc(1, 15)))
-            .expect_instr(5, Instruction::LoadBoolean(SymbolKey::from("z"), lc(1, 29)))
-            .expect_instr(6, Instruction::LogicalNot(lc(1, 25)))
-            .expect_instr(7, Instruction::LogicalXor(lc(1, 21)))
-            .expect_instr(8, Instruction::Assign(SymbolKey::from("b")))
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_bitwise_ops() {
-        Tester::default()
-            .define("a", SymbolPrototype::Variable(ExprType::Integer))
-            .define("b", SymbolPrototype::Variable(ExprType::Integer))
-            .parse("i = a >> 5 << b")
-            .compile()
-            .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("a"), lc(1, 5)))
-            .expect_instr(1, Instruction::PushInteger(5, lc(1, 10)))
-            .expect_instr(2, Instruction::ShiftRight(lc(1, 7)))
-            .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("b"), lc(1, 15)))
-            .expect_instr(4, Instruction::ShiftLeft(lc(1, 12)))
-            .expect_instr(5, Instruction::Assign(SymbolKey::from("i")))
-            .check();
-    }
-
-    /// Tests the behavior of one binary operator.
-    ///
-    /// `op_inst` is the instruction to expect for the operator and `op_name` is the literal name
-    /// of the operator as it appears in EndBASIC code.
-    ///
-    /// `load_inst` and `push_inst` are generators to construct the necessary load and push
-    /// operations for the given type.
-    ///
-    /// `test_value` is a value of the right type to use with the operator call, `test_value_str`
-    /// is the same value as represented in EndBASIC code, and `test_value_type` is the
-    /// corresponding type definition.
-    fn do_op_test<
-        L: Fn(SymbolKey, LineCol) -> Instruction,
-        M: Fn(LineCol) -> Instruction,
-        P: Fn(V, LineCol) -> Instruction,
-        V,
-    >(
-        load_inst: L,
-        op_inst: M,
-        op_name: &str,
-        push_inst: P,
-        test_value: V,
-        test_value_str: &str,
-        test_value_type: ExprType,
-    ) {
-        Tester::default()
-            .define("a", SymbolPrototype::Variable(test_value_type))
-            .parse(&format!("b = a {} {}", op_name, test_value_str))
-            .compile()
-            .expect_instr(0, load_inst(SymbolKey::from("a"), lc(1, 5)))
-            .expect_instr(1, push_inst(test_value, lc(1, 8 + op_name.len())))
-            .expect_instr(2, op_inst(lc(1, 7)))
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("b")))
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_equality_ops() {
-        use ExprType::*;
-        use Instruction::*;
-
-        do_op_test(LoadBoolean, EqualBooleans, "=", PushBoolean, true, "TRUE", Boolean);
-        do_op_test(LoadBoolean, NotEqualBooleans, "<>", PushBoolean, true, "TRUE", Boolean);
-
-        do_op_test(LoadDouble, EqualDoubles, "=", PushDouble, 10.2, "10.2", Double);
-        do_op_test(LoadDouble, NotEqualDoubles, "<>", PushDouble, 10.2, "10.2", Double);
-
-        do_op_test(LoadInteger, EqualIntegers, "=", PushInteger, 10, "10", Integer);
-        do_op_test(LoadInteger, NotEqualIntegers, "<>", PushInteger, 10, "10", Integer);
-
-        do_op_test(LoadString, EqualStrings, "=", PushString, "foo".to_owned(), "\"foo\"", Text);
-        do_op_test(
-            LoadString,
-            NotEqualStrings,
-            "<>",
-            PushString,
-            "foo".to_owned(),
-            "\"foo\"",
-            Text,
-        );
-    }
-
-    #[test]
-    fn test_compile_expr_relational_ops() {
-        use ExprType::*;
-        use Instruction::*;
-
-        do_op_test(LoadDouble, LessDoubles, "<", PushDouble, 10.2, "10.2", Double);
-        do_op_test(LoadDouble, LessEqualDoubles, "<=", PushDouble, 10.2, "10.2", Double);
-        do_op_test(LoadDouble, GreaterDoubles, ">", PushDouble, 10.2, "10.2", Double);
-        do_op_test(LoadDouble, GreaterEqualDoubles, ">=", PushDouble, 10.2, "10.2", Double);
-
-        do_op_test(LoadInteger, LessIntegers, "<", PushInteger, 10, "10", Integer);
-        do_op_test(LoadInteger, LessEqualIntegers, "<=", PushInteger, 10, "10", Integer);
-        do_op_test(LoadInteger, GreaterIntegers, ">", PushInteger, 10, "10", Integer);
-        do_op_test(LoadInteger, GreaterEqualIntegers, ">=", PushInteger, 10, "10", Integer);
-
-        do_op_test(LoadString, LessStrings, "<", PushString, "foo".to_owned(), "\"foo\"", Text);
-        do_op_test(
-            LoadString,
-            LessEqualStrings,
-            "<=",
-            PushString,
-            "foo".to_owned(),
-            "\"foo\"",
-            Text,
-        );
-        do_op_test(LoadString, GreaterStrings, ">", PushString, "foo".to_owned(), "\"foo\"", Text);
-        do_op_test(
-            LoadString,
-            GreaterEqualStrings,
-            ">=",
-            PushString,
-            "foo".to_owned(),
-            "\"foo\"",
-            Text,
-        );
-    }
-
-    #[test]
-    fn test_compile_expr_arithmetic_ops() {
-        use ExprType::*;
-        use Instruction::*;
-
-        do_op_test(LoadDouble, AddDoubles, "+", PushDouble, 10.2, "10.2", Double);
-        do_op_test(LoadDouble, SubtractDoubles, "-", PushDouble, 10.2, "10.2", Double);
-        do_op_test(LoadDouble, MultiplyDoubles, "*", PushDouble, 10.2, "10.2", Double);
-        do_op_test(LoadDouble, DivideDoubles, "/", PushDouble, 10.2, "10.2", Double);
-        do_op_test(LoadDouble, ModuloDoubles, "MOD", PushDouble, 10.2, "10.2", Double);
-        do_op_test(LoadDouble, PowerDoubles, "^", PushDouble, 10.2, "10.2", Double);
-        Tester::default()
-            .define("a", SymbolPrototype::Variable(Integer))
-            .parse("i = -60.2")
-            .compile()
-            .expect_instr(0, PushDouble(60.2, lc(1, 6)))
-            .expect_instr(1, NegateDouble(lc(1, 5)))
-            .expect_instr(2, Assign(SymbolKey::from("i")))
-            .check();
-
-        do_op_test(LoadInteger, AddIntegers, "+", PushInteger, 10, "10", Integer);
-        do_op_test(LoadInteger, SubtractIntegers, "-", PushInteger, 10, "10", Integer);
-        do_op_test(LoadInteger, MultiplyIntegers, "*", PushInteger, 10, "10", Integer);
-        do_op_test(LoadInteger, DivideIntegers, "/", PushInteger, 10, "10", Integer);
-        do_op_test(LoadInteger, ModuloIntegers, "MOD", PushInteger, 10, "10", Integer);
-        do_op_test(LoadInteger, PowerIntegers, "^", PushInteger, 10, "10", Integer);
-        Tester::default()
-            .define("a", SymbolPrototype::Variable(Integer))
-            .parse("i = -60")
-            .compile()
-            .expect_instr(0, PushInteger(60, lc(1, 6)))
-            .expect_instr(1, NegateInteger(lc(1, 5)))
-            .expect_instr(2, Assign(SymbolKey::from("i")))
-            .check();
-
-        do_op_test(LoadString, ConcatStrings, "+", PushString, "foo".to_owned(), "\"foo\"", Text);
-    }
-
-    #[test]
-    fn test_compile_expr_array_ref_exprs() {
-        Tester::default()
-            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 3))
-            .define("j", SymbolPrototype::Variable(ExprType::Integer))
-            .define("k", SymbolPrototype::Variable(ExprType::Integer))
-            .parse("i = FOO(3, j, k + 1)")
-            .compile()
-            .expect_instr(0, Instruction::LoadInteger(SymbolKey::from("k"), lc(1, 15)))
-            .expect_instr(1, Instruction::PushInteger(1, lc(1, 19)))
-            .expect_instr(2, Instruction::AddIntegers(lc(1, 17)))
-            .expect_instr(3, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 12)))
-            .expect_instr(4, Instruction::PushInteger(3, lc(1, 9)))
-            .expect_instr(5, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 3))
-            .expect_instr(6, Instruction::Assign(SymbolKey::from("i")))
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_array_ref_ok_annotation() {
-        Tester::default()
-            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
-            .parse("i = FOO%(3)")
-            .compile()
-            .expect_instr(0, Instruction::PushInteger(3, lc(1, 10)))
-            .expect_instr(1, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 1))
-            .expect_instr(2, Instruction::Assign(SymbolKey::from("i")))
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_array_ref_bad_annotation() {
-        Tester::default()
-            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
-            .parse("i = FOO#(3)")
-            .compile()
-            .expect_err("1:5: Incompatible type annotation in FOO# reference")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_array_ref_index_double() {
-        Tester::default()
-            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
-            .parse("i = FOO(3.8)")
-            .compile()
-            .expect_instr(0, Instruction::PushDouble(3.8, lc(1, 9)))
-            .expect_instr(1, Instruction::DoubleToInteger)
-            .expect_instr(2, Instruction::ArrayLoad(SymbolKey::from("foo"), lc(1, 5), 1))
-            .expect_instr(3, Instruction::Assign(SymbolKey::from("i")))
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_array_ref_index_bad_type() {
-        Tester::default()
-            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 1))
-            .parse("i = FOO(FALSE)")
-            .compile()
-            .expect_err("1:9: BOOLEAN is not a number")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_array_ref_bad_dimensions() {
-        Tester::default()
-            .define("FOO", SymbolPrototype::Array(ExprType::Integer, 3))
-            .parse("i = FOO#(3, 4)")
-            .compile()
-            .expect_err("1:5: Cannot index array with 2 subscripts; need 3")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_array_ref_not_defined() {
-        Tester::default().parse("i = a(4)").compile().expect_err("1:5: Undefined symbol a").check();
-    }
-
-    #[test]
-    fn test_compile_expr_array_ref_not_an_array() {
-        Tester::default()
-            .define("a", SymbolPrototype::Variable(ExprType::Integer))
-            .parse("i = a(3)")
-            .compile()
-            .expect_err("1:5: a is not an array nor a function")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_function_call() {
-        Tester::default()
-            .define_callable(
-                CallableMetadataBuilder::new("FOO")
-                    .with_return_type(ExprType::Integer)
-                    .with_syntax(&[(
-                        &[],
-                        Some(&RepeatedSyntax {
-                            name: Cow::Borrowed("expr"),
-                            type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                            sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                            require_one: true,
-                            allow_missing: false,
-                        }),
-                    )]),
-            )
-            .define("j", SymbolPrototype::Variable(ExprType::Integer))
-            .define("k", SymbolPrototype::Variable(ExprType::Double))
-            .parse("i = FOO(3, j, k + 1)")
-            .compile()
-            .expect_instr(0, Instruction::LoadDouble(SymbolKey::from("k"), lc(1, 15)))
-            .expect_instr(1, Instruction::PushInteger(1, lc(1, 19)))
-            .expect_instr(2, Instruction::IntegerToDouble)
-            .expect_instr(3, Instruction::AddDoubles(lc(1, 17)))
-            .expect_instr(4, Instruction::DoubleToInteger)
-            .expect_instr(5, Instruction::LoadInteger(SymbolKey::from("j"), lc(1, 12)))
-            .expect_instr(6, Instruction::PushInteger(3, lc(1, 9)))
-            .expect_instr(
-                7,
-                Instruction::FunctionCall(FunctionCallISpan {
-                    name: SymbolKey::from("FOO"),
-                    name_pos: lc(1, 5),
-                    upcall_index: 0,
-                    return_type: ExprType::Integer,
-                    nargs: 3,
-                }),
-            )
-            .expect_instr(8, Instruction::Assign(SymbolKey::from("i")))
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_array_or_function_not_defined() {
-        Tester::default()
-            .define("j", SymbolPrototype::Variable(ExprType::Integer))
-            .define("k", SymbolPrototype::Variable(ExprType::Integer))
-            .parse("i = FOO(3, j, k + 1)")
-            .compile()
-            .expect_err("1:5: Undefined symbol FOO")
-            .check();
-    }
-
-    #[test]
-    fn test_compile_expr_array_or_function_references_variable() {
-        Tester::default()
-            .parse("i = 3: j = i()")
-            .compile()
-            .expect_err("1:12: i is not an array nor a function")
-            .check();
     }
 }

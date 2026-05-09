@@ -17,7 +17,7 @@
 //! String functions for EndBASIC.
 
 use async_trait::async_trait;
-use endbasic_core2::{
+use endbasic_core::{
     AnyValueSyntax, ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
     CallableMetadataBuilder, ExprType, RequiredValueSyntax, Scope, SingularArgSyntax, VarArgTag,
 };

@@ -17,7 +17,7 @@
 //! Commands that manipulate the machine's state or the program's execution.
 
 use async_trait::async_trait;
-use endbasic_core2::{
+use endbasic_core::{
     ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
     ExprType, RequiredValueSyntax, Scope, SingularArgSyntax,
 };

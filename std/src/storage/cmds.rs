@@ -21,7 +21,7 @@ use crate::MachineBuilder;
 use crate::console::{Console, Pager, is_narrow};
 use crate::storage::Storage;
 use async_trait::async_trait;
-use endbasic_core2::{
+use endbasic_core::{
     ArgSep, ArgSepSyntax, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
     ExprType, RequiredValueSyntax, Scope, SingularArgSyntax,
 };

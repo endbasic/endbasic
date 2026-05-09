@@ -23,7 +23,7 @@ use crate::strings::{
     format_boolean, format_double, format_integer, parse_boolean, parse_double, parse_integer,
 };
 use async_trait::async_trait;
-use endbasic_core2::{
+use endbasic_core::{
     ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
     CallableMetadataBuilder, ExprType, OptionalValueSyntax, RepeatedSyntax, RepeatedTypeSyntax,
     RequiredRefSyntax, RequiredValueSyntax, Scope, SingularArgSyntax, VarArgTag,

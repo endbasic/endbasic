@@ -31,9 +31,9 @@ thiserror = "1.0"
 version = "0.12.99" # ENDBASIC-VERSION
 path = "../client"
 
-[dependencies.endbasic-core2]
+[dependencies.endbasic-core]
 version = "0.12.99" # ENDBASIC-VERSION
-path = "../core2"
+path = "../core"
 
 [dependencies.endbasic-repl]
 version = "0.12.99" # ENDBASIC-VERSION

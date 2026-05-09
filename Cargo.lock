@@ -248,7 +248,7 @@ dependencies = [
  "async-channel",
  "dirs",
  "endbasic-client",
- "endbasic-core2",
+ "endbasic-core",
  "endbasic-repl",
  "endbasic-rpi",
  "endbasic-sdl",
@@ -269,7 +269,7 @@ dependencies = [
  "async-trait",
  "base64",
  "bytes",
- "endbasic-core2",
+ "endbasic-core",
  "endbasic-std",
  "rand",
  "reqwest",
@@ -285,17 +285,6 @@ dependencies = [
 name = "endbasic-core"
 version = "0.12.99"
 dependencies = [
- "async-channel",
- "async-trait",
- "futures-lite",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "endbasic-core2"
-version = "0.12.99"
-dependencies = [
  "async-trait",
  "futures-lite",
  "tempfile",
@@ -309,7 +298,7 @@ version = "0.12.99"
 dependencies = [
  "async-channel",
  "async-trait",
- "endbasic-core2",
+ "endbasic-core",
  "endbasic-std",
  "futures-lite",
  "time",
@@ -329,7 +318,7 @@ version = "0.12.99"
 dependencies = [
  "async-channel",
  "async-trait",
- "endbasic-core2",
+ "endbasic-core",
  "endbasic-std",
  "flate2",
  "futures-lite",
@@ -344,7 +333,7 @@ version = "0.12.99"
 dependencies = [
  "async-channel",
  "async-trait",
- "endbasic-core2",
+ "endbasic-core",
  "endbasic-std",
  "tempfile",
  "tokio",
@@ -356,7 +345,7 @@ version = "0.12.99"
 dependencies = [
  "async-channel",
  "async-trait",
- "endbasic-core2",
+ "endbasic-core",
  "filetime",
  "flate2",
  "futures-lite",
@@ -376,7 +365,7 @@ dependencies = [
  "async-channel",
  "async-trait",
  "crossterm",
- "endbasic-core2",
+ "endbasic-core",
  "endbasic-std",
  "tokio",
 ]
@@ -389,7 +378,7 @@ dependencies = [
  "async-trait",
  "console_error_panic_hook",
  "endbasic-client",
- "endbasic-core2",
+ "endbasic-core",
  "endbasic-repl",
  "endbasic-std",
  "js-sys",

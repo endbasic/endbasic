@@ -1,141 +1,126 @@
 // EndBASIC
-// Copyright 2020 Julio Merino
+// Copyright 2026 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Integration tests that use golden input and output files.
+//! Integration tests for the core language.
 
-use std::env;
-use std::fs::File;
-use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::process;
+use std::fs::{self, File};
+use std::io::{self, BufRead, BufReader};
 
-/// Computes the path to the directory where this test's binary lives.
-fn self_dir() -> PathBuf {
-    let self_exe = env::current_exe().expect("Cannot get self's executable path");
-    let dir = self_exe.parent().expect("Cannot get self's directory");
-    assert!(dir.ends_with("target/debug/deps") || dir.ends_with("target/release/deps"));
-    dir.to_owned()
-}
+mod testutils;
+use testutils::*;
 
-/// Computes the path to the built binary `name`.
-fn bin_path<P: AsRef<Path>>(name: P) -> PathBuf {
-    let test_dir = self_dir();
-    let debug_or_release_dir = test_dir.parent().expect("Failed to get parent directory");
-    debug_or_release_dir.join(name).with_extension(env::consts::EXE_EXTENSION)
-}
-
-/// Computes the path to the source file `name`.
-fn src_path(name: &str) -> PathBuf {
-    let test_dir = self_dir();
-    let debug_or_release_dir = test_dir.parent().expect("Failed to get parent directory");
-    let target_dir = debug_or_release_dir.parent().expect("Failed to get parent directory");
-    let dir = target_dir.parent().expect("Failed to get parent directory");
-
-    // Sanity-check that we landed in the right location.
-    assert!(dir.join("Cargo.toml").exists());
-
-    dir.join(name)
-}
-
-/// Describes the behavior for one of the three streams (stdin, stdout, stderr) connected to a
-/// program.
-enum Behavior {
-    /// Ensure the stream is silent.
-    Null,
-
-    /// If stdin, feed the given path as the program's input.  If stdout/stderr, expect the contents
-    /// of the stream to match this file.
-    File(PathBuf),
-}
-
-/// Reads the contents of a golden data file.
-fn read_golden(path: &Path) -> String {
-    let mut f = File::open(path).expect("Failed to open golden data file");
-    let mut golden = vec![];
-    f.read_to_end(&mut golden).expect("Failed to read golden data file");
-    let raw = String::from_utf8(golden).expect("Golden data file is not valid UTF-8");
-    if cfg!(target_os = "windows") { raw.replace("\r\n", "\n") } else { raw }
-}
-
-/// Runs `bin` with arguments `args` and checks its behavior against expectations.
-///
-/// `exp_code` is the expected error code from the program.  `stdin_behavior` indicates what to feed
-/// to the program's stdin.  `stdout_behavior` and `stderr_behavior` indicate what to expect from
-/// the program's textual output.
-fn check<P: AsRef<Path>>(
-    bin: P,
-    args: &[&str],
-    exp_code: i32,
-    stdin_behavior: Behavior,
-    stdout_behavior: Behavior,
-    stderr_behavior: Behavior,
-) {
-    let golden_stdin = match stdin_behavior {
-        Behavior::Null => process::Stdio::null(),
-        Behavior::File(path) => File::open(path).unwrap().into(),
+/// Instantiates a test case for the test described in `core/tests/<name>.md`.
+macro_rules! one_test {
+    ( $name:ident ) => {
+        #[tokio::test]
+        async fn $name() -> io::Result<()> {
+            run_one_test(stringify!($name)).await
+        }
     };
+}
 
-    let exp_stdout = match stdout_behavior {
-        Behavior::Null => "".to_owned(),
-        Behavior::File(path) => read_golden(&path),
-    };
+one_test!(test_args);
+one_test!(test_arithmetic_add);
+one_test!(test_arithmetic_div);
+one_test!(test_arithmetic_mod);
+one_test!(test_arithmetic_mul);
+one_test!(test_arithmetic_neg);
+one_test!(test_arithmetic_pow);
+one_test!(test_arithmetic_sub);
+one_test!(test_arrays);
+one_test!(test_assignments);
+one_test!(test_bitwise_and);
+one_test!(test_bitwise_not);
+one_test!(test_bitwise_or);
+one_test!(test_bitwise_shl);
+one_test!(test_bitwise_shr);
+one_test!(test_bitwise_xor);
+one_test!(test_call_errors);
+one_test!(test_case_insensitivity);
+one_test!(test_data);
+one_test!(test_do);
+one_test!(test_empty);
+one_test!(test_end);
+one_test!(test_for);
+one_test!(test_functions);
+one_test!(test_globals);
+one_test!(test_gosub);
+one_test!(test_goto);
+one_test!(test_if);
+one_test!(test_incremental);
+one_test!(test_locals);
+one_test!(test_numerics);
+one_test!(test_on_error);
+one_test!(test_out_of_registers);
+one_test!(test_relational_eq);
+one_test!(test_relational_ge);
+one_test!(test_relational_gt);
+one_test!(test_relational_le);
+one_test!(test_relational_lt);
+one_test!(test_relational_ne);
+one_test!(test_select);
+one_test!(test_strings);
+one_test!(test_subs);
+one_test!(test_types);
+one_test!(test_unary_neg_depth);
+one_test!(test_unary_not_depth);
+one_test!(test_while);
 
-    let exp_stderr = match stderr_behavior {
-        Behavior::Null => "".to_owned(),
-        Behavior::File(path) => read_golden(&path),
-    };
+#[test]
+fn test_all_md_files_registered() -> io::Result<()> {
+    let mut registered = vec![];
+    {
+        let file = File::open(src_path("core/tests/integration_test.rs"))?;
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            let line = line?;
 
-    let result = process::Command::new(bin.as_ref())
-        .args(args)
-        .stdin(golden_stdin)
-        .output()
-        .expect("Failed to execute subprocess");
-    let code = result.status.code().expect("Subprocess didn't exit cleanly");
-    let stdout = String::from_utf8(result.stdout).expect("Stdout not is not valid UTF-8");
-    let stderr = String::from_utf8(result.stderr).expect("Stderr not is not valid UTF-8");
-
-    if exp_code != code || exp_stdout != stdout || exp_stderr != stderr {
-        eprintln!("Exit code: {}", code);
-        eprintln!("stdout:\n{}", stdout);
-        eprintln!("stderr:\n{}", stderr);
-        assert_eq!(exp_code, code);
-        assert_eq!(exp_stdout, stdout);
-        assert_eq!(exp_stderr, stderr);
+            if line.starts_with("one_test!(") {
+                let name = &line["one_test!(".len()..line.len() - 2];
+                registered.push(format!("{}.md", name));
+            }
+        }
     }
-}
 
-#[test]
-fn test_example_config() {
-    check(
-        bin_path("examples/config"),
-        &[],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("core/tests/config.out")),
-        Behavior::Null,
-    );
-}
+    // Sanity-check to ensure that the code right above actually discovered what we expect.
+    assert!(registered.iter().any(|s| s == "test_types.md"));
 
-#[test]
-fn test_example_dsl() {
-    check(
-        bin_path("examples/dsl"),
-        &[],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("core/tests/dsl.out")),
-        Behavior::Null,
-    );
+    // Make sure that every md test case definition in the file system is in the list of
+    // tests discovered from code scanning.  We don't have to do the opposite because, if
+    // this program registers a md file that doesn't actually exist, the test itself will
+    // fail.
+    let mut found = vec![];
+    for entry in fs::read_dir(src_path("core/tests"))? {
+        let entry = entry?;
+
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+
+        #[allow(clippy::collapsible_if)]
+        if name.starts_with("test_") && name.ends_with(".md") {
+            found.push(name);
+        }
+    }
+
+    // We want the list of tests below to be sorted, so sort the list of found tests and
+    // use that when comparing against the list of registered tests.
+    found.sort();
+
+    assert_eq!(registered, found);
+
+    Ok(())
 }

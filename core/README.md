@@ -19,12 +19,12 @@ performance or a much richer language.
 EndBASIC is written in Rust and runs both on the web and locally on a variety of
 operating systems and platforms, including macOS, Windows, and Linux.
 
-EndBASIC is free software under the [Apache 2.0 License](LICENSE).
+EndBASIC is free software under the [AGPL v3+](LICENSE).
 
 ## What's in this crate?
 
-`endbasic-core` provides the language parser and interpreter.  By design, this
-crate provides zero commands and zero functions.
+`endbasic-core` provides the language parser, compiler, and virtual machine.
+By design, this crate provides zero commands and zero functions.
 
 ## Language features
 
@@ -38,6 +38,7 @@ currently supports:
 *   Strong typing with optional variable type annotations.
 *   `DATA` statements for literal primitive values.  Booleans, numbers, and
     strings are supported, but strings must be double-quoted.
+*   `DECLARE FUNCTION` / `DECLARE SUB`.
 *   `DO` / `LOOP` statements with optional `UNTIL` / `WHILE` pre- and
     post-guards and optional `EXIT DO` early terminations.
 *   `DIM SHARED` for global variables.
@@ -60,11 +61,12 @@ currently supports:
 
 Some highlights about the EndBASIC implementation are:
 
-*   Minimalist core.  The interpreter knows how to execute the logic of the
-    language but, by default, it exposes no builtins to the scripts—not even
-    `INPUT` or `PRINT`.  This makes EndBASIC ideal for embedding into other
-    programs, as it is possible to execute external code without side-effects or
-    by precisely controlling how such code interacts with the host program.
+*   Minimalist core.  The compiler and virtual machine know how to execute the
+    logic of the language but, by default, it exposes no builtins to the
+    scripts—not even `INPUT` or `PRINT`.  This makes EndBASIC ideal for
+    embedding into other programs, as it is possible to execute external code
+    without side-effects or by precisely controlling how such code interacts
+    with the host program.
 
 *   Async support.  The interpreter is async-compatible, making it trivial to
     embed it into Javascript via WASM.

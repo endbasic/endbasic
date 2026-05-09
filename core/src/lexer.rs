@@ -1,17 +1,18 @@
 // EndBASIC
 // Copyright 2020 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Tokenizer for the EndBASIC language.
 
@@ -72,6 +73,7 @@ pub enum Token {
 
     Case,
     Data,
+    Declare,
     Do,
     Else,
     Elseif,
@@ -156,6 +158,7 @@ impl fmt::Display for Token {
 
             Token::Case => write!(f, "CASE"),
             Token::Data => write!(f, "DATA"),
+            Token::Declare => write!(f, "DECLARE"),
             Token::Do => write!(f, "DO"),
             Token::Else => write!(f, "ELSE"),
             Token::Elseif => write!(f, "ELSEIF"),
@@ -231,7 +234,7 @@ impl CharOps for char {
     }
 }
 
-/// Container for a token and its context.
+/// A token along with its position and length in the source.
 ///
 /// Note that the "context" is not truly available for some tokens such as `Token::Eof`, but we can
 /// synthesize one for simplicity.  Otherwise, we would need to extend the `Token` enum so that
@@ -241,7 +244,7 @@ pub struct TokenSpan {
     /// The token itself.
     pub(crate) token: Token,
 
-    /// Start position of the token.
+    /// Start position of the token in the source.
     pub(crate) pos: LineCol,
 
     /// Length of the token in characters.
@@ -256,9 +259,9 @@ impl TokenSpan {
     }
 }
 
-/// Iterator over the tokens of the language.
+/// Tokenizer that breaks an input stream into a sequence of language tokens.
 pub struct Lexer<'a> {
-    /// Peekable iterator over the characters to scan.
+    /// Character reader for the input stream.
     input: CharReader<'a>,
 }
 
@@ -516,6 +519,7 @@ impl<'a> Lexer<'a> {
             "BOOLEAN" => Token::BooleanName,
             "CASE" => Token::Case,
             "DATA" => Token::Data,
+            "DECLARE" => Token::Declare,
             "DIM" => Token::Dim,
             "DO" => Token::Do,
             "DOUBLE" => Token::DoubleName,
@@ -708,7 +712,7 @@ impl<'a> Lexer<'a> {
     }
 }
 
-/// Wraps a `Lexer` and offers peeking abilities.
+/// A lexer wrapper that supports peeking at the next token without consuming it.
 ///
 /// Ideally, the `Lexer` would be an `Iterator` which would give us access to the standard
 /// `Peekable` interface, but the ergonomics of that when dealing with a `Fallible` are less than
@@ -717,7 +721,7 @@ pub struct PeekableLexer<'a> {
     /// The wrapped lexer instance.
     lexer: Lexer<'a>,
 
-    /// If not none, contains the character read by `peek`, which will be consumed by the next call
+    /// If not none, contains the token read by `peek`, which will be consumed by the next call
     /// to `read` or `consume_peeked`.
     peeked: Option<TokenSpan>,
 }
@@ -1081,6 +1085,13 @@ mod tests {
                 ts(Token::Eof, 1, 13, 0),
             ],
         );
+    }
+
+    #[test]
+    fn test_declare() {
+        do_ok_test("DECLARE", &[ts(Token::Declare, 1, 1, 7), ts(Token::Eof, 1, 8, 0)]);
+
+        do_ok_test("declare", &[ts(Token::Declare, 1, 1, 7), ts(Token::Eof, 1, 8, 0)]);
     }
 
     #[test]
