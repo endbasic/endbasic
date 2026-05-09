@@ -1,22 +1,24 @@
 // EndBASIC
 // Copyright 2025 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Support for bitmap fonts directly rendered onto an LCD.
 
 use crate::gfx::lcd::LcdSize;
 use std::collections::HashMap;
+use std::io;
 
 mod font_5x8;
 pub(crate) use font_5x8::FONT_5X8;
@@ -58,14 +60,31 @@ impl Font {
 }
 
 /// Registry of all available fonts.
-pub type Fonts = HashMap<&'static str, &'static Font>;
+pub struct Fonts(HashMap<&'static str, &'static Font>);
 
-/// Obtains a mapping of all available fonts.
-pub fn all_fonts() -> Fonts {
-    let mut fonts = Fonts::default();
-    fonts.insert(FONT_5X8.name, &FONT_5X8);
-    fonts.insert(FONT_16X16.name, &FONT_16X16);
-    fonts
+impl Fonts {
+    /// Obtains a mapping of all available fonts.
+    pub fn all() -> Self {
+        let mut fonts = HashMap::default();
+        fonts.insert(FONT_5X8.name, &FONT_5X8);
+        fonts.insert(FONT_16X16.name, &FONT_16X16);
+        Self(fonts)
+    }
+
+    /// Gets a font by `name`, ensuring that it's present.
+    pub fn get(&self, name: &str) -> io::Result<&'static Font> {
+        match self.0.get(name) {
+            Some(font) => Ok(*font),
+            None => {
+                let mut valid = self.0.keys().copied().collect::<Vec<&'static str>>();
+                valid.sort();
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Unknown font: {}; valid names are: {}", name, valid.join(", ")),
+                ))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
