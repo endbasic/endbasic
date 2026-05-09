@@ -29,7 +29,7 @@ use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
     CharsXY, ClearType, Console, ConsoleSpec, GraphicsConsole, Key, PixelsXY, RGB, SizeInPixels,
 };
-use endbasic_std::gfx::lcd::fonts::Fonts;
+use endbasic_std::gfx::lcd::fonts::{FONT_5X8, Fonts};
 use endbasic_std::gfx::lcd::{BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel, to_xy_size};
 use endbasic_std::gpio::{Pin, PinMode, Pins};
 use endbasic_std::spi::{SpiBus, SpiMode};
@@ -484,7 +484,7 @@ where
     let default_fg_color = spec.take_keyed_flag::<u8>("fg_color")?;
     let default_bg_color = spec.take_keyed_flag::<u8>("bg_color")?;
 
-    let font_name = spec.take_keyed_flag_str("font").unwrap_or("5x8");
+    let font_name = spec.take_keyed_flag_str("font").unwrap_or(FONT_5X8.name);
     let font = fonts.get(font_name)?;
 
     let pins = Arc::from(Mutex::from(pins));
