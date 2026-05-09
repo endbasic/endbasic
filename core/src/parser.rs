@@ -1,17 +1,18 @@
 // EndBASIC
 // Copyright 2020 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Statement and expression parser for the EndBASIC language.
 
@@ -21,14 +22,14 @@ use crate::reader::LineCol;
 use std::cmp::Ordering;
 use std::io;
 
-/// Parser errors.
+/// Errors that can occur during parsing.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// Bad syntax in the input program.
+    /// Syntax error in the input program at the given position with a description.
     #[error("{}: {}", .0, .1)]
     Bad(LineCol, String),
 
-    /// I/O error while parsing the input program.
+    /// I/O error while reading the input program.
     #[error("{0}: {1}")]
     Io(LineCol, io::Error),
 }
@@ -73,36 +74,56 @@ pub(crate) fn argspans_to_exprs(spans: Vec<ArgSpan>) -> Vec<Expr> {
 /// Operators that can appear within an expression.
 ///
 /// The main difference between this and `lexer::Token` is that, in here, we differentiate the
-/// meaning of a minus sign and separate it in its two variants: the 2-operand `Minus` and the
+/// meaning of a minus sign and separate it in its two variants: the 2-operand `Subtract` and the
 /// 1-operand `Negate`.
 ///
 /// That said, this type also is the right place to abstract away operator-related logic to
 /// implement the expression parsing algorithm, so it's not completely useless.
 #[derive(Debug, Eq, PartialEq)]
 enum ExprOp {
+    /// Left parenthesis, used as a grouping marker in the operator stack.
     LeftParen,
 
+    /// Binary addition operator.
     Add,
+    /// Binary subtraction operator.
     Subtract,
+    /// Binary multiplication operator.
     Multiply,
+    /// Binary division operator.
     Divide,
+    /// Binary modulo operator.
     Modulo,
+    /// Binary exponentiation operator.
     Power,
+    /// Unary negation operator.
     Negate,
 
+    /// Binary equality comparison operator.
     Equal,
+    /// Binary inequality comparison operator.
     NotEqual,
+    /// Binary less-than comparison operator.
     Less,
+    /// Binary less-than-or-equal comparison operator.
     LessEqual,
+    /// Binary greater-than comparison operator.
     Greater,
+    /// Binary greater-than-or-equal comparison operator.
     GreaterEqual,
 
+    /// Binary logical AND operator.
     And,
+    /// Unary logical NOT operator.
     Not,
+    /// Binary logical OR operator.
     Or,
+    /// Binary logical XOR operator.
     Xor,
 
+    /// Binary left shift operator.
     ShiftLeft,
+    /// Binary right shift operator.
     ShiftRight,
 }
 
@@ -165,12 +186,12 @@ impl ExprOp {
     }
 }
 
-/// Wrapper over an `ExprOp` to extend it with its position.
+/// An expression operator paired with its source position.
 struct ExprOpSpan {
-    /// The wrapped expression operation.
+    /// The expression operator.
     op: ExprOp,
 
-    /// The position where the operation appears in the input.
+    /// The position where the operator appears in the source.
     pos: LineCol,
 }
 
@@ -239,8 +260,9 @@ impl ExprOpSpan {
     }
 }
 
-/// Iterator over the statements of the language.
+/// Parser that converts a token stream into an AST of statements.
 pub struct Parser<'a> {
+    /// The lexer providing tokens for parsing.
     lexer: PeekableLexer<'a>,
 }
 
@@ -664,7 +686,7 @@ impl<'a> Parser<'a> {
 
     /// Parses a potential `END` statement but, if this corresponds to a statement terminator such
     /// as `END IF`, returns the token that followed `END`.
-    fn maybe_parse_end(&mut self) -> Result<std::result::Result<Statement, Token>> {
+    fn maybe_parse_end(&mut self, pos: LineCol) -> Result<std::result::Result<Statement, Token>> {
         match self.lexer.peek()?.token {
             Token::Function => Ok(Err(Token::Function)),
             Token::If => Ok(Err(Token::If)),
@@ -672,14 +694,14 @@ impl<'a> Parser<'a> {
             Token::Sub => Ok(Err(Token::Sub)),
             _ => {
                 let code = self.parse_expr(None)?;
-                Ok(Ok(Statement::End(EndSpan { code })))
+                Ok(Ok(Statement::End(EndSpan { code, pos })))
             }
         }
     }
 
     /// Parses an `END` statement.
     fn parse_end(&mut self, pos: LineCol) -> Result<Statement> {
-        match self.maybe_parse_end()? {
+        match self.maybe_parse_end(pos)? {
             Ok(stmt) => Ok(stmt),
             Err(token) => Err(Error::Bad(pos, format!("END {} without {}", token, token))),
         }
@@ -723,10 +745,8 @@ impl<'a> Parser<'a> {
 
                     if let Some(expr) = prev_expr.take() {
                         spans.push(ArgSpan { expr: Some(expr), sep: ArgSep::End, sep_pos: pos });
-                    } else {
-                        if !is_first {
-                            return Err(Error::Bad(pos, "Missing expression".to_owned()));
-                        }
+                    } else if !is_first {
+                        return Err(Error::Bad(pos, "Missing expression".to_owned()));
                     }
 
                     break;
@@ -943,6 +963,7 @@ impl<'a> Parser<'a> {
                 Token::BooleanName
                 | Token::Case
                 | Token::Data
+                | Token::Declare
                 | Token::Do
                 | Token::Dim
                 | Token::DoubleName
@@ -1108,7 +1129,7 @@ impl<'a> Parser<'a> {
 
                 Token::End => {
                     let token_span = self.lexer.consume_peeked();
-                    match self.maybe_parse_end()? {
+                    match self.maybe_parse_end(token_span.pos)? {
                         Ok(stmt) => {
                             branches[i].body.push(stmt);
                         }
@@ -1393,7 +1414,7 @@ impl<'a> Parser<'a> {
 
                 Token::End => {
                     let end_span = self.lexer.consume_peeked();
-                    match self.maybe_parse_end()? {
+                    match self.maybe_parse_end(end_span.pos)? {
                         Ok(stmt) => {
                             body.push(stmt);
                         }
@@ -1431,61 +1452,81 @@ impl<'a> Parser<'a> {
         Ok((body, end_pos))
     }
 
-    /// Parses a `FUNCTION` definition.
-    fn parse_function(&mut self, function_pos: LineCol) -> Result<Statement> {
+    /// Parses a `DECLARE` statement.
+    fn parse_declare(&mut self) -> Result<Statement> {
         let token_span = self.lexer.read()?;
-        let name = match token_span.token {
-            Token::Symbol(name) => {
-                if name.ref_type.is_none() {
-                    VarRef::new(name.name, Some(ExprType::Integer))
-                } else {
-                    name
-                }
-            }
+        let (name, name_pos, params) = match token_span.token {
+            Token::Function => self.parse_callable_signature(true, true)?,
+
+            Token::Sub => self.parse_callable_signature(true, false)?,
+
             _ => {
                 return Err(Error::Bad(
                     token_span.pos,
-                    "Expected a function name after FUNCTION".to_owned(),
+                    "Expected FUNCTION or SUB after DECLARE".to_owned(),
                 ));
             }
         };
-        let name_pos = token_span.pos;
-
-        let params = self.parse_callable_args()?;
-        self.expect_and_consume(Token::Eol, "Expected newline after FUNCTION name")?;
-
-        let (body, end_pos) = self.parse_callable_body(function_pos, Token::Function)?;
-
-        Ok(Statement::Callable(CallableSpan { name, name_pos, params, body, end_pos }))
+        Ok(Statement::Declare(DeclareSpan { name, name_pos, params }))
     }
 
-    /// Parses a `SUB` definition.
-    fn parse_sub(&mut self, sub_pos: LineCol) -> Result<Statement> {
+    /// Parses the signature of a callable declaration or definition.
+    fn parse_callable_signature(
+        &mut self,
+        is_declare: bool,
+        is_function: bool,
+    ) -> Result<(VarRef, LineCol, Vec<VarRef>)> {
+        let kw_name = if is_function { "FUNCTION" } else { "SUB" };
         let token_span = self.lexer.read()?;
         let name = match token_span.token {
-            Token::Symbol(name) => {
-                if name.ref_type.is_some() {
+            Token::Symbol(name) => match (name.ref_type, is_function) {
+                (None, true) => VarRef::new(name.name, Some(ExprType::Integer)),
+                (Some(..), true) => name,
+                (None, false) => name,
+                (Some(..), false) => {
                     return Err(Error::Bad(
                         token_span.pos,
                         "SUBs cannot return a value so type annotations are not allowed".to_owned(),
                     ));
                 }
-                name
-            }
+            },
             _ => {
                 return Err(Error::Bad(
                     token_span.pos,
-                    "Expected a function name after SUB".to_owned(),
+                    format!("Expected a name after {}", kw_name),
                 ));
             }
         };
         let name_pos = token_span.pos;
 
         let params = self.parse_callable_args()?;
-        self.expect_and_consume(Token::Eol, "Expected newline after SUB name")?;
 
+        let peeked = self.lexer.peek()?;
+        match peeked.token {
+            Token::Eol => (),
+            Token::Eof if is_declare => (),
+            _ => {
+                return Err(Error::Bad(
+                    peeked.pos,
+                    format!("Expected newline after {} name", kw_name),
+                ));
+            }
+        }
+
+        Ok((name, name_pos, params))
+    }
+
+    /// Parses a `FUNCTION` definition.
+    fn parse_function(&mut self, function_pos: LineCol) -> Result<Statement> {
+        let (name, name_pos, params) = self.parse_callable_signature(false, true)?;
+        let (body, end_pos) = self.parse_callable_body(function_pos, Token::Function)?;
+        Ok(Statement::Callable(CallableSpan { name, name_pos, params, body, end_pos }))
+    }
+
+    /// Parses a `SUB` definition.
+    fn parse_sub(&mut self, sub_pos: LineCol) -> Result<Statement> {
+        let (name, name_pos, params) = self.parse_callable_signature(false, false)?;
         let (body, end_pos) = self.parse_callable_body(sub_pos, Token::Sub)?;
-
         Ok(Statement::Callable(CallableSpan { name, name_pos, params, body, end_pos }))
     }
 
@@ -1511,7 +1552,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses an `ON ERROR` statement.  Only `ON` has been consumed so far.
-    fn parse_on(&mut self) -> Result<Statement> {
+    fn parse_on(&mut self, pos: LineCol) -> Result<Statement> {
         self.expect_and_consume(Token::Error, "Expected ERROR after ON")?;
 
         let token_span = self.lexer.read()?;
@@ -1519,15 +1560,15 @@ impl<'a> Parser<'a> {
             Token::Goto => {
                 let token_span = self.lexer.read()?;
                 match token_span.token {
-                    Token::Integer(0) => Ok(Statement::OnError(OnErrorSpan::Reset)),
-                    Token::Integer(i) => Ok(Statement::OnError(OnErrorSpan::Goto(GotoSpan {
-                        target: format!("{}", i),
-                        target_pos: token_span.pos,
-                    }))),
-                    Token::Label(target) => Ok(Statement::OnError(OnErrorSpan::Goto(GotoSpan {
-                        target,
-                        target_pos: token_span.pos,
-                    }))),
+                    Token::Integer(0) => Ok(Statement::OnError(OnErrorSpan::Reset(pos))),
+                    Token::Integer(i) => Ok(Statement::OnError(OnErrorSpan::Goto(
+                        GotoSpan { target: format!("{}", i), target_pos: token_span.pos },
+                        pos,
+                    ))),
+                    Token::Label(target) => Ok(Statement::OnError(OnErrorSpan::Goto(
+                        GotoSpan { target, target_pos: token_span.pos },
+                        pos,
+                    ))),
                     _ => Err(Error::Bad(
                         token_span.pos,
                         "Expected label name or 0 after ON ERROR GOTO".to_owned(),
@@ -1536,7 +1577,7 @@ impl<'a> Parser<'a> {
             }
             Token::Resume => {
                 self.expect_and_consume(Token::Next, "Expected NEXT after ON ERROR RESUME")?;
-                Ok(Statement::OnError(OnErrorSpan::ResumeNext))
+                Ok(Statement::OnError(OnErrorSpan::ResumeNext(pos)))
             }
             _ => {
                 Err(Error::Bad(token_span.pos, "Expected GOTO or RESUME after ON ERROR".to_owned()))
@@ -1690,7 +1731,7 @@ impl<'a> Parser<'a> {
 
                 Token::End => {
                     let end_span = self.lexer.consume_peeked();
-                    match self.maybe_parse_end()? {
+                    match self.maybe_parse_end(end_span.pos)? {
                         Ok(stmt) => {
                             if cases.is_empty() {
                                 return Err(Error::Bad(
@@ -1810,7 +1851,7 @@ impl<'a> Parser<'a> {
             Token::Exit => Ok(Some(self.parse_exit(token_span.pos)?)),
             Token::Gosub => Ok(Some(self.parse_gosub()?)),
             Token::Goto => Ok(Some(self.parse_goto()?)),
-            Token::On => Ok(Some(self.parse_on()?)),
+            Token::On => Ok(Some(self.parse_on(token_span.pos)?)),
             Token::Return => Ok(Some(Statement::Return(ReturnSpan { pos: token_span.pos }))),
             Token::Symbol(vref) => {
                 let peeked = self.lexer.peek()?;
@@ -1843,6 +1884,7 @@ impl<'a> Parser<'a> {
         let token_span = self.lexer.read()?;
         let res = match token_span.token {
             Token::Data => Ok(Some(self.parse_data()?)),
+            Token::Declare => Ok(Some(self.parse_declare()?)),
             Token::Dim => Ok(Some(self.parse_dim()?)),
             Token::Do => {
                 let result = self.parse_do(token_span.pos);
@@ -1895,7 +1937,7 @@ impl<'a> Parser<'a> {
                 // ending given that the next statement may start after the label we found.
                 return Ok(Some(Statement::Label(LabelSpan { name, name_pos: token_span.pos })));
             }
-            Token::On => Ok(Some(self.parse_on()?)),
+            Token::On => Ok(Some(self.parse_on(token_span.pos)?)),
             Token::Return => Ok(Some(Statement::Return(ReturnSpan { pos: token_span.pos }))),
             Token::Select => {
                 let result = self.parse_select(token_span.pos);
@@ -1977,7 +2019,9 @@ impl<'a> Parser<'a> {
     }
 }
 
+/// Iterator that yields parsed statements from an input stream.
 pub(crate) struct StatementIter<'a> {
+    /// The underlying parser.
     parser: Parser<'a>,
 }
 
@@ -2445,6 +2489,113 @@ mod tests {
         do_error_test("DATA -FALSE", "1:6: Expected number after -");
         do_error_test("DATA -\"abc\"", "1:6: Expected number after -");
         do_error_test("DATA -foo", "1:6: Expected number after -");
+    }
+
+    #[test]
+    fn test_declare_callable_no_args_eof() {
+        do_ok_test(
+            "DECLARE FUNCTION foo$",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", Some(ExprType::Text)),
+                name_pos: lc(1, 18),
+                params: vec![],
+            })],
+        );
+
+        do_ok_test(
+            "DECLARE SUB foo",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", None),
+                name_pos: lc(1, 13),
+                params: vec![],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_declare_callable_no_args_not_eof() {
+        do_ok_test(
+            "DECLARE FUNCTION foo$\nREM A comment",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", Some(ExprType::Text)),
+                name_pos: lc(1, 18),
+                params: vec![],
+            })],
+        );
+
+        do_ok_test(
+            "DECLARE SUB foo\nREM A comment",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", None),
+                name_pos: lc(1, 13),
+                params: vec![],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_declare_callable_consecutive() {
+        do_ok_test(
+            "DECLARE FUNCTION foo$\nDECLARE SUB bar",
+            &[
+                Statement::Declare(DeclareSpan {
+                    name: VarRef::new("foo", Some(ExprType::Text)),
+                    name_pos: lc(1, 18),
+                    params: vec![],
+                }),
+                Statement::Declare(DeclareSpan {
+                    name: VarRef::new("bar", None),
+                    name_pos: lc(2, 13),
+                    params: vec![],
+                }),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_declare_callable_multiple_params() {
+        do_ok_test(
+            "DECLARE FUNCTION foo$(x$, y, z AS BOOLEAN)",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", Some(ExprType::Text)),
+                name_pos: lc(1, 18),
+                params: vec![
+                    VarRef::new("x", Some(ExprType::Text)),
+                    VarRef::new("y", None),
+                    VarRef::new("z", Some(ExprType::Boolean)),
+                ],
+            })],
+        );
+
+        do_ok_test(
+            "DECLARE SUB foo(x$, y, z AS BOOLEAN)",
+            &[Statement::Declare(DeclareSpan {
+                name: VarRef::new("foo", None),
+                name_pos: lc(1, 13),
+                params: vec![
+                    VarRef::new("x", Some(ExprType::Text)),
+                    VarRef::new("y", None),
+                    VarRef::new("z", Some(ExprType::Boolean)),
+                ],
+            })],
+        );
+    }
+
+    #[test]
+    fn test_declare_callable_errors() {
+        do_error_test("DECLARE", "1:8: Expected FUNCTION or SUB after DECLARE");
+        do_error_test("DECLARE foo", "1:9: Expected FUNCTION or SUB after DECLARE");
+
+        do_error_test("DECLARE FUNCTION", "1:17: Expected a name after FUNCTION");
+        do_error_test("DECLARE SUB", "1:12: Expected a name after SUB");
+
+        do_error_test("DECLARE FUNCTION foo()", "1:22: Expected a parameter name");
+        do_error_test("DECLARE SUB foo()", "1:17: Expected a parameter name");
+
+        do_error_test(
+            "DECLARE SUB foo%",
+            "1:13: SUBs cannot return a value so type annotations are not allowed",
+        );
     }
 
     #[test]
@@ -3646,7 +3797,7 @@ mod tests {
                         guard: expr_integer(1, 2, 16),
                         body: vec![
                             make_bare_builtin_call("A", 3, 17),
-                            Statement::End(EndSpan { code: None }),
+                            Statement::End(EndSpan { code: None, pos: lc(4, 17) }),
                             make_bare_builtin_call("B", 5, 17),
                         ],
                     },
@@ -3656,6 +3807,7 @@ mod tests {
                             make_bare_builtin_call("C", 7, 17),
                             Statement::End(EndSpan {
                                 code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(8, 21) })),
+                                pos: lc(8, 17),
                             }),
                             make_bare_builtin_call("D", 9, 17),
                         ],
@@ -3664,7 +3816,7 @@ mod tests {
                         guard: expr_integer(3, 10, 20),
                         body: vec![
                             make_bare_builtin_call("E", 11, 17),
-                            Statement::End(EndSpan { code: None }),
+                            Statement::End(EndSpan { code: None, pos: lc(12, 17) }),
                             make_bare_builtin_call("F", 13, 17),
                         ],
                     },
@@ -3677,6 +3829,7 @@ mod tests {
                                     value: 5,
                                     pos: lc(16, 21),
                                 })),
+                                pos: lc(16, 17),
                             }),
                             make_bare_builtin_call("H", 17, 17),
                         ],
@@ -3871,7 +4024,7 @@ mod tests {
     fn test_if_uniline_allowed_end() {
         do_if_uniline_allowed_test(
             "END 8",
-            Statement::End(EndSpan { code: Some(expr_integer(8, 1, 15)) }),
+            Statement::End(EndSpan { code: Some(expr_integer(8, 1, 15)), pos: lc(1, 11) }),
         );
     }
 
@@ -3906,7 +4059,7 @@ mod tests {
     fn test_if_uniline_allowed_on_error() {
         do_if_uniline_allowed_test(
             "ON ERROR RESUME NEXT",
-            Statement::OnError(OnErrorSpan::ResumeNext),
+            Statement::OnError(OnErrorSpan::ResumeNext(lc(1, 11))),
         );
 
         do_error_test("IF 1 THEN ON", "1:13: Expected ERROR after ON");
@@ -4196,9 +4349,10 @@ mod tests {
                 params: vec![],
                 body: vec![
                     make_bare_builtin_call("A", 3, 21),
-                    Statement::End(EndSpan { code: None }),
+                    Statement::End(EndSpan { code: None, pos: lc(4, 21) }),
                     Statement::End(EndSpan {
                         code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(5, 25) })),
+                        pos: lc(5, 21),
                     }),
                     make_bare_builtin_call("B", 6, 21),
                 ],
@@ -4241,7 +4395,7 @@ mod tests {
 
     #[test]
     fn test_function_errors() {
-        do_error_test("FUNCTION", "1:9: Expected a function name after FUNCTION");
+        do_error_test("FUNCTION", "1:9: Expected a name after FUNCTION");
         do_error_test("FUNCTION foo", "1:13: Expected newline after FUNCTION name");
         do_error_test("FUNCTION foo 3", "1:14: Expected newline after FUNCTION name");
         do_error_test("FUNCTION foo\nEND", "1:1: FUNCTION without END FUNCTION");
@@ -4352,25 +4506,28 @@ mod tests {
 
     #[test]
     fn test_parse_on_error_ok() {
-        do_ok_test("ON ERROR GOTO 0", &[Statement::OnError(OnErrorSpan::Reset)]);
+        do_ok_test("ON ERROR GOTO 0", &[Statement::OnError(OnErrorSpan::Reset(lc(1, 1)))]);
 
         do_ok_test(
             "ON ERROR GOTO 10",
-            &[Statement::OnError(OnErrorSpan::Goto(GotoSpan {
-                target: "10".to_owned(),
-                target_pos: lc(1, 15),
-            }))],
+            &[Statement::OnError(OnErrorSpan::Goto(
+                GotoSpan { target: "10".to_owned(), target_pos: lc(1, 15) },
+                lc(1, 1),
+            ))],
         );
 
         do_ok_test(
             "ON ERROR GOTO @foo",
-            &[Statement::OnError(OnErrorSpan::Goto(GotoSpan {
-                target: "foo".to_owned(),
-                target_pos: lc(1, 15),
-            }))],
+            &[Statement::OnError(OnErrorSpan::Goto(
+                GotoSpan { target: "foo".to_owned(), target_pos: lc(1, 15) },
+                lc(1, 1),
+            ))],
         );
 
-        do_ok_test("ON ERROR RESUME NEXT", &[Statement::OnError(OnErrorSpan::ResumeNext)]);
+        do_ok_test(
+            "ON ERROR RESUME NEXT",
+            &[Statement::OnError(OnErrorSpan::ResumeNext(lc(1, 1)))],
+        );
     }
 
     #[test]
@@ -4521,7 +4678,7 @@ mod tests {
                         guards: vec![CaseGuardSpan::Is(CaseRelOp::Equal, expr_integer(1, 3, 22))],
                         body: vec![
                             make_bare_builtin_call("A", 4, 21),
-                            Statement::End(EndSpan { code: None }),
+                            Statement::End(EndSpan { code: None, pos: lc(5, 21) }),
                             make_bare_builtin_call("B", 6, 21),
                         ],
                     },
@@ -4531,6 +4688,7 @@ mod tests {
                             make_bare_builtin_call("C", 8, 21),
                             Statement::End(EndSpan {
                                 code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(9, 25) })),
+                                pos: lc(9, 21),
                             }),
                             make_bare_builtin_call("D", 10, 21),
                         ],
@@ -4539,7 +4697,7 @@ mod tests {
                         guards: vec![],
                         body: vec![
                             make_bare_builtin_call("E", 12, 21),
-                            Statement::End(EndSpan { code: None }),
+                            Statement::End(EndSpan { code: None, pos: lc(13, 21) }),
                             make_bare_builtin_call("F", 14, 21),
                         ],
                     },
@@ -4701,9 +4859,10 @@ mod tests {
                 params: vec![],
                 body: vec![
                     make_bare_builtin_call("A", 3, 21),
-                    Statement::End(EndSpan { code: None }),
+                    Statement::End(EndSpan { code: None, pos: lc(4, 21) }),
                     Statement::End(EndSpan {
                         code: Some(Expr::Integer(IntegerSpan { value: 8, pos: lc(5, 25) })),
+                        pos: lc(5, 21),
                     }),
                     make_bare_builtin_call("B", 6, 21),
                 ],
@@ -4746,7 +4905,7 @@ mod tests {
 
     #[test]
     fn test_sub_errors() {
-        do_error_test("SUB", "1:4: Expected a function name after SUB");
+        do_error_test("SUB", "1:4: Expected a name after SUB");
         do_error_test("SUB foo", "1:8: Expected newline after SUB name");
         do_error_test("SUB foo 3", "1:9: Expected newline after SUB name");
         do_error_test("SUB foo\nEND", "1:1: SUB without END SUB");

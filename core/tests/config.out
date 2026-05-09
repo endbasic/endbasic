@@ -1,3 +1,11 @@
-foo_value is 123
-enable_bar is true
-enable_baz is not set
+foo_value% = 123
+result_total% = 579
+status$ = "Processing complete"
+defined_within% = 42
+optional_flag? = false
+injected_value% = 6
+unknown is not declared
+results%(0) = 10
+results%(1) = 20
+results%(2) = 30
+foo_value%(0): error: 'FOO_VALUE' is a scalar variable; use get_global to access it

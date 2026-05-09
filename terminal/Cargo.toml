@@ -20,9 +20,9 @@ async-trait = "0.1"
 crossterm = "0.27"
 tokio = { version = "1", features = ["rt"] }
 
-[dependencies.endbasic-core2]
+[dependencies.endbasic-core]
 version = "0.12.99" # ENDBASIC-VERSION
-path = "../core2"
+path = "../core"
 
 [dependencies.endbasic-std]
 version = "0.12.99" # ENDBASIC-VERSION

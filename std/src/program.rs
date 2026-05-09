@@ -21,7 +21,7 @@ use crate::storage::Storage;
 use crate::strings::parse_boolean;
 use crate::{MachineAction, MachineBuilder};
 use async_trait::async_trait;
-use endbasic_core2::{
+use endbasic_core::{
     ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
     Compiler, ExprType, RequiredValueSyntax, Scope, SingularArgSyntax, SymbolKey,
 };
@@ -958,8 +958,8 @@ mod tests {
 
     #[test]
     fn test_run_something_that_exits_with_trailing_code() {
-        // TODO(jmmv): Versions of EndBASIC before the core2 rewrite would show the "after"
-        // message after an abrupt termination from the program.  core2 cannot do this because
+        // TODO(jmmv): Versions of EndBASIC before the core rewrite would show the "after"
+        // message after an abrupt termination from the program.  core cannot do this because
         // of how the whole line is compiled first and how RUN then replaces the full program
         // memory.  We should fix this at some point.
         let program = "PRINT 5: END 1: PRINT 4";

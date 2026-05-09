@@ -20,7 +20,7 @@ use crate::MachineBuilder;
 use crate::console::{AnsiColor, Console, Pager, refill_and_page};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
-use endbasic_core2::{
+use endbasic_core::{
     ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
     ExprType, RequiredValueSyntax, Scope, SingularArgSyntax, SymbolKey,
 };

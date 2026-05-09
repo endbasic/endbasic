@@ -1,21 +1,23 @@
 // EndBASIC
 // Copyright 2020 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Abstract Syntax Tree (AST) for the EndBASIC language.
 
 use crate::reader::LineCol;
+use std::convert::TryFrom;
 use std::fmt;
 
 /// Components of a boolean literal expression.
@@ -155,56 +157,72 @@ pub enum Expr {
 impl Expr {
     /// Returns the start position of the expression.
     pub fn start_pos(&self) -> LineCol {
-        match self {
-            Expr::Boolean(span) => span.pos,
-            Expr::Double(span) => span.pos,
-            Expr::Integer(span) => span.pos,
-            Expr::Text(span) => span.pos,
+        let mut expr = self;
+        loop {
+            match expr {
+                Expr::Boolean(span) => return span.pos,
+                Expr::Double(span) => return span.pos,
+                Expr::Integer(span) => return span.pos,
+                Expr::Text(span) => return span.pos,
 
-            Expr::Symbol(span) => span.pos,
+                Expr::Symbol(span) => return span.pos,
 
-            Expr::And(span) => span.lhs.start_pos(),
-            Expr::Or(span) => span.lhs.start_pos(),
-            Expr::Xor(span) => span.lhs.start_pos(),
-            Expr::Not(span) => span.pos,
+                Expr::Not(span) => return span.pos,
+                Expr::Negate(span) => return span.pos,
 
-            Expr::ShiftLeft(span) => span.lhs.start_pos(),
-            Expr::ShiftRight(span) => span.lhs.start_pos(),
+                Expr::Call(span) => return span.vref_pos,
 
-            Expr::Equal(span) => span.lhs.start_pos(),
-            Expr::NotEqual(span) => span.lhs.start_pos(),
-            Expr::Less(span) => span.lhs.start_pos(),
-            Expr::LessEqual(span) => span.lhs.start_pos(),
-            Expr::Greater(span) => span.lhs.start_pos(),
-            Expr::GreaterEqual(span) => span.lhs.start_pos(),
-
-            Expr::Add(span) => span.lhs.start_pos(),
-            Expr::Subtract(span) => span.lhs.start_pos(),
-            Expr::Multiply(span) => span.lhs.start_pos(),
-            Expr::Divide(span) => span.lhs.start_pos(),
-            Expr::Modulo(span) => span.lhs.start_pos(),
-            Expr::Power(span) => span.lhs.start_pos(),
-            Expr::Negate(span) => span.pos,
-
-            Expr::Call(span) => span.vref_pos,
+                Expr::Add(span)
+                | Expr::And(span)
+                | Expr::Divide(span)
+                | Expr::Equal(span)
+                | Expr::Greater(span)
+                | Expr::GreaterEqual(span)
+                | Expr::Less(span)
+                | Expr::LessEqual(span)
+                | Expr::Modulo(span)
+                | Expr::Multiply(span)
+                | Expr::NotEqual(span)
+                | Expr::Or(span)
+                | Expr::Power(span)
+                | Expr::ShiftLeft(span)
+                | Expr::ShiftRight(span)
+                | Expr::Subtract(span)
+                | Expr::Xor(span) => expr = &span.lhs,
+            }
         }
     }
 }
 
 /// Represents type of an expression.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub enum ExprType {
     /// Type for an expression that evaluates to a boolean.
-    Boolean,
+    Boolean = 0,
 
     /// Type for an expression that evaluates to a double.
-    Double,
+    Double = 1,
 
     /// Type for an expression that evaluates to an integer.
-    Integer,
+    Integer = 2,
 
     /// Type for an expression that evaluates to a string.
-    Text,
+    Text = 3,
+}
+
+impl TryFrom<u8> for ExprType {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Boolean),
+            1 => Ok(Self::Double),
+            2 => Ok(Self::Integer),
+            3 => Ok(Self::Text),
+            _ => Err(()),
+        }
+    }
 }
 
 impl ExprType {
@@ -220,16 +238,6 @@ impl ExprType {
             ExprType::Double => '#',
             ExprType::Integer => '%',
             ExprType::Text => '$',
-        }
-    }
-
-    /// Returns the default value to assign to this type.
-    pub(crate) fn default_value(&self) -> Value {
-        match self {
-            ExprType::Boolean => Value::Boolean(false),
-            ExprType::Double => Value::Double(0.0),
-            ExprType::Integer => Value::Integer(0),
-            ExprType::Text => Value::Text("".to_owned()),
         }
     }
 }
@@ -295,83 +303,9 @@ impl fmt::Display for VarRef {
     }
 }
 
-/// Represents an evaluated value.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Value {
-    /// A boolean value.
-    Boolean(bool),
-
-    /// A double-precision floating point value.
-    Double(f64),
-
-    /// An integer value.
-    Integer(i32),
-
-    /// A string value.
-    Text(String), // Should be `String` but would get confusing with the built-in Rust type.
-
-    /// A reference to a variable.
-    VarRef(String, ExprType),
-}
-
-impl From<bool> for Value {
-    fn from(b: bool) -> Self {
-        Value::Boolean(b)
-    }
-}
-
-impl From<f64> for Value {
-    fn from(d: f64) -> Self {
-        Value::Double(d)
-    }
-}
-
-impl From<i32> for Value {
-    fn from(i: i32) -> Self {
-        Value::Integer(i)
-    }
-}
-
-impl From<&str> for Value {
-    fn from(s: &str) -> Self {
-        Value::Text(s.to_owned())
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Value::Boolean(true) => write!(f, "TRUE"),
-            Value::Boolean(false) => write!(f, "FALSE"),
-            Value::Double(d) => {
-                let mut s = format!("{}", d);
-                if d.is_finite() && !d.is_nan() && !s.contains('.') {
-                    s += ".0";
-                }
-                write!(f, "{}", s)
-            }
-            Value::Integer(i) => write!(f, "{}", i),
-            Value::Text(s) => write!(f, "\"{}\"", s),
-            Value::VarRef(key, etype) => write!(f, "{}{}", key, etype),
-        }
-    }
-}
-
-impl Value {
-    /// Returns the type of the value as an `ExprType`.
-    pub fn as_exprtype(&self) -> ExprType {
-        match self {
-            Value::Boolean(_) => ExprType::Boolean,
-            Value::Double(_) => ExprType::Double,
-            Value::Integer(_) => ExprType::Integer,
-            Value::Text(_) => ExprType::Text,
-            Value::VarRef(_key, etype) => *etype,
-        }
-    }
-}
-
 /// Types of separators between arguments to a `BuiltinCall`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub enum ArgSep {
     /// Filler for the separator in the last argument.
     End = 0,
@@ -384,6 +318,20 @@ pub enum ArgSep {
 
     /// `AS` separator.
     As = 3,
+}
+
+impl TryFrom<u8> for ArgSep {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::End),
+            1 => Ok(Self::Short),
+            2 => Ok(Self::Long),
+            3 => Ok(Self::As),
+            _ => Err(()),
+        }
+    }
 }
 
 impl fmt::Display for ArgSep {
@@ -499,6 +447,20 @@ pub struct DataSpan {
     pub values: Vec<Option<Expr>>,
 }
 
+/// Components of a `DECLARE` statement.
+#[derive(Debug, PartialEq)]
+pub struct DeclareSpan {
+    /// Name of the callable, expressed as a variable reference.  For functions, this contains
+    /// a type, and for subroutines, it does not.
+    pub name: VarRef,
+
+    /// Position of the name of the callable.
+    pub name_pos: LineCol,
+
+    /// Definition of the callable parameters.
+    pub params: Vec<VarRef>,
+}
+
 /// Components of a variable definition.
 ///
 /// Given that a definition causes the variable to be initialized to a default value, it is
@@ -584,6 +546,9 @@ pub struct DoSpan {
 pub struct EndSpan {
     /// Integer expression to compute the return code.
     pub code: Option<Expr>,
+
+    /// Position of the statement.
+    pub pos: LineCol,
 }
 
 /// Components of an `EXIT` statement.
@@ -672,13 +637,13 @@ pub struct LabelSpan {
 #[derive(Debug, Eq, PartialEq)]
 pub enum OnErrorSpan {
     /// Components of an `ON ERROR GOTO @label` statement.
-    Goto(GotoSpan),
+    Goto(GotoSpan, LineCol),
 
     /// Components of an `ON ERROR GOTO 0` statement.
-    Reset,
+    Reset(LineCol),
 
     /// Components of an `ON ERROR RESUME NEXT` statement.
-    ResumeNext,
+    ResumeNext(LineCol),
 }
 
 /// Components of a `RETURN` statement.
@@ -773,6 +738,9 @@ pub enum Statement {
     /// Represents a `DATA` statement.
     Data(DataSpan),
 
+    /// Represents a `DECLARE` statement.
+    Declare(DeclareSpan),
+
     /// Represents a variable definition.
     Dim(DimSpan),
 
@@ -864,20 +832,5 @@ mod tests {
         assert!(!VarRef::new("a", Some(ExprType::Text)).accepts(ExprType::Double));
         assert!(!VarRef::new("a", Some(ExprType::Text)).accepts(ExprType::Integer));
         assert!(VarRef::new("a", Some(ExprType::Text)).accepts(ExprType::Text));
-    }
-
-    #[test]
-    fn test_value_display() {
-        assert_eq!("TRUE", format!("{}", Value::Boolean(true)));
-        assert_eq!("FALSE", format!("{}", Value::Boolean(false)));
-        assert_eq!("3.0", format!("{}", Value::Double(3.0)));
-        assert_eq!("3.1", format!("{}", Value::Double(3.1)));
-        assert_eq!("0.51", format!("{}", Value::Double(0.51)));
-        assert_eq!("inf", format!("{}", Value::Double(f64::INFINITY)));
-        assert_eq!("-inf", format!("{}", Value::Double(f64::NEG_INFINITY)));
-        assert_eq!("NaN", format!("{}", Value::Double(f64::NAN)));
-        assert_eq!("NaN", format!("{}", Value::Double(-f64::NAN)));
-        assert_eq!("-56", format!("{}", Value::Integer(-56)));
-        assert_eq!("\"some words\"", format!("{}", Value::Text("some words".to_owned())));
     }
 }

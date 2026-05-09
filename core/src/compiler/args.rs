@@ -1,453 +1,54 @@
 // EndBASIC
-// Copyright 2024 Julio Merino
+// Copyright 2026 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Common compilers for callable arguments.
 
-use crate::ast::*;
-use crate::bytecode::*;
+use super::SymbolKey;
+use super::syms::LocalSymtable;
+use crate::ast::{ArgSpan, CallSpan, Expr, VarRef};
+use crate::bytecode::{self, Register};
+use crate::callable::CallableMetadata;
+use crate::compiler::codegen::Codegen;
 use crate::compiler::exprs::{compile_expr, compile_expr_as_type};
-use crate::compiler::{Error, ExprType, Fixup, Result, SymbolPrototype, SymbolsTable};
-use crate::exec::ValueTag;
+use crate::compiler::syms::{self, SymbolPrototype, TempSymtable};
+use crate::compiler::{Error, Result};
 use crate::reader::LineCol;
-use crate::syms::CallableMetadata;
-use crate::syms::SymbolKey;
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::ops::RangeInclusive;
+use crate::{ArgSep, ArgSepSyntax, ExprType, RepeatedTypeSyntax, SingularArgSyntax};
+use std::rc::Rc;
 
-/// Details to compile a required scalar parameter.
-#[derive(Clone, Debug)]
-pub struct RequiredValueSyntax {
-    /// The name of the parameter for help purposes.
-    pub name: Cow<'static, str>,
-
-    /// The type of the expected parameter.
-    pub vtype: ExprType,
-}
-
-/// Details to compile a required reference parameter.
-#[derive(Clone, Debug)]
-pub struct RequiredRefSyntax {
-    /// The name of the parameter for help purposes.
-    pub name: Cow<'static, str>,
-
-    /// If true, require an array reference; if false, a variable reference.
-    pub require_array: bool,
-
-    /// If true, allow references to undefined variables because the command will define them when
-    /// missing.  Can only be set to true for commands, not functions, and `require_array` must be
-    /// false.
-    pub define_undefined: bool,
-}
-
-/// Details to compile an optional scalar parameter.
-///
-/// Optional parameters are only supported in commands.
-#[derive(Clone, Debug)]
-pub struct OptionalValueSyntax {
-    /// The name of the parameter for help purposes.
-    pub name: Cow<'static, str>,
-
-    /// The type of the expected parameter.
-    pub vtype: ExprType,
-
-    /// Value to push onto the stack when the parameter is missing.
-    pub missing_value: i32,
-
-    /// Value to push onto the stack when the parameter is present, after which the stack contains
-    /// the parameter value.
-    pub present_value: i32,
-}
-
-/// Details to describe the type of a repeated parameter.
-#[derive(Clone, Debug)]
-pub enum RepeatedTypeSyntax {
-    /// Allows any value type, including empty arguments.  The values pushed onto the stack have
-    /// the same semantics as those pushed by `AnyValueSyntax`.
-    AnyValue,
-
-    /// Expects a value of the given type.
-    TypedValue(ExprType),
-
-    /// Expects a reference to a variable (not an array) and allows the variables to not be defined.
-    VariableRef,
-}
-
-/// Details to compile a repeated parameter.
-///
-/// The repeated parameter must appear after all singular positional parameters.
-#[derive(Clone, Debug)]
-pub struct RepeatedSyntax {
-    /// The name of the parameter for help purposes.
-    pub name: Cow<'static, str>,
-
-    /// The type of the expected parameters.
-    pub type_syn: RepeatedTypeSyntax,
-
-    /// The separator to expect between the repeated parameters.  For functions, this must be the
-    /// long separator (the comma).
-    pub sep: ArgSepSyntax,
-
-    /// Whether the repeated parameter must at least have one element or not.
-    pub require_one: bool,
-
-    /// Whether to allow any parameter to not be present or not.  Can only be true for commands.
-    pub allow_missing: bool,
-}
-
-impl RepeatedSyntax {
-    /// Formats the repeated argument syntax for help purposes into `output`.
-    ///
-    /// `last_singular_sep` contains the separator of the last singular argument syntax, if any,
-    /// which we need to place inside of the optional group.
-    fn describe(&self, output: &mut String, last_singular_sep: Option<&ArgSepSyntax>) {
-        if !self.require_one {
-            output.push('[');
-        }
-
-        if let Some(sep) = last_singular_sep {
-            sep.describe(output);
-        }
-
-        output.push_str(&self.name);
-        output.push('1');
-        if let RepeatedTypeSyntax::TypedValue(vtype) = self.type_syn {
-            output.push(vtype.annotation());
-        }
-
-        if self.require_one {
-            output.push('[');
-        }
-
-        self.sep.describe(output);
-        output.push_str("..");
-        self.sep.describe(output);
-
-        output.push_str(&self.name);
-        output.push('N');
-        if let RepeatedTypeSyntax::TypedValue(vtype) = self.type_syn {
-            output.push(vtype.annotation());
-        }
-
-        output.push(']');
-    }
-}
-
-/// Details to compile a parameter of any scalar type.
-#[derive(Clone, Debug)]
-pub struct AnyValueSyntax {
-    /// The name of the parameter for help purposes.
-    pub name: Cow<'static, str>,
-
-    /// Whether to allow the parameter to not be present or not.  Can only be true for commands.
-    pub allow_missing: bool,
-}
-
-/// Details to process an argument separator.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum ArgSepSyntax {
-    /// The argument separator must exactly be the one give.
-    Exactly(ArgSep),
-
-    /// The argument separator may be any of the ones given.
-    OneOf(ArgSep, ArgSep),
-
-    /// The argument separator is the end of the call.
-    End,
-}
-
-impl ArgSepSyntax {
-    /// Formats the argument separator for help purposes into `output`.
-    fn describe(&self, output: &mut String) {
-        match self {
-            ArgSepSyntax::Exactly(sep) => {
-                let (text, needs_space) = sep.describe();
-
-                if !text.is_empty() && needs_space {
-                    output.push(' ');
-                }
-                output.push_str(text);
-                if !text.is_empty() {
-                    output.push(' ');
-                }
-            }
-
-            ArgSepSyntax::OneOf(sep1, sep2) => {
-                let (text1, _needs_space1) = sep1.describe();
-                let (text2, _needs_space2) = sep2.describe();
-
-                output.push(' ');
-                output.push_str(&format!("<{}|{}>", text1, text2));
-                output.push(' ');
-            }
-
-            ArgSepSyntax::End => (),
-        };
-    }
-}
-
-/// Details to process a non-repeated argument.
-///
-/// Every item in this enum is composed of a struct that provides the details on the parameter and
-/// a struct that provides the details on how this parameter is separated from the next.
-#[derive(Clone, Debug)]
-pub enum SingularArgSyntax {
-    /// A required scalar value.
-    RequiredValue(RequiredValueSyntax, ArgSepSyntax),
-
-    /// A required reference.
-    RequiredRef(RequiredRefSyntax, ArgSepSyntax),
-
-    /// An optional scalar value.
-    OptionalValue(OptionalValueSyntax, ArgSepSyntax),
-
-    /// A required scalar value of any type.
-    AnyValue(AnyValueSyntax, ArgSepSyntax),
-}
-
-/// Details to process the arguments of a callable.
-///
-/// Note that the description of function arguments is more restricted than that of commands.
-/// The arguments compiler panics when these preconditions aren't met with the rationale that
-/// builtin functions must never be ill-defined.
-// TODO(jmmv): It might be nice to try to express these restrictions in the type system, but
-// things are already too verbose as they are...
-#[derive(Clone, Debug)]
-pub(crate) struct CallableSyntax {
-    /// Ordered list of singular arguments that appear before repeated arguments.
-    singular: Cow<'static, [SingularArgSyntax]>,
-
-    /// Details on the repeated argument allowed after singular arguments.
-    repeated: Option<Cow<'static, RepeatedSyntax>>,
-}
-
-impl CallableSyntax {
-    /// Creates a new callable arguments definition from its parts defined statically in the
-    /// code.
-    pub(crate) fn new_static(
-        singular: &'static [SingularArgSyntax],
-        repeated: Option<&'static RepeatedSyntax>,
-    ) -> Self {
-        Self { singular: Cow::Borrowed(singular), repeated: repeated.map(Cow::Borrowed) }
-    }
-
-    /// Creates a new callable arguments definition from its parts defined dynamically at
-    /// runtime.
-    pub(crate) fn new_dynamic(
-        singular: Vec<SingularArgSyntax>,
-        repeated: Option<RepeatedSyntax>,
-    ) -> Self {
-        Self { singular: Cow::Owned(singular), repeated: repeated.map(Cow::Owned) }
-    }
-
-    /// Computes the range of the expected number of parameters for this syntax.
-    fn expected_nargs(&self) -> RangeInclusive<usize> {
-        let mut min = self.singular.len();
-        let mut max = self.singular.len();
-        if let Some(syn) = self.repeated.as_ref() {
-            if syn.require_one {
-                min += 1;
-            }
-            max = usize::MAX;
-        }
-        min..=max
-    }
-
-    /// Returns true if this syntax represents "no arguments".
-    pub(crate) fn is_empty(&self) -> bool {
-        self.singular.is_empty() && self.repeated.is_none()
-    }
-
-    /// Produces a user-friendly description of this callable syntax.
-    pub(crate) fn describe(&self) -> String {
-        let mut description = String::new();
-        let mut last_singular_sep = None;
-        for (i, s) in self.singular.iter().enumerate() {
-            let sep = match s {
-                SingularArgSyntax::RequiredValue(details, sep) => {
-                    description.push_str(&details.name);
-                    description.push(details.vtype.annotation());
-                    sep
-                }
-
-                SingularArgSyntax::RequiredRef(details, sep) => {
-                    description.push_str(&details.name);
-                    sep
-                }
-
-                SingularArgSyntax::OptionalValue(details, sep) => {
-                    description.push('[');
-                    description.push_str(&details.name);
-                    description.push(details.vtype.annotation());
-                    description.push(']');
-                    sep
-                }
-
-                SingularArgSyntax::AnyValue(details, sep) => {
-                    if details.allow_missing {
-                        description.push('[');
-                    }
-                    description.push_str(&details.name);
-                    if details.allow_missing {
-                        description.push(']');
-                    }
-                    sep
-                }
-            };
-
-            if self.repeated.is_none() || i < self.singular.len() - 1 {
-                sep.describe(&mut description);
-            }
-            if i == self.singular.len() - 1 {
-                last_singular_sep = Some(sep);
-            }
-        }
-
-        if let Some(syn) = &self.repeated {
-            syn.describe(&mut description, last_singular_sep);
-        }
-
-        description
-    }
-}
-
-/// Compiles an argument that requires a reference.
-///
-/// If the reference does not exist and the syntax allowed undefined symbols, returns the details
-/// for the symbol to insert into the symbols table, which the caller must handle because we do
-/// not have mutable access to the `symtable` here.
-fn compile_required_ref(
-    instrs: &mut Vec<Instruction>,
-    md: &CallableMetadata,
-    pos: LineCol,
-    symtable: &SymbolsTable,
-    require_array: bool,
-    define_undefined: bool,
-    expr: Option<Expr>,
-) -> Result<Option<(SymbolKey, SymbolPrototype)>> {
-    match expr {
-        Some(Expr::Symbol(span)) => {
-            let key = SymbolKey::from(&span.vref.name);
-            match symtable.get(&key) {
-                None => {
-                    if !define_undefined {
-                        return Err(Error::UndefinedSymbol(span.pos, span.vref));
-                    }
-                    debug_assert!(!require_array);
-
-                    let vtype = span.vref.ref_type.unwrap_or(ExprType::Integer);
-
-                    if !span.vref.accepts(vtype) {
-                        return Err(Error::IncompatibleTypeAnnotationInReference(
-                            span.pos, span.vref,
-                        ));
-                    }
-
-                    instrs.push(Instruction::LoadRef(key.clone(), vtype, span.pos));
-                    Ok(Some((key, SymbolPrototype::Variable(vtype))))
-                }
-
-                Some(SymbolPrototype::Array(vtype, _)) => {
-                    let vtype = *vtype;
-
-                    if !span.vref.accepts(vtype) {
-                        return Err(Error::IncompatibleTypeAnnotationInReference(
-                            span.pos, span.vref,
-                        ));
-                    }
-
-                    if !require_array {
-                        return Err(Error::NotAReference(span.pos));
-                    }
-
-                    instrs.push(Instruction::LoadRef(key, vtype, span.pos));
-                    Ok(None)
-                }
-
-                Some(SymbolPrototype::Variable(vtype)) => {
-                    let vtype = *vtype;
-
-                    if !span.vref.accepts(vtype) {
-                        return Err(Error::IncompatibleTypeAnnotationInReference(
-                            span.pos, span.vref,
-                        ));
-                    }
-
-                    if require_array {
-                        return Err(Error::NotAReference(span.pos));
-                    }
-
-                    instrs.push(Instruction::LoadRef(key, vtype, span.pos));
-                    Ok(None)
-                }
-
-                Some(SymbolPrototype::BuiltinCallable(md, _))
-                | Some(SymbolPrototype::Callable(md)) => {
-                    if !span.vref.accepts_callable(md.return_type()) {
-                        return Err(Error::IncompatibleTypeAnnotationInReference(
-                            span.pos, span.vref,
-                        ));
-                    }
-
-                    Err(Error::NotArrayOrFunction(span.pos, span.vref))
-                }
-            }
-        }
-
-        Some(expr) => Err(Error::NotAReference(expr.start_pos())),
-
-        None => Err(Error::CallableSyntaxError(pos, md.clone())),
-    }
-}
-
-/// Locates the syntax definition that can parse the given number of arguments.
-///
-/// Panics if more than one syntax definition applies.
-fn find_syntax(md: &CallableMetadata, pos: LineCol, nargs: usize) -> Result<&CallableSyntax> {
-    let mut matches = md.syntaxes().iter().filter(|s| s.expected_nargs().contains(&nargs));
-    let syntax = matches.next();
-    match syntax {
-        Some(syntax) => {
-            debug_assert!(matches.next().is_none(), "Ambiguous syntax definitions");
-            Ok(syntax)
-        }
-        None => Err(Error::CallableSyntaxError(pos, md.clone())),
-    }
-}
-
-/// Compiles an argument separator with any necessary tagging.
-///
-/// `instrs` is the list of instructions into which insert the separator tag at `sep_tag_pc`
-/// when it is needed to disambiguate separators at runtime.
+/// Validates an argument separator against the expected syntax.
 ///
 /// `syn` contains the details about the separator syntax that is accepted.
 ///
-/// `sep` and `sep_pos` are the details about the separator being compiled.
+/// `end_ok` indicates whether an `ArgSep::End` is acceptable.  This is true for repeated
+/// arguments, where `End` terminates the argument sequence, and false for singular arguments,
+/// where `End` should only be accepted by `ArgSepSyntax::End`.
 ///
 /// `is_last` indicates whether this is the last separator in the command call and is used
 /// only for diagnostics purposes.
-#[allow(clippy::too_many_arguments)]
-fn compile_syn_argsep(
-    instrs: &mut Vec<Instruction>,
-    md: &CallableMetadata,
+///
+/// `sep` and `sep_pos` are the details about the separator being validated.
+fn validate_syn_argsep(
+    md: &Rc<CallableMetadata>,
     syn: &ArgSepSyntax,
+    end_ok: bool,
     is_last: bool,
     sep: ArgSep,
     sep_pos: LineCol,
-    sep_tag_pc: Address,
-) -> Result<usize> {
+) -> Result<()> {
     debug_assert!(
         (!is_last || sep == ArgSep::End) && (is_last || sep != ArgSep::End),
         "Parser can only supply an End separator in the last argument"
@@ -456,1692 +57,500 @@ fn compile_syn_argsep(
     match syn {
         ArgSepSyntax::Exactly(exp_sep) => {
             debug_assert!(*exp_sep != ArgSep::End, "Use ArgSepSyntax::End");
-            if sep != ArgSep::End && sep != *exp_sep {
-                return Err(Error::CallableSyntaxError(sep_pos, md.clone()));
+            if sep == *exp_sep || (sep == ArgSep::End && end_ok) {
+                Ok(())
+            } else {
+                Err(Error::CallableSyntax(sep_pos, md.as_ref().clone()))
             }
-            Ok(0)
         }
 
-        ArgSepSyntax::OneOf(exp_sep1, exp_sep2) => {
-            debug_assert!(*exp_sep1 != ArgSep::End, "Use ArgSepSyntax::End");
-            debug_assert!(*exp_sep2 != ArgSep::End, "Use ArgSepSyntax::End");
+        ArgSepSyntax::OneOf(exp_seps) => {
             if sep == ArgSep::End {
-                Ok(0)
-            } else {
-                if sep != *exp_sep1 && sep != *exp_sep2 {
-                    return Err(Error::CallableSyntaxError(sep_pos, md.clone()));
+                if end_ok {
+                    return Ok(());
                 }
-                instrs.insert(sep_tag_pc, Instruction::PushInteger(sep as i32, sep_pos));
-                Ok(1)
+                return Err(Error::CallableSyntax(sep_pos, md.as_ref().clone()));
             }
+
+            let mut found = false;
+            for exp_sep in *exp_seps {
+                debug_assert!(*exp_sep != ArgSep::End, "Use ArgSepSyntax::End");
+                if sep == *exp_sep {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return Err(Error::CallableSyntax(sep_pos, md.as_ref().clone()));
+            }
+            Ok(())
         }
 
         ArgSepSyntax::End => {
             debug_assert!(is_last);
-            Ok(0)
+            Ok(())
         }
     }
 }
 
-/// Parses the arguments to a command or a function and generates expressions to compute them.
-///
-/// Returns the number of arguments that the instructions added to `instrs` will push into the
-/// stack and returns the list of new symbols that need to be inserted into `symtable`.
-fn compile_args(
-    md: &CallableMetadata,
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
+/// Pre-allocates one local variable for a command output argument, setting its to its default
+/// value.
+fn define_new_arg(
+    symtable: &mut LocalSymtable<'_>,
+    vref: &VarRef,
     pos: LineCol,
-    args: Vec<ArgSpan>,
-) -> Result<(usize, Vec<(SymbolKey, SymbolPrototype)>)> {
-    let syntax = find_syntax(md, pos, args.len())?;
+    codegen: &mut Codegen,
+) -> Result<()> {
+    let key = SymbolKey::from(&vref.name);
+    let vtype = vref.ref_type.unwrap_or(ExprType::Integer);
+    let reg = symtable
+        .put_local(key, SymbolPrototype::Scalar(vtype))
+        .map_err(|e| Error::from_syms(e, pos))?;
+    codegen.emit_default(reg, vtype, pos);
+    Ok(())
+}
 
-    let input_nargs = args.len();
-    let mut aiter = args.into_iter().rev();
+/// Pre-allocates local variables for command output arguments.
+pub(super) fn define_new_args(
+    span: &CallSpan,
+    md: &Rc<CallableMetadata>,
+    symtable: &mut LocalSymtable<'_>,
+    codegen: &mut Codegen,
+) -> Result<()> {
+    let Some(syntax) = md.find_syntax(span.args.len()) else {
+        return Err(Error::CallableSyntax(span.vref_pos, md.as_ref().clone()));
+    };
 
-    let mut nargs = 0;
-    let mut to_insert = vec![];
+    let mut arg_iter = span.args.iter();
 
-    let mut remaining;
+    for syn in syntax.singular.iter() {
+        match syn {
+            SingularArgSyntax::RequiredValue(_details, _exp_sep) => {
+                arg_iter.next().expect("Args and their syntax must advance in unison");
+            }
+
+            SingularArgSyntax::RequiredRef(details, _exp_sep) => {
+                let ArgSpan { expr, .. } =
+                    arg_iter.next().expect("Args and their syntax must advance in unison");
+
+                if let Some(Expr::Symbol(span)) = expr
+                    && let Err(syms::Error::UndefinedSymbol(..)) =
+                        symtable.get_local_or_global(&span.vref)
+                    && details.define_undefined
+                {
+                    let key = SymbolKey::from(&span.vref.name);
+                    if symtable.get_callable(&key).is_some() {
+                        continue;
+                    }
+                    define_new_arg(symtable, &span.vref, span.pos, codegen)?;
+                }
+            }
+
+            SingularArgSyntax::OptionalValue(_details, _exp_sep) => {
+                arg_iter.next();
+            }
+
+            SingularArgSyntax::AnyValue(_details, _exp_sep) => {
+                arg_iter.next();
+            }
+        };
+    }
+
+    if let Some(syn) = syntax.repeated.as_ref()
+        && let RepeatedTypeSyntax::VariableRef = syn.type_syn
+    {
+        for arg in arg_iter {
+            let Some(Expr::Symbol(span)) = &arg.expr else {
+                continue;
+            };
+
+            let Err(syms::Error::UndefinedSymbol(..)) = symtable.get_local_or_global(&span.vref)
+            else {
+                continue;
+            };
+
+            let key = SymbolKey::from(&span.vref.name);
+            if symtable.get_callable(&key).is_some() {
+                continue;
+            }
+
+            define_new_arg(symtable, &span.vref, span.pos, codegen)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Compiles the arguments of a callable invocation.
+///
+/// Returns the first register containing the compiled arguments and the source positions for all
+/// allocated registers.  The register layout depends on the callable's syntax:
+///
+/// * Singular arguments and variable repeated arguments use `VarArgTag` tag registers followed by
+///   optional value registers.  See the `VarArgTag` documentation for details.
+///
+/// * Repeated arguments of type `TypedValue` with `Exactly` separators and `!allow_missing` use
+///   plain value registers without tags, since the type and separator are statically known.  The
+///   callable can use `Scope::nargs()` to determine the total number of register slots.
+///
+/// The caller *must* invoke `define_new_args` beforehand when compiling arguments for commands.
+/// This separate function is necessary to pre-allocate local variables for any output arguments.
+///
+/// TODO(jmmv): The `md` metadata is passed by value, not because we want to, but because it's
+/// necessary to appease the borrow checker.  The `md` is obtained from the `symtable` in the caller
+/// (as a reference) to perform various validations so it is not possible to pass it as input along
+/// `symtable`.  An alternative would be to take the symbol `key` as a parameter here and perform
+/// another lookup from the symtable.  Or maybe we could make `Metadata` objects static by
+/// eliminating the `MetadataBuilder` and pass a static reference here.
+pub(super) fn compile_args(
+    span: CallSpan,
+    md: Rc<CallableMetadata>,
+    symtable: &mut TempSymtable<'_, '_>,
+    codegen: &mut Codegen,
+) -> Result<(Register, Vec<LineCol>)> {
+    let key_pos = span.vref_pos;
+
+    let Some(syntax) = md.find_syntax(span.args.len()) else {
+        return Err(Error::CallableSyntax(key_pos, md.as_ref().clone()));
+    };
+
+    let mut scope = symtable.temp_scope();
+
+    // Collects the source position for each register slot allocated below, in allocation order.
+    // This is used to populate the UPCALL instruction's arg_linecols metadata so that callables
+    // can query the source position of any argument via `Scope::get_pos`.
+    let mut arg_linecols: Vec<LineCol> = Vec::new();
+
+    let input_nargs = span.args.len();
+    let mut arg_iter = span.args.into_iter().peekable();
+
+    for (i, syn) in syntax.singular.iter().enumerate() {
+        let end_ok = i + 1 == syntax.singular.len()
+            && input_nargs == syntax.singular.len()
+            && syntax.repeated.as_ref().is_some_and(|syn| !syn.require_one);
+
+        match syn {
+            SingularArgSyntax::RequiredValue(details, exp_sep) => {
+                let ArgSpan { expr, sep, sep_pos } =
+                    arg_iter.next().expect("Args and their syntax must advance in unison");
+                let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
+
+                match expr {
+                    None => return Err(Error::CallableSyntax(key_pos, md.as_ref().clone())),
+                    Some(expr) => {
+                        let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
+                        compile_expr_as_type(codegen, symtable, temp_value, expr, details.vtype)?;
+                        validate_syn_argsep(
+                            &md,
+                            exp_sep,
+                            end_ok,
+                            arg_iter.peek().is_none(),
+                            sep,
+                            sep_pos,
+                        )?;
+                    }
+                }
+            }
+
+            SingularArgSyntax::RequiredRef(details, exp_sep) => {
+                let ArgSpan { expr, sep, sep_pos } =
+                    arg_iter.next().expect("Args and their syntax must advance in unison");
+                let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
+
+                match expr {
+                    None => return Err(Error::CallableSyntax(key_pos, md.as_ref().clone())),
+                    Some(Expr::Symbol(span)) => {
+                        let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
+                            Ok((reg, SymbolPrototype::Array(info))) if details.require_array => {
+                                (reg, info.subtype)
+                            }
+                            Ok((reg, SymbolPrototype::Scalar(vtype))) if !details.require_array => {
+                                (reg, vtype)
+                            }
+                            Ok((_, _)) => {
+                                return Err(Error::CallableSyntax(span.pos, md.as_ref().clone()));
+                            }
+                            Err(e @ syms::Error::UndefinedSymbol(..)) => {
+                                if !details.define_undefined {
+                                    return Err(Error::from_syms(e, span.pos));
+                                }
+                                let key = SymbolKey::from(&span.vref.name);
+                                if symtable.get_callable(&key).is_some() {
+                                    return Err(Error::NotAFunction(span.pos, span.vref));
+                                }
+                                unreachable!("Caller must use define_new_args first for commands");
+                            }
+                            Err(e) => return Err(Error::from_syms(e, span.pos)),
+                        };
+                        let temp = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
+                        codegen.emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
+                        validate_syn_argsep(
+                            &md,
+                            exp_sep,
+                            end_ok,
+                            arg_iter.peek().is_none(),
+                            sep,
+                            sep_pos,
+                        )?;
+                    }
+                    Some(expr) => {
+                        return Err(Error::CallableSyntax(expr.start_pos(), md.as_ref().clone()));
+                    }
+                }
+            }
+
+            SingularArgSyntax::OptionalValue(details, exp_sep) => {
+                // The `CallSpan` is optimized (for simplicity) to not carry any arguments at all
+                // when callables are invoked without arguments.  This leads to a little
+                // inconsistency though: a call like `PRINT ;` carries two arguments whereas
+                // `PRINT` carries none (instead of one).  Deal with this here.
+                let (expr, sep, sep_pos) = match arg_iter.next() {
+                    Some(ArgSpan { expr, sep, sep_pos }) => (expr, sep, sep_pos),
+                    None => (None, ArgSep::End, key_pos),
+                };
+                let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
+
+                let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                arg_linecols.push(arg_pos);
+                let tag = match expr {
+                    None => bytecode::VarArgTag::Missing(sep),
+                    Some(expr) => {
+                        let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
+                        compile_expr_as_type(codegen, symtable, temp_value, expr, details.vtype)?;
+                        bytecode::VarArgTag::Immediate(sep, details.vtype)
+                    }
+                };
+                validate_syn_argsep(&md, exp_sep, end_ok, arg_iter.peek().is_none(), sep, sep_pos)?;
+                codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
+            }
+
+            SingularArgSyntax::AnyValue(details, exp_sep) => {
+                // The `CallSpan` is optimized (for simplicity) to not carry any arguments at all
+                // when callables are invoked without arguments.  This leads to a little
+                // inconsistency though: a call like `PRINT ;` carries two arguments whereas
+                // `PRINT` carries none (instead of one).  Deal with this here.
+                let (expr, sep, sep_pos) = match arg_iter.next() {
+                    Some(ArgSpan { expr, sep, sep_pos }) => (expr, sep, sep_pos),
+                    None => {
+                        if !details.allow_missing {
+                            return Err(Error::CallableSyntax(key_pos, md.as_ref().clone()));
+                        }
+                        (None, ArgSep::End, key_pos)
+                    }
+                };
+                let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
+
+                let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                arg_linecols.push(arg_pos);
+                let tag = match expr {
+                    None => bytecode::VarArgTag::Missing(sep),
+                    Some(expr) => {
+                        let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
+                        let etype = compile_expr(codegen, symtable, temp_value, expr)?;
+                        bytecode::VarArgTag::Immediate(sep, etype)
+                    }
+                };
+                validate_syn_argsep(&md, exp_sep, end_ok, arg_iter.peek().is_none(), sep, sep_pos)?;
+                codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
+            }
+        };
+    }
+
+    // Variable (repeated) arguments can be represented in two different layouts depending on
+    // the type syntax and separators.
+    //
+    // When `use_plain_values` is true (TypedValue + Exactly separators + !allow_missing), each
+    // argument occupies a single register containing only the value.  The type and separator are
+    // known at compile time, so no tags are needed.  The callable uses `Scope::nargs()` to
+    // determine how many repeated values are present, starting from the offset after all
+    // singular arguments.
+    //
+    // When `use_plain_values` is false, each argument is represented as 1 or 2 consecutive
+    // registers.  The first register always contains a `VarArgTag`, which indicates the type of
+    // separator following the argument and, if an argument is present, its type.  The second
+    // register is only present if there is an argument.  The caller must iterate over all tags
+    // until it finds `ArgSep::End`.
     if let Some(syn) = syntax.repeated.as_ref() {
         let mut min_nargs = syntax.singular.len();
         if syn.require_one {
             min_nargs += 1;
         }
         if input_nargs < min_nargs {
-            return Err(Error::CallableSyntaxError(pos, md.clone()));
+            return Err(Error::CallableSyntax(key_pos, md.as_ref().clone()));
         }
 
-        let need_tags = syn.allow_missing || matches!(syn.type_syn, RepeatedTypeSyntax::AnyValue);
+        let use_plain_values = matches!(syn.type_syn, RepeatedTypeSyntax::TypedValue(_))
+            && !syn.allow_missing
+            && matches!(syn.sep, ArgSepSyntax::Exactly(_));
 
-        remaining = input_nargs;
-        while remaining > syntax.singular.len() {
-            let span = aiter.next().expect("Args and their syntax must advance in unison");
+        if use_plain_values {
+            while let Some(ArgSpan { expr, sep, sep_pos }) = arg_iter.next() {
+                let vtype = match syn.type_syn {
+                    RepeatedTypeSyntax::TypedValue(vtype) => vtype,
+                    _ => unreachable!(),
+                };
+                let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
+                validate_syn_argsep(&md, &syn.sep, true, arg_iter.peek().is_none(), sep, sep_pos)?;
 
-            let sep_tag_pc = instrs.len();
+                match expr {
+                    None => {
+                        return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
+                    }
+                    Some(expr) => {
+                        let temp_value = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                        arg_linecols.push(arg_pos);
+                        compile_expr_as_type(codegen, symtable, temp_value, expr, vtype)?;
+                    }
+                }
+            }
+        } else {
+            if arg_iter.peek().is_none() {
+                let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, key_pos))?;
+                arg_linecols.push(key_pos);
+                let tag = bytecode::VarArgTag::Missing(ArgSep::End);
+                codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), key_pos);
+            }
 
-            match span.expr {
-                Some(expr) => {
-                    let pos = expr.start_pos();
-                    match syn.type_syn {
-                        RepeatedTypeSyntax::AnyValue => {
-                            debug_assert!(need_tags);
-                            let etype = compile_expr(instrs, fixups, symtable, expr, false)?;
-                            instrs
-                                .push(Instruction::PushInteger(ValueTag::from(etype) as i32, pos));
-                            nargs += 2;
+            while arg_iter.peek().is_some() {
+                let ArgSpan { expr, sep, sep_pos } =
+                    arg_iter.next().expect("Args and their syntax must advance in unison");
+
+                let arg_pos = expr.as_ref().map(|e| e.start_pos()).unwrap_or(sep_pos);
+                let temp_tag = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                arg_linecols.push(arg_pos);
+                validate_syn_argsep(&md, &syn.sep, true, arg_iter.peek().is_none(), sep, sep_pos)?;
+
+                let tag = match expr {
+                    None => {
+                        if !syn.allow_missing {
+                            return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
                         }
+                        bytecode::VarArgTag::Missing(sep)
+                    }
 
-                        RepeatedTypeSyntax::VariableRef => {
-                            let to_insert_one = compile_required_ref(
-                                instrs,
-                                md,
-                                pos,
-                                symtable,
-                                false,
-                                true,
-                                Some(expr),
-                            )?;
-                            if let Some(to_insert_one) = to_insert_one {
-                                to_insert.push(to_insert_one);
-                            }
-                            nargs += 1;
+                    Some(expr) => match syn.type_syn {
+                        RepeatedTypeSyntax::AnyValue => {
+                            let temp_value =
+                                scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                            arg_linecols.push(arg_pos);
+                            let etype = compile_expr(codegen, symtable, temp_value, expr)?;
+                            bytecode::VarArgTag::Immediate(sep, etype)
                         }
 
                         RepeatedTypeSyntax::TypedValue(vtype) => {
-                            compile_expr_as_type(instrs, fixups, symtable, expr, vtype)?;
-                            if need_tags {
-                                instrs.push(Instruction::PushInteger(
-                                    ValueTag::from(vtype) as i32,
-                                    pos,
-                                ));
-                                nargs += 2;
-                            } else {
-                                nargs += 1;
-                            }
+                            let temp_value =
+                                scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                            arg_linecols.push(arg_pos);
+                            compile_expr_as_type(codegen, symtable, temp_value, expr, vtype)?;
+                            bytecode::VarArgTag::Immediate(sep, vtype)
                         }
-                    }
-                }
-                None => {
-                    if !syn.allow_missing {
-                        return Err(Error::CallableSyntaxError(pos, md.clone()));
-                    }
-                    instrs.push(Instruction::PushInteger(ValueTag::Missing as i32, span.sep_pos));
-                    nargs += 1;
-                }
-            }
 
-            nargs += compile_syn_argsep(
-                instrs,
-                md,
-                &syn.sep,
-                input_nargs == remaining,
-                span.sep,
-                span.sep_pos,
-                sep_tag_pc,
-            )?;
+                        RepeatedTypeSyntax::VariableRef => {
+                            let Expr::Symbol(span) = expr else {
+                                return Err(Error::CallableSyntax(arg_pos, md.as_ref().clone()));
+                            };
 
-            remaining -= 1;
-        }
-    } else {
-        remaining = syntax.singular.len();
-    }
-
-    for syn in syntax.singular.iter().rev() {
-        let span = aiter.next().expect("Args and their syntax must advance in unison");
-
-        let sep_tag_pc = instrs.len();
-
-        let exp_sep = match syn {
-            SingularArgSyntax::RequiredValue(details, sep) => {
-                match span.expr {
-                    Some(expr) => {
-                        compile_expr_as_type(instrs, fixups, symtable, expr, details.vtype)?;
-                        nargs += 1;
-                    }
-                    None => return Err(Error::CallableSyntaxError(pos, md.clone())),
-                }
-                sep
-            }
-
-            SingularArgSyntax::RequiredRef(details, sep) => {
-                let to_insert_one = compile_required_ref(
-                    instrs,
-                    md,
-                    pos,
-                    symtable,
-                    details.require_array,
-                    details.define_undefined,
-                    span.expr,
-                )?;
-                if let Some(to_insert_one) = to_insert_one {
-                    to_insert.push(to_insert_one);
-                }
-                nargs += 1;
-                sep
-            }
-
-            SingularArgSyntax::OptionalValue(details, sep) => {
-                let (tag, pos) = match span.expr {
-                    Some(expr) => {
-                        let pos = expr.start_pos();
-                        compile_expr_as_type(instrs, fixups, symtable, expr, details.vtype)?;
-                        nargs += 1;
-                        (details.present_value, pos)
-                    }
-                    None => (details.missing_value, span.sep_pos),
-                };
-                instrs.push(Instruction::PushInteger(tag, pos));
-                nargs += 1;
-                sep
-            }
-
-            SingularArgSyntax::AnyValue(details, sep) => {
-                let (tag, pos) = match span.expr {
-                    Some(expr) => {
-                        let pos = expr.start_pos();
-                        let etype = compile_expr(instrs, fixups, symtable, expr, false)?;
-                        nargs += 2;
-                        (ValueTag::from(etype), pos)
-                    }
-                    None => {
-                        if !details.allow_missing {
-                            return Err(Error::CallableSyntaxError(span.sep_pos, md.clone()));
+                            let (reg, vtype) = match symtable.get_local_or_global(&span.vref) {
+                                Ok((reg, SymbolPrototype::Scalar(vtype))) => (reg, vtype),
+                                Ok((_, SymbolPrototype::Array(_))) => {
+                                    return Err(Error::CallableSyntax(
+                                        arg_pos,
+                                        md.as_ref().clone(),
+                                    ));
+                                }
+                                Err(syms::Error::UndefinedSymbol(..)) => {
+                                    let key = SymbolKey::from(&span.vref.name);
+                                    if symtable.get_callable(&key).is_some() {
+                                        return Err(Error::NotAFunction(span.pos, span.vref));
+                                    }
+                                    unreachable!(
+                                        "Caller must use define_new_args first for commands"
+                                    );
+                                }
+                                Err(e) => return Err(Error::from_syms(e, span.pos)),
+                            };
+                            let temp = scope.alloc().map_err(|e| Error::from_syms(e, arg_pos))?;
+                            arg_linecols.push(arg_pos);
+                            codegen
+                                .emit(bytecode::make_load_register_ptr(temp, vtype, reg), arg_pos);
+                            bytecode::VarArgTag::Pointer(sep)
                         }
-                        nargs += 1;
-                        (ValueTag::Missing, span.sep_pos)
-                    }
+                    },
                 };
-                instrs.push(Instruction::PushInteger(tag as i32, pos));
-                sep
+                codegen.emit(bytecode::make_load_integer(temp_tag, tag.make_u16()), arg_pos);
             }
-        };
-
-        nargs += compile_syn_argsep(
-            instrs,
-            md,
-            exp_sep,
-            input_nargs == remaining,
-            span.sep,
-            span.sep_pos,
-            sep_tag_pc,
-        )?;
-
-        remaining -= 1;
-    }
-
-    Ok((nargs, to_insert))
-}
-
-/// Parses the arguments to a buitin command and generates expressions to compute them.
-///
-/// This can be used to help the runtime by doing type checking during compilation and then
-/// allowing the runtime to assume that the values on the stack are correctly typed.
-pub(super) fn compile_command_args(
-    md: &CallableMetadata,
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &mut SymbolsTable,
-    pos: LineCol,
-    args: Vec<ArgSpan>,
-) -> Result<usize> {
-    let (nargs, to_insert) = compile_args(md, instrs, fixups, symtable, pos, args)?;
-    for (key, proto) in to_insert {
-        if !symtable.contains_key(&key) {
-            symtable.insert(key, proto);
         }
     }
-    Ok(nargs)
-}
 
-/// Parses the arguments to a function and generates expressions to compute them.
-///
-/// This can be used to help the runtime by doing type checking during compilation and then
-/// allowing the runtime to assume that the values on the stack are correctly typed.
-pub(super) fn compile_function_args(
-    md: &CallableMetadata,
-    instrs: &mut Vec<Instruction>,
-    fixups: &mut HashMap<Address, Fixup>,
-    symtable: &SymbolsTable,
-    pos: LineCol,
-    args: Vec<ArgSpan>,
-) -> Result<usize> {
-    let (nargs, to_insert) = compile_args(md, instrs, fixups, symtable, pos, args)?;
-    debug_assert!(to_insert.is_empty());
-    Ok(nargs)
+    if arg_iter.peek().is_some() {
+        debug_assert!(arg_iter.next().is_some(), "Args and their syntax must advance in unison");
+        return Err(Error::CallableSyntax(key_pos, md.as_ref().clone()));
+    }
+
+    let first_reg = scope.first().map_err(|e| Error::from_syms(e, key_pos))?;
+    Ok((first_reg, arg_linecols))
 }
 
 #[cfg(test)]
-mod testutils {
-    use crate::syms::CallableMetadataBuilder;
-
+mod tests {
     use super::*;
+    use crate::CallableMetadataBuilder;
+    use crate::callable::RepeatedSyntax;
+    use crate::compiler::syms::GlobalSymtable;
+    use std::borrow::Cow;
     use std::collections::HashMap;
 
-    /// Syntactic sugar to instantiate a `LineCol` for tests.
-    pub(super) fn lc(line: usize, col: usize) -> LineCol {
-        LineCol { line, col }
-    }
-
-    /// Builder pattern to instantiate a test scenario.
-    #[derive(Default)]
-    #[must_use]
-    pub(super) struct Tester {
-        syntaxes: Vec<CallableSyntax>,
-        symtable: SymbolsTable,
-    }
-
-    impl Tester {
-        /// Registers a syntax definition in the arguments compiler.
-        pub(super) fn syntax(
-            mut self,
-            singular: &'static [SingularArgSyntax],
-            repeated: Option<&'static RepeatedSyntax>,
-        ) -> Self {
-            self.syntaxes.push(CallableSyntax::new_static(singular, repeated));
-            self
-        }
-
-        /// Registers a pre-existing symbol in the symbols table.
-        pub(super) fn symbol(mut self, key: &str, proto: SymbolPrototype) -> Self {
-            self.symtable.insert(SymbolKey::from(key), proto);
-            self
-        }
-
-        /// Feeds command `args` into the arguments compiler and returns a checker to validate
-        /// expectations.
-        pub(super) fn compile_command<A: Into<Vec<ArgSpan>>>(mut self, args: A) -> Checker {
-            let args = args.into();
-            let mut instrs = vec![
-                // Start with one instruction to validate that the args compiler doesn't touch it.
-                Instruction::Nop,
-            ];
-            let mut fixups = HashMap::default();
-            let md = CallableMetadataBuilder::new("TEST").with_syntaxes(self.syntaxes).test_build();
-            let result = compile_command_args(
-                &md,
-                &mut instrs,
-                &mut fixups,
-                &mut self.symtable,
-                lc(1000, 2000),
-                args,
-            );
-            Checker {
-                result,
-                instrs,
-                fixups,
-                symtable: self.symtable,
-                exp_result: Ok(0),
-                exp_instrs: vec![Instruction::Nop],
-                exp_fixups: HashMap::default(),
-                exp_vars: HashMap::default(),
-            }
-        }
-    }
-
-    /// Builder pattern to validate expectations in a test scenario.
-    #[must_use]
-    pub(super) struct Checker {
-        result: Result<usize>,
-        instrs: Vec<Instruction>,
-        fixups: HashMap<Address, Fixup>,
-        symtable: SymbolsTable,
-        exp_result: Result<usize>,
-        exp_instrs: Vec<Instruction>,
-        exp_fixups: HashMap<Address, Fixup>,
-        exp_vars: HashMap<SymbolKey, ExprType>,
-    }
-
-    impl Checker {
-        /// Expects the compilation to succeeded and produce `nargs` arguments.
-        pub(super) fn exp_nargs(mut self, nargs: usize) -> Self {
-            self.exp_result = Ok(nargs);
-            self
-        }
-
-        /// Expects the compilation to fail with the given `error`.
-        pub(super) fn exp_error(mut self, error: Error) -> Self {
-            self.exp_result = Err(error);
-            self
-        }
-
-        /// Adds the given instruction to the expected instructions on success.
-        pub(super) fn exp_instr(mut self, instr: Instruction) -> Self {
-            self.exp_instrs.push(instr);
-            self
-        }
-
-        /// Expects the compilation to define a new variable `key` of type `etype`.
-        pub(super) fn exp_symbol<K: AsRef<str>>(mut self, key: K, etype: ExprType) -> Self {
-            self.exp_vars.insert(SymbolKey::from(key), etype);
-            self
-        }
-
-        /// Checks that the compilation ended with the configured expectations.
-        pub(super) fn check(self) {
-            let is_ok = self.result.is_ok();
-            assert_eq!(
-                self.exp_result.map_err(|e| format!("{}", e)),
-                self.result.map_err(|e| format!("{}", e)),
-            );
-
-            if !is_ok {
-                return;
-            }
-
-            assert_eq!(self.exp_instrs, self.instrs);
-            assert_eq!(self.exp_fixups, self.fixups);
-
-            let mut exp_keys = self.symtable.keys();
-            for (key, exp_etype) in &self.exp_vars {
-                match self.symtable.get(key) {
-                    Some(SymbolPrototype::Variable(etype)) => {
-                        assert_eq!(
-                            exp_etype, etype,
-                            "Variable {} was defined with the wrong type",
-                            key
-                        );
-                    }
-                    Some(_) => panic!("Symbol {} was defined but not as a variable", key),
-                    None => panic!("Symbol {} was not defined", key),
-                }
-                exp_keys.insert(key);
-            }
-
-            assert_eq!(exp_keys, self.symtable.keys(), "Unexpected variables defined");
-        }
-    }
-}
-
-#[cfg(test)]
-mod description_tests {
-    use super::*;
-
     #[test]
-    fn test_no_args() {
-        assert_eq!("", CallableSyntax::new_static(&[], None).describe());
-    }
-
-    #[test]
-    fn test_singular_required_value() {
-        assert_eq!(
-            "the-arg%",
-            CallableSyntax::new_static(
-                &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax {
-                        name: Cow::Borrowed("the-arg"),
-                        vtype: ExprType::Integer
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .describe(),
-        );
-    }
-
-    #[test]
-    fn test_singular_required_ref() {
-        assert_eq!(
-            "the-arg",
-            CallableSyntax::new_static(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("the-arg"),
-                        require_array: false,
-                        define_undefined: false
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .describe()
-        );
-    }
-
-    #[test]
-    fn test_singular_optional_value() {
-        assert_eq!(
-            "[the-arg%]",
-            CallableSyntax::new_static(
-                &[SingularArgSyntax::OptionalValue(
-                    OptionalValueSyntax {
-                        name: Cow::Borrowed("the-arg"),
-                        vtype: ExprType::Integer,
-                        missing_value: 0,
-                        present_value: 1,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .describe()
-        );
-    }
-
-    #[test]
-    fn test_singular_any_value_required() {
-        assert_eq!(
-            "the-arg",
-            CallableSyntax::new_static(
-                &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: Cow::Borrowed("the-arg"), allow_missing: false },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .describe()
-        );
-    }
-
-    #[test]
-    fn test_singular_any_value_optional() {
-        assert_eq!(
-            "[the-arg]",
-            CallableSyntax::new_static(
-                &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: Cow::Borrowed("the-arg"), allow_missing: true },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .describe()
-        );
-    }
-
-    #[test]
-    fn test_singular_exactly_separators() {
-        assert_eq!(
-            "a; b AS c, d",
-            CallableSyntax::new_static(
-                &[
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("a"), allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::Short),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("b"), allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::As),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("c"), allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::Long),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("d"), allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::End),
-                    ),
-                ],
-                None,
-            )
-            .describe()
-        );
-    }
-
-    #[test]
-    fn test_singular_oneof_separators() {
-        assert_eq!(
-            "a <;|,> b <AS|,> c",
-            CallableSyntax::new_static(
-                &[
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("a"), allow_missing: false },
-                        ArgSepSyntax::OneOf(ArgSep::Short, ArgSep::Long),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("b"), allow_missing: false },
-                        ArgSepSyntax::OneOf(ArgSep::As, ArgSep::Long),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("c"), allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::End),
-                    ),
-                ],
-                None,
-            )
-            .describe()
-        );
-    }
-
-    #[test]
-    fn test_repeated_require_one() {
-        assert_eq!(
-            "rep1[; ..; repN]",
-            CallableSyntax::new_static(
+    fn test_compile_args_materializes_missing_repeated_tag() -> Result<()> {
+        let pos = LineCol { line: 1, col: 1 };
+        let md = CallableMetadataBuilder::new("OUT")
+            .with_syntax(&[(
                 &[],
                 Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("rep"),
+                    name: Cow::Borrowed("arg"),
                     type_syn: RepeatedTypeSyntax::AnyValue,
                     sep: ArgSepSyntax::Exactly(ArgSep::Short),
-                    require_one: true,
+                    require_one: false,
                     allow_missing: false,
                 }),
-            )
-            .describe()
-        );
-    }
+            )])
+            .test_build();
 
-    #[test]
-    fn test_repeated_allow_missing() {
+        let mut codegen = Codegen::default();
+
+        let upcalls = HashMap::default();
+        let mut global = GlobalSymtable::new(upcalls);
+        let mut local = global.enter_scope();
+        let (first_reg, arg_linecols) = {
+            let mut symtable = local.frozen();
+            compile_args(
+                CallSpan { vref: VarRef::new("OUT", None), vref_pos: pos, args: vec![] },
+                md,
+                &mut symtable,
+                &mut codegen,
+            )?
+        };
+        assert_eq!(Register::local(0).unwrap(), first_reg);
+        assert_eq!(vec![pos], arg_linecols);
+
+        let upcall = codegen.get_upcall(SymbolKey::from("OUT"), None, pos)?;
+        let addr = codegen.emit(bytecode::make_upcall(upcall, first_reg), pos);
+        codegen.set_arg_linecols(addr, arg_linecols);
+        codegen.emit(bytecode::make_eof(), LineCol { line: 0, col: 0 });
+
+        let image = codegen.build_image(HashMap::default(), HashMap::default(), vec![])?;
         assert_eq!(
-            "[rep1, .., repN]",
-            CallableSyntax::new_static(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("rep"),
-                    type_syn: RepeatedTypeSyntax::AnyValue,
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    require_one: false,
-                    allow_missing: true,
-                }),
-            )
-            .describe()
+            vec![
+                "0000:   LOADI       R64, 0              ; 1:1".to_owned(),
+                "0001:   UPCALL      0, R64              ; 1:1, OUT".to_owned(),
+                "0002:   EOF                             ; 0:0".to_owned(),
+            ],
+            image.disasm()
         );
-    }
-
-    #[test]
-    fn test_repeated_value() {
-        assert_eq!(
-            "rep1$[ AS .. AS repN$]",
-            CallableSyntax::new_static(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("rep"),
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Text),
-                    sep: ArgSepSyntax::Exactly(ArgSep::As),
-                    require_one: true,
-                    allow_missing: false,
-                }),
-            )
-            .describe()
-        );
-    }
-
-    #[test]
-    fn test_repeated_ref() {
-        assert_eq!(
-            "rep1[ AS .. AS repN]",
-            CallableSyntax::new_static(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("rep"),
-                    type_syn: RepeatedTypeSyntax::VariableRef,
-                    sep: ArgSepSyntax::Exactly(ArgSep::As),
-                    require_one: true,
-                    allow_missing: false,
-                }),
-            )
-            .describe()
-        );
-    }
-
-    #[test]
-    fn test_singular_and_repeated() {
-        assert_eq!(
-            "arg%[, rep1 <;|,> .. <;|,> repN]",
-            CallableSyntax::new_static(
-                &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: Cow::Borrowed("arg"), vtype: ExprType::Integer },
-                    ArgSepSyntax::Exactly(ArgSep::Long),
-                )],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("rep"),
-                    type_syn: RepeatedTypeSyntax::AnyValue,
-                    sep: ArgSepSyntax::OneOf(ArgSep::Short, ArgSep::Long),
-                    require_one: false,
-                    allow_missing: false,
-                }),
-            )
-            .describe()
-        );
-    }
-}
-
-#[cfg(test)]
-mod compile_tests {
-    use super::testutils::*;
-    use super::*;
-    use crate::syms::CallableMetadataBuilder;
-
-    #[test]
-    fn test_no_args_ok() {
-        Tester::default().syntax(&[], None).compile_command([]).check();
-    }
-
-    #[test]
-    fn test_no_args_mismatch() {
-        Tester::default()
-            .syntax(&[], None)
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 2) })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 3),
-            }])
-            .exp_error(Error::CallableSyntaxError(
-                lc(1000, 2000),
-                CallableMetadataBuilder::new("TEST").test_build(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_value_ok() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: Cow::Borrowed("arg1"), vtype: ExprType::Integer },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 2) })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 3),
-            }])
-            .exp_instr(Instruction::PushInteger(3, lc(1, 2)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_value_type_promotion() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: Cow::Borrowed("arg1"), vtype: ExprType::Integer },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Double(DoubleSpan { value: 3.0, pos: lc(1, 2) })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_instr(Instruction::PushDouble(3.0, lc(1, 2)))
-            .exp_instr(Instruction::DoubleToInteger)
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_ok() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Variable(ExprType::Text))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", None),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Text, lc(1, 2)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_not_defined() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", None),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_error(Error::UndefinedSymbol(lc(1, 2), VarRef::new("foo", None)))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_disallow_value() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 2) })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_error(Error::NotAReference(lc(1, 2)))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_wrong_type() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Array(ExprType::Text, 1))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", None),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_error(Error::NotAReference(lc(1, 2)))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_wrong_annotation() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Variable(ExprType::Text))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: false,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", Some(ExprType::Integer)),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_error(Error::IncompatibleTypeAnnotationInReference(
-                lc(1, 2),
-                VarRef::new("foo", Some(ExprType::Integer)),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_define_undefined_default_type() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: false,
-                        define_undefined: true,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", None),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Integer, lc(1, 2)))
-            .exp_nargs(1)
-            .exp_symbol("foo", ExprType::Integer)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_variable_define_undefined_explicit_type() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: false,
-                        define_undefined: true,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", Some(ExprType::Text)),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 6),
-            }])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Text, lc(1, 2)))
-            .exp_nargs(1)
-            .exp_symbol("foo", ExprType::Text)
-            .check();
-    }
-
-    #[test]
-    fn test_multiple_required_ref_variable_define_undefined_repeated_ok() {
-        Tester::default()
-            .syntax(
-                &[
-                    SingularArgSyntax::RequiredRef(
-                        RequiredRefSyntax {
-                            name: Cow::Borrowed("ref1"),
-                            require_array: false,
-                            define_undefined: true,
-                        },
-                        ArgSepSyntax::Exactly(ArgSep::Long),
-                    ),
-                    SingularArgSyntax::RequiredRef(
-                        RequiredRefSyntax {
-                            name: Cow::Borrowed("ref2"),
-                            require_array: false,
-                            define_undefined: true,
-                        },
-                        ArgSepSyntax::End,
-                    ),
-                ],
-                None,
-            )
-            .compile_command([
-                ArgSpan {
-                    expr: Some(Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("foo", None),
-                        pos: lc(1, 2),
-                    })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 5),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Symbol(SymbolSpan {
-                        vref: VarRef::new("foo", None),
-                        pos: lc(1, 2),
-                    })),
-                    sep: ArgSep::End,
-                    sep_pos: lc(1, 5),
-                },
-            ])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Integer, lc(1, 2)))
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Integer, lc(1, 2)))
-            .exp_nargs(2)
-            .exp_symbol("foo", ExprType::Integer)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_array_ok() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Array(ExprType::Text, 0))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: true,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", None),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Text, lc(1, 2)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_array_not_defined() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: true,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", None),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_error(Error::UndefinedSymbol(lc(1, 2), VarRef::new("foo", None)))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_array_disallow_value() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: true,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 2) })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_error(Error::NotAReference(lc(1, 2)))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_array_wrong_type() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Variable(ExprType::Text))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: true,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", None),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_error(Error::NotAReference(lc(1, 2)))
-            .check();
-    }
-
-    #[test]
-    fn test_one_required_ref_array_wrong_annotation() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Array(ExprType::Text, 0))
-            .syntax(
-                &[SingularArgSyntax::RequiredRef(
-                    RequiredRefSyntax {
-                        name: Cow::Borrowed("ref"),
-                        require_array: true,
-                        define_undefined: false,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", Some(ExprType::Integer)),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_error(Error::IncompatibleTypeAnnotationInReference(
-                lc(1, 2),
-                VarRef::new("foo", Some(ExprType::Integer)),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_one_optional_value_ok_is_present() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::OptionalValue(
-                    OptionalValueSyntax {
-                        name: Cow::Borrowed("ref"),
-                        vtype: ExprType::Double,
-                        missing_value: 10,
-                        present_value: 20,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Double(DoubleSpan { value: 3.0, pos: lc(1, 2) })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 5),
-            }])
-            .exp_instr(Instruction::PushDouble(3.0, lc(1, 2)))
-            .exp_instr(Instruction::PushInteger(20, lc(1, 2)))
-            .exp_nargs(2)
-            .check();
-    }
-
-    #[test]
-    fn test_one_optional_value_ok_is_missing() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::OptionalValue(
-                    OptionalValueSyntax {
-                        name: Cow::Borrowed("ref"),
-                        vtype: ExprType::Double,
-                        missing_value: 10,
-                        present_value: 20,
-                    },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 2) }])
-            .exp_instr(Instruction::PushInteger(10, lc(1, 2)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_multiple_any_value_ok() {
-        Tester::default()
-            .syntax(
-                &[
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::Long),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::Long),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg3"), allow_missing: false },
-                        ArgSepSyntax::Exactly(ArgSep::Long),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg4"), allow_missing: false },
-                        ArgSepSyntax::End,
-                    ),
-                ],
-                None,
-            )
-            .compile_command([
-                ArgSpan {
-                    expr: Some(Expr::Boolean(BooleanSpan { value: false, pos: lc(1, 2) })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 3),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Double(DoubleSpan { value: 2.0, pos: lc(1, 4) })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 5),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 6) })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 7),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Text(TextSpan { value: "foo".to_owned(), pos: lc(1, 8) })),
-                    sep: ArgSep::End,
-                    sep_pos: lc(1, 9),
-                },
-            ])
-            .exp_instr(Instruction::PushString("foo".to_owned(), lc(1, 8)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Text as i32, lc(1, 8)))
-            .exp_instr(Instruction::PushInteger(3, lc(1, 6)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Integer as i32, lc(1, 6)))
-            .exp_instr(Instruction::PushDouble(2.0, lc(1, 4)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Double as i32, lc(1, 4)))
-            .exp_instr(Instruction::PushBoolean(false, lc(1, 2)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Boolean as i32, lc(1, 2)))
-            .exp_nargs(8)
-            .check();
-    }
-
-    #[test]
-    fn test_one_any_value_expr_error() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Variable(ExprType::Double))
-            .syntax(
-                &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: false },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", Some(ExprType::Boolean)),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 3),
-            }])
-            .exp_error(Error::IncompatibleTypeAnnotationInReference(
-                lc(1, 2),
-                VarRef::new("foo", Some(ExprType::Boolean)),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_one_any_value_disallow_missing() {
-        Tester::default()
-            .symbol("foo", SymbolPrototype::Variable(ExprType::Double))
-            .syntax(
-                &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: false },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 3) }])
-            .exp_error(Error::CallableSyntaxError(
-                lc(1, 3),
-                CallableMetadataBuilder::new("TEST")
-                    .with_syntax(&[(
-                        &[SingularArgSyntax::AnyValue(
-                            AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: false },
-                            ArgSepSyntax::End,
-                        )],
-                        None,
-                    )])
-                    .test_build(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_one_any_value_allow_missing() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::AnyValue(
-                    AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
-                    ArgSepSyntax::End,
-                )],
-                None,
-            )
-            .compile_command([ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 3) }])
-            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 3)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_multiple_separator_types_ok() {
-        Tester::default()
-            .syntax(
-                &[
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
-                        ArgSepSyntax::Exactly(ArgSep::As),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: true },
-                        ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg3"), allow_missing: true },
-                        ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg4"), allow_missing: true },
-                        ArgSepSyntax::End,
-                    ),
-                ],
-                None,
-            )
-            .compile_command([
-                ArgSpan { expr: None, sep: ArgSep::As, sep_pos: lc(1, 1) },
-                ArgSpan { expr: None, sep: ArgSep::Long, sep_pos: lc(1, 2) },
-                ArgSpan { expr: None, sep: ArgSep::Short, sep_pos: lc(1, 3) },
-                ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 4) },
-            ])
-            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 4)))
-            .exp_instr(Instruction::PushInteger(ArgSep::Short as i32, lc(1, 3)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 3)))
-            .exp_instr(Instruction::PushInteger(ArgSep::Long as i32, lc(1, 2)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 2)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 1)))
-            .exp_nargs(6)
-            .check();
-    }
-
-    #[test]
-    fn test_multiple_separator_exactly_mismatch() {
-        Tester::default()
-            .syntax(
-                &[
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
-                        ArgSepSyntax::Exactly(ArgSep::As),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: true },
-                        ArgSepSyntax::End,
-                    ),
-                ],
-                None,
-            )
-            .compile_command([
-                ArgSpan { expr: None, sep: ArgSep::Short, sep_pos: lc(1, 1) },
-                ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 4) },
-            ])
-            .exp_error(Error::CallableSyntaxError(
-                lc(1, 1),
-                CallableMetadataBuilder::new("TEST")
-                    .with_syntax(&[(
-                        &[
-                            SingularArgSyntax::AnyValue(
-                                AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
-                                ArgSepSyntax::Exactly(ArgSep::As),
-                            ),
-                            SingularArgSyntax::AnyValue(
-                                AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: true },
-                                ArgSepSyntax::End,
-                            ),
-                        ],
-                        None,
-                    )])
-                    .test_build(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_multiple_separator_oneof_mismatch() {
-        Tester::default()
-            .syntax(
-                &[
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
-                        ArgSepSyntax::OneOf(ArgSep::Short, ArgSep::Long),
-                    ),
-                    SingularArgSyntax::AnyValue(
-                        AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: true },
-                        ArgSepSyntax::End,
-                    ),
-                ],
-                None,
-            )
-            .compile_command([
-                ArgSpan { expr: None, sep: ArgSep::As, sep_pos: lc(1, 1) },
-                ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 4) },
-            ])
-            .exp_error(Error::CallableSyntaxError(
-                lc(1, 1),
-                CallableMetadataBuilder::new("TEST")
-                    .with_syntax(&[(
-                        &[
-                            SingularArgSyntax::AnyValue(
-                                AnyValueSyntax { name: Cow::Borrowed("arg1"), allow_missing: true },
-                                ArgSepSyntax::OneOf(ArgSep::Short, ArgSep::Long),
-                            ),
-                            SingularArgSyntax::AnyValue(
-                                AnyValueSyntax { name: Cow::Borrowed("arg2"), allow_missing: true },
-                                ArgSepSyntax::End,
-                            ),
-                        ],
-                        None,
-                    )])
-                    .test_build(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_none() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("arg"),
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: false,
-                }),
-            )
-            .compile_command([])
-            .exp_nargs(0)
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_multiple_and_cast() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("arg"),
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: false,
-                }),
-            )
-            .compile_command([
-                ArgSpan {
-                    expr: Some(Expr::Double(DoubleSpan { value: 3.0, pos: lc(1, 2) })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 2),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 4) })),
-                    sep: ArgSep::End,
-                    sep_pos: lc(1, 3),
-                },
-            ])
-            .exp_instr(Instruction::PushInteger(5, lc(1, 4)))
-            .exp_instr(Instruction::PushDouble(3.0, lc(1, 2)))
-            .exp_instr(Instruction::DoubleToInteger)
-            .exp_nargs(2)
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_require_one_just_one() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("arg"),
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: true,
-                }),
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 2) })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 2),
-            }])
-            .exp_instr(Instruction::PushInteger(5, lc(1, 2)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_require_one_missing() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("arg"),
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: true,
-                }),
-            )
-            .compile_command([])
-            .exp_error(Error::CallableSyntaxError(
-                lc(1000, 2000),
-                CallableMetadataBuilder::new("TEST")
-                    .with_syntax(&[(
-                        &[],
-                        Some(&RepeatedSyntax {
-                            name: Cow::Borrowed("arg"),
-                            type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                            sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                            allow_missing: false,
-                            require_one: true,
-                        }),
-                    )])
-                    .test_build(),
-            ))
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_require_one_ref_ok() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("arg"),
-                    type_syn: RepeatedTypeSyntax::VariableRef,
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: true,
-                }),
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Symbol(SymbolSpan {
-                    vref: VarRef::new("foo", Some(ExprType::Text)),
-                    pos: lc(1, 2),
-                })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 2),
-            }])
-            .exp_instr(Instruction::LoadRef(SymbolKey::from("foo"), ExprType::Text, lc(1, 2)))
-            .exp_nargs(1)
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_require_one_ref_error() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("arg"),
-                    type_syn: RepeatedTypeSyntax::VariableRef,
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: true,
-                }),
-            )
-            .compile_command([ArgSpan {
-                expr: Some(Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 2) })),
-                sep: ArgSep::End,
-                sep_pos: lc(1, 2),
-            }])
-            .exp_error(Error::NotAReference(lc(1, 2)))
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_oneof_separator() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("arg"),
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Double),
-                    sep: ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
-                    allow_missing: false,
-                    require_one: false,
-                }),
-            )
-            .compile_command([
-                ArgSpan {
-                    expr: Some(Expr::Double(DoubleSpan { value: 3.0, pos: lc(1, 2) })),
-                    sep: ArgSep::Short,
-                    sep_pos: lc(1, 3),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Double(DoubleSpan { value: 5.0, pos: lc(1, 4) })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 5),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Double(DoubleSpan { value: 2.0, pos: lc(1, 6) })),
-                    sep: ArgSep::End,
-                    sep_pos: lc(1, 7),
-                },
-            ])
-            .exp_instr(Instruction::PushDouble(2.0, lc(1, 6)))
-            .exp_instr(Instruction::PushInteger(ArgSep::Long as i32, lc(1, 5)))
-            .exp_instr(Instruction::PushDouble(5.0, lc(1, 4)))
-            .exp_instr(Instruction::PushInteger(ArgSep::Short as i32, lc(1, 3)))
-            .exp_instr(Instruction::PushDouble(3.0, lc(1, 2)))
-            .exp_nargs(5)
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_oneof_separator_and_missing_in_last_position() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("arg"),
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Double),
-                    sep: ArgSepSyntax::OneOf(ArgSep::Long, ArgSep::Short),
-                    allow_missing: true,
-                    require_one: false,
-                }),
-            )
-            .compile_command([
-                ArgSpan {
-                    expr: Some(Expr::Double(DoubleSpan { value: 3.0, pos: lc(1, 2) })),
-                    sep: ArgSep::Short,
-                    sep_pos: lc(1, 3),
-                },
-                ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 4) },
-            ])
-            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 4)))
-            .exp_instr(Instruction::PushInteger(ArgSep::Short as i32, lc(1, 3)))
-            .exp_instr(Instruction::PushDouble(3.0, lc(1, 2)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Double as i32, lc(1, 2)))
-            .exp_nargs(4)
-            .check();
-    }
-
-    #[test]
-    fn test_repeated_any_value() {
-        Tester::default()
-            .syntax(
-                &[],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("arg"),
-                    type_syn: RepeatedTypeSyntax::AnyValue,
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: true,
-                    require_one: false,
-                }),
-            )
-            .compile_command([
-                ArgSpan {
-                    expr: Some(Expr::Boolean(BooleanSpan { value: false, pos: lc(1, 2) })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 3),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Double(DoubleSpan { value: 2.0, pos: lc(1, 4) })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 5),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Integer(IntegerSpan { value: 3, pos: lc(1, 6) })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 7),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Text(TextSpan { value: "foo".to_owned(), pos: lc(1, 8) })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 9),
-                },
-                ArgSpan { expr: None, sep: ArgSep::End, sep_pos: lc(1, 10) },
-            ])
-            .exp_instr(Instruction::PushInteger(ValueTag::Missing as i32, lc(1, 10)))
-            .exp_instr(Instruction::PushString("foo".to_owned(), lc(1, 8)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Text as i32, lc(1, 8)))
-            .exp_instr(Instruction::PushInteger(3, lc(1, 6)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Integer as i32, lc(1, 6)))
-            .exp_instr(Instruction::PushDouble(2.0, lc(1, 4)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Double as i32, lc(1, 4)))
-            .exp_instr(Instruction::PushBoolean(false, lc(1, 2)))
-            .exp_instr(Instruction::PushInteger(ValueTag::Boolean as i32, lc(1, 2)))
-            .exp_nargs(9)
-            .check();
-    }
-
-    #[test]
-    fn test_singular_and_repeated() {
-        Tester::default()
-            .syntax(
-                &[SingularArgSyntax::RequiredValue(
-                    RequiredValueSyntax { name: Cow::Borrowed("arg"), vtype: ExprType::Double },
-                    ArgSepSyntax::Exactly(ArgSep::Short),
-                )],
-                Some(&RepeatedSyntax {
-                    name: Cow::Borrowed("rep"),
-                    type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                    sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                    allow_missing: false,
-                    require_one: false,
-                }),
-            )
-            .compile_command([
-                ArgSpan {
-                    expr: Some(Expr::Double(DoubleSpan { value: 4.0, pos: lc(1, 2) })),
-                    sep: ArgSep::Short,
-                    sep_pos: lc(1, 2),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Integer(IntegerSpan { value: 5, pos: lc(1, 5) })),
-                    sep: ArgSep::Long,
-                    sep_pos: lc(1, 2),
-                },
-                ArgSpan {
-                    expr: Some(Expr::Integer(IntegerSpan { value: 6, pos: lc(1, 7) })),
-                    sep: ArgSep::End,
-                    sep_pos: lc(1, 2),
-                },
-            ])
-            .exp_nargs(3)
-            .exp_instr(Instruction::PushInteger(6, lc(1, 7)))
-            .exp_instr(Instruction::PushInteger(5, lc(1, 5)))
-            .exp_instr(Instruction::PushDouble(4.0, lc(1, 2)))
-            .check();
+        Ok(())
     }
 }

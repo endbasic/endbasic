@@ -23,7 +23,7 @@ use crate::program::Program;
 use crate::storage::Storage;
 use crate::{Machine, MachineBuilder, gpio};
 use async_trait::async_trait;
-use endbasic_core2::{
+use endbasic_core::{
     Callable, ConstantDatum, ExprType, GetGlobalError, GlobalDef, GlobalDefKind, StopReason,
     SymbolKey,
 };

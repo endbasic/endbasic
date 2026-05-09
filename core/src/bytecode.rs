@@ -1,721 +1,1816 @@
 // EndBASIC
-// Copyright 2022 Julio Merino
+// Copyright 2026 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Low-level representation of an EndBASIC program for execution.
+//! Bytecode for a compiled EndBASIC program.
 
-use crate::ast::{ExprType, Value};
-use crate::reader::LineCol;
-use crate::syms::SymbolKey;
+use crate::ast::{ArgSep, ExprType};
+use crate::num::{
+    unchecked_u32_as_u8, unchecked_u32_as_u16, unchecked_u32_as_usize, unchecked_u64_as_u8,
+};
+use std::convert::TryFrom;
+use std::fmt;
 
-/// Convenience type to represent a program address.
-pub type Address = usize;
+/// Representation of the various register scopes.
+#[derive(Debug)]
+pub enum RegisterScope {
+    /// Global scope for variables visible from any scope.
+    Global,
 
-/// Components of a builtin command call.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-pub struct BuiltinCallISpan {
-    /// Name of the builtin to call.
-    pub name: SymbolKey,
+    /// Local scope for variables visible only within a function or subroutine.
+    Local,
 
-    /// Position of the name.
-    pub name_pos: LineCol,
+    /// Temporary scope for intermediate values during expression evaluation.
+    Temp,
+}
 
-    /// Runtime index to execute this call.
-    pub upcall_index: usize,
+impl fmt::Display for RegisterScope {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Global => write!(f, "global"),
+            Self::Local => write!(f, "local"),
+            Self::Temp => write!(f, "temp"),
+        }
+    }
+}
 
-    /// Number of arguments on the stack for the call.
+/// Error to indicate an invalid `END` exit code.
+#[derive(Debug, thiserror::Error)]
+#[error("Exit code must be in the 0..127 range")]
+pub struct InvalidExitCodeError(());
+
+/// Error to indicate that we have run out of registers.
+#[derive(Debug, thiserror::Error)]
+#[error("Out of registers")]
+pub(crate) struct OutOfRegistersError(());
+
+/// Error to indicate that an array has too many dimensions.
+#[derive(Debug, thiserror::Error)]
+#[error("Too many dimensions")]
+pub(crate) struct TooManyArrayDimensionsError(());
+
+/// Error types for bytecode parsing.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ParseError {
+    /// The type tag in the bytecode is not recognized.
+    #[error("{0}: Invalid type tag {0}")]
+    InvalidTypeTag(u64),
+}
+
+/// Result type for bytecode parsing operations.
+pub(crate) type ParseResult<T> = Result<T, ParseError>;
+
+/// Program exit code carried by the `END` instruction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ExitCode(u8);
+
+impl ExitCode {
+    /// Returns true if this code represents successful execution.
+    pub fn is_success(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Creates an `ExitCode` from an integer.
+    pub fn try_new(value: i32) -> Result<Self, InvalidExitCodeError> {
+        if (0..128).contains(&value) {
+            Ok(Self(value as u8))
+        } else {
+            Err(InvalidExitCodeError(()))
+        }
+    }
+
+    /// Converts this exit code to an integer.
+    pub fn to_i32(self) -> i32 {
+        i32::from(self.0)
+    }
+}
+
+impl TryFrom<i32> for ExitCode {
+    type Error = InvalidExitCodeError;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        Self::try_new(value)
+    }
+}
+
+/// Conversions between a primitive type and a `u32` for insertion into an instruction.
+trait RawValue: Sized {
+    /// Converts a `u32` to the primitive type `Self`.
     ///
-    /// The arguments in the stack are interspersed with the separators used to separate them from
-    /// each other because those separators have meaning.
-    pub nargs: usize,
+    /// This operation is only performed to _parse_ bytecode and we assume that the bytecode is
+    /// correctly formed.  As a result, this does not perform any range checks.
+    fn from_u32(v: u32) -> Self;
+
+    /// Converts the primitive type `Self` to a u32.
+    ///
+    /// This operation is only performed to _generate_ bytecode during compilation, and all
+    /// instruction definitions need to have fields that always fit in a u32.  Consequently,
+    /// this operation is always safe.
+    fn to_u32(self) -> u32;
 }
 
-/// Components of a variable definition.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-pub struct DimISpan {
-    /// Name of the variable to define.
-    pub name: SymbolKey,
+/// Implements `RawValue` for an unsigned primitive type that is narrower than `u32`.
+macro_rules! impl_raw_value {
+    ( $ty:ty, $from_u32_conv:ident ) => {
+        impl RawValue for $ty {
+            fn from_u32(v: u32) -> Self {
+                $from_u32_conv(v)
+            }
 
-    /// Whether the variable is global or not.
-    pub shared: bool,
-
-    /// Type of the variable to be defined.
-    pub vtype: ExprType,
+            fn to_u32(self) -> u32 {
+                u32::from(self)
+            }
+        }
+    };
 }
 
-/// Components of an array definition.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-pub struct DimArrayISpan {
-    /// Name of the array to define.
-    pub name: SymbolKey,
+impl_raw_value!(u8, unchecked_u32_as_u8);
+impl_raw_value!(u16, unchecked_u32_as_u16);
 
-    /// Position of the name.
-    pub name_pos: LineCol,
+/// Representation of a register number.
+///
+/// Registers are represented as `u8` integers where the first `Self::MAX_GLOBAL` values
+/// correspond to global registers and the numbers after those correspond to local registers.
+///
+/// During compilation, local register numbers are assigned starting from "logical 0" for
+/// every scope in the call stack.  During execution, local register numbers must be interpreted
+/// in the context of the Frame Pointer (FP) register, which indicates the offset in the register
+/// bank where local registers start for the current scope.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Register(pub(crate) u8);
 
-    /// Whether the array is global or not.
-    pub shared: bool,
-
-    /// Number of values in the stack representing the dimensions of the array.
-    pub dimensions: usize,
-
-    /// Type of the array to be defined.
-    pub subtype: ExprType,
-
-    /// Position of the subtype.
-    pub subtype_pos: LineCol,
+impl fmt::Display for Register {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "R{}", self.0)
+    }
 }
 
-/// Components of a builtin function call.
-#[derive(Debug, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-pub struct FunctionCallISpan {
-    /// Name of the builtin to call.
-    pub name: SymbolKey,
+impl RawValue for Register {
+    fn from_u32(v: u32) -> Self {
+        Self(unchecked_u32_as_u8(v))
+    }
 
-    /// Position of the name.
-    pub name_pos: LineCol,
-
-    /// Runtime index to execute this call.
-    pub upcall_index: usize,
-
-    /// Return type of the function.
-    pub return_type: ExprType,
-
-    /// Number of arguments on the stack for the call.
-    pub nargs: usize,
+    fn to_u32(self) -> u32 {
+        u32::from(self.0)
+    }
 }
 
-/// Components of an unconditional jump instruction.
-#[derive(Debug, Eq, PartialEq)]
-pub struct JumpISpan {
-    /// The address to jump to.
-    pub addr: Address,
+impl Register {
+    /// Maximum number of supported registers.
+    pub(crate) const MAX: u8 = u8::MAX;
+
+    /// Maximum number of supported global registers.
+    pub(crate) const MAX_GLOBAL: u8 = 64;
+
+    /// Constructs an instance of `Register` to represent the global register `reg`.  Returns an
+    /// error if we have run out of global registers.
+    pub(crate) fn global(reg: u8) -> Result<Self, OutOfRegistersError> {
+        if reg < Self::MAX_GLOBAL { Ok(Self(reg)) } else { Err(OutOfRegistersError(())) }
+    }
+
+    /// Constructs an instance of `Register` to represent the local register `reg`.  Returns an
+    /// error if we have run out of local registers.
+    pub(crate) fn local(reg: u8) -> Result<Self, OutOfRegistersError> {
+        match reg.checked_add(Self::MAX_GLOBAL) {
+            Some(num) => Ok(Self(num)),
+            None => Err(OutOfRegistersError(())),
+        }
+    }
+
+    /// Breaks apart the internal register representation and returns a tuple indicating if the
+    /// register is global or not and its logical index.
+    pub(crate) fn to_parts(self) -> (bool, u8) {
+        if self.0 < Self::MAX_GLOBAL { (true, self.0) } else { (false, self.0 - Self::MAX_GLOBAL) }
+    }
 }
 
-/// Components of a conditional jump that depends on whether a variable is defined.
-#[cfg_attr(test, derive(Debug, Eq, PartialEq))]
-pub struct JumpIfDefinedISpan {
-    /// The variable to check for nonexistence.
-    pub var: SymbolKey,
+/// A tagged reference to a variable (register) encoding the register's absolute address
+/// and the type of the value it holds.
+///
+/// The encoding stores the `ExprType` tag in the upper 32 bits and the absolute register
+/// address in the lower 32 bits of a `u64`.
+///
+/// This is distinct from `DatumPtr`, which points to data in the constant pool or heap
+/// rather than to a register in the register file.
+pub(crate) struct TaggedRegisterRef(u64);
 
-    /// The address to jump to.
-    pub addr: Address,
+impl TaggedRegisterRef {
+    /// Creates a new tagged register reference from a register, frame pointer, and type.
+    pub(crate) fn new(reg: Register, fp: usize, vtype: ExprType) -> Self {
+        let (is_global, index) = reg.to_parts();
+        let mut index = usize::from(index);
+        if !is_global {
+            index += fp;
+        }
+
+        let index = u32::try_from(index).expect("Cannot support that many registers");
+        Self(u64::from(vtype as u8) << 32 | u64::from(index))
+    }
+
+    /// Parses a tagged register reference from a raw `u64`, returning the absolute register
+    /// index and the type of the value it holds.
+    ///
+    /// Panics if the type tag is invalid.
+    pub(crate) fn parse(self) -> (usize, ExprType) {
+        let vtype: ExprType = {
+            #[allow(unsafe_code)]
+            unsafe {
+                let v = unchecked_u64_as_u8(self.0 >> 32);
+                assert!(v <= ExprType::Text as u8);
+                std::mem::transmute(v)
+            }
+        };
+
+        let index = unchecked_u32_as_usize((self.0 & 0xffffffff) as u32);
+
+        (index, vtype)
+    }
+
+    /// Returns the raw `u64` encoding.
+    pub(crate) fn as_u64(&self) -> u64 {
+        self.0
+    }
+
+    /// Wraps a raw `u64` as a `TaggedRegisterRef`.
+    pub(crate) fn from_u64(v: u64) -> Self {
+        Self(v)
+    }
 }
 
-/// Components of a change to the error handler.
-#[derive(Clone, Copy)]
-#[cfg_attr(test, derive(Debug, Eq, PartialEq))]
-pub enum ErrorHandlerISpan {
-    /// Jumps to the included address on error.
-    Jump(Address),
+/// A packed representation of an array's element type and number of dimensions.
+///
+/// The encoding stores the `ExprType` in the upper 4 bits and the dimension count in the
+/// lower 4 bits of a single `u8`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct PackedArrayType(u8);
 
-    /// Sets the error handler to the default.
+impl PackedArrayType {
+    /// Creates a new packed array type from a subtype and dimension count.
+    pub(crate) fn new(
+        subtype: ExprType,
+        ndims: usize,
+    ) -> Result<Self, TooManyArrayDimensionsError> {
+        if ndims > 15 {
+            return Err(TooManyArrayDimensionsError(()));
+        }
+        let ndims = ndims as u8;
+        Ok(Self(((subtype as u8) << 4) | (ndims & 0x0f)))
+    }
+
+    /// Returns the element type.
+    pub(crate) fn subtype(self) -> ExprType {
+        ExprType::from_u32(u32::from(self.0 >> 4))
+    }
+
+    /// Returns the number of dimensions.
+    pub(crate) fn ndims(self) -> u8 {
+        self.0 & 0x0f
+    }
+}
+
+impl fmt::Display for PackedArrayType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}]{}", self.ndims(), self.subtype().annotation())
+    }
+}
+
+impl RawValue for PackedArrayType {
+    fn from_u32(v: u32) -> Self {
+        Self(unchecked_u32_as_u8(v))
+    }
+
+    fn to_u32(self) -> u32 {
+        u32::from(self.0)
+    }
+}
+
+impl RawValue for ExprType {
+    fn from_u32(v: u32) -> Self {
+        #[allow(unsafe_code)]
+        unsafe {
+            let v = unchecked_u32_as_u8(v);
+            assert!(v <= ExprType::Text as u8);
+            std::mem::transmute(v)
+        }
+    }
+
+    fn to_u32(self) -> u32 {
+        u32::from(self as u8)
+    }
+}
+
+/// Modes for the error handler configured by `ON ERROR`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ErrorHandlerMode {
+    /// Disable error handling.
     None,
 
-    /// Sets the error handler to resume execution at to the next instruction.
+    /// Resume execution at the next statement after an error.
     ResumeNext,
+
+    /// Jump to a specific handler address after an error.
+    Jump,
 }
 
-/// Components of a request to unset a variable.
-#[cfg_attr(test, derive(Debug, Eq, PartialEq))]
-pub struct UnsetISpan {
-    /// Name of the variable to unset.
-    pub name: SymbolKey,
+impl RawValue for ErrorHandlerMode {
+    fn from_u32(v: u32) -> Self {
+        #[allow(unsafe_code)]
+        unsafe {
+            let v = unchecked_u32_as_u8(v);
+            assert!(v <= ErrorHandlerMode::Jump as u8);
+            std::mem::transmute(v)
+        }
+    }
 
-    /// Position of where this instruction was requested.
-    pub pos: LineCol,
+    fn to_u32(self) -> u32 {
+        u32::from(self as u8)
+    }
 }
 
-/// Representation of all possible instructions in the bytecode.
-#[cfg_attr(test, derive(Debug, PartialEq))]
-pub enum Instruction {
-    /// Represents a binary logical "and" operation.
-    LogicalAnd(LineCol),
+impl fmt::Display for ErrorHandlerMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => write!(f, "NONE"),
+            Self::ResumeNext => write!(f, "RESUME_NEXT"),
+            Self::Jump => write!(f, "JUMP"),
+        }
+    }
+}
 
-    /// Represents a binary logical "or" operation.
-    LogicalOr(LineCol),
+/// Generates functions to construct an instruction's bytecode representation for the compiler's
+/// benefit, to parse it for the VM's benefit, and to format it for debugging purposes.
+macro_rules! instr {
+    ( $opcode:expr, $name:expr,
+      $make:ident, $parse:ident, $format:ident,
+    ) => {
+        pub(crate) fn $make() -> u32 {
+            ($opcode as u32) << 24
+        }
 
-    /// Represents a binary logical "xor" operation.
-    LogicalXor(LineCol),
+        pub(crate) fn $parse(op: u32) {
+            debug_assert_eq!($opcode as u32, op >> 24);
+        }
 
-    /// Represents a unary logical "not" operation.
-    LogicalNot(LineCol),
+        pub(crate) fn $format(op: u32) -> String {
+            $parse(op);
+            $name.to_owned()
+        }
+    };
 
-    /// Represents a binary bitwise "and" operation.
-    BitwiseAnd(LineCol),
+    ( $opcode:expr, $name: expr,
+      $make:ident, $parse:ident, $format:ident,
+      $type1:ty, $mask1:expr, $offset1:expr,
+    ) => {
+        pub(crate) fn $make(v1: $type1) -> u32 {
+            let v1 = (RawValue::to_u32(v1) & $mask1) << $offset1;
+            (($opcode as u32) << 24) | v1
+        }
 
-    /// Represents a binary bitwise "or" operation.
-    BitwiseOr(LineCol),
+        pub(crate) fn $parse(op: u32) -> $type1 {
+            debug_assert_eq!($opcode as u32, op >> 24);
+            let v1 = RawValue::from_u32((op >> $offset1) & $mask1);
+            v1
+        }
 
-    /// Represents a binary bitwise "xor" operation.
-    BitwiseXor(LineCol),
+        pub(crate) fn $format(op: u32) -> String {
+            let v1 = $parse(op);
+            format!("{:11} {}", $name, v1)
+        }
+    };
 
-    /// Represents a unary bitwise "not" operation.
-    BitwiseNot(LineCol),
+    ( $opcode:expr, $name:expr,
+      $make:ident, $parse:ident, $format:ident,
+      $type1:ty, $mask1:expr, $offset1:expr,
+      $type2:ty, $mask2:expr, $offset2:expr,
+    ) => {
+        pub(crate) fn $make(v1: $type1, v2: $type2) -> u32 {
+            let v1 = (RawValue::to_u32(v1) & $mask1) << $offset1;
+            let v2 = (RawValue::to_u32(v2) & $mask2) << $offset2;
+            (($opcode as u32) << 24) | v1 | v2
+        }
 
-    /// Represents a left bitshift.
-    ShiftLeft(LineCol),
+        pub(crate) fn $parse(op: u32) -> ($type1, $type2) {
+            debug_assert_eq!($opcode as u32, op >> 24);
+            let v1 = RawValue::from_u32((op >> $offset1) & $mask1);
+            let v2 = RawValue::from_u32((op >> $offset2) & $mask2);
+            (v1, v2)
+        }
 
-    /// Represents a right bitshift.
-    ShiftRight(LineCol),
+        pub(crate) fn $format(op: u32) -> String {
+            let (v1, v2) = $parse(op);
+            format!("{:11} {}, {}", $name, v1, v2)
+        }
+    };
 
-    /// Represents an equality comparison for booleans.
-    EqualBooleans(LineCol),
+    ( $opcode:expr, $name:expr,
+      $make:ident, $parse:ident, $format:ident,
+      $type1:ty, $mask1:expr, $offset1:expr,
+      $type2:ty, $mask2:expr, $offset2:expr,
+      $type3:ty, $mask3:expr, $offset3:expr,
+    ) => {
+        pub(crate) fn $make(v1: $type1, v2: $type2, v3: $type3) -> u32 {
+            let v1 = (RawValue::to_u32(v1) & $mask1) << $offset1;
+            let v2 = (RawValue::to_u32(v2) & $mask2) << $offset2;
+            let v3 = (RawValue::to_u32(v3) & $mask3) << $offset3;
+            (($opcode as u32) << 24) | v1 | v2 | v3
+        }
 
-    /// Represents an inequality comparison for booleans.
-    NotEqualBooleans(LineCol),
+        pub(crate) fn $parse(op: u32) -> ($type1, $type2, $type3) {
+            debug_assert_eq!($opcode as u32, op >> 24);
+            let v1 = RawValue::from_u32((op >> $offset1) & $mask1);
+            let v2 = RawValue::from_u32((op >> $offset2) & $mask2);
+            let v3 = RawValue::from_u32((op >> $offset3) & $mask3);
+            (v1, v2, v3)
+        }
 
-    /// Represents an equality comparison for doubles.
-    EqualDoubles(LineCol),
+        pub(crate) fn $format(op: u32) -> String {
+            let (v1, v2, v3) = $parse(op);
+            format!("{:11} {}, {}, {}", $name, v1, v2, v3)
+        }
+    };
+}
 
-    /// Represents an inequality comparison for doubles.
-    NotEqualDoubles(LineCol),
+/// Enumeration of all valid instruction types (opcodes).
+///
+/// The specific numbers assigned to each instruction are not important at this moment because
+/// we expect bytecode execution to always be coupled with generation (which means there is no
+/// need to worry about stable values over time).
+#[repr(u8)]
+pub(crate) enum Opcode {
+    /// Adds two doubles and stores the result into a third one.
+    AddDouble,
 
-    /// Represents a less-than comparison for doubles.
-    LessDoubles(LineCol),
+    /// Adds two integers and stores the result into a third one.
+    AddInteger,
 
-    /// Represents a less-or-equal comparison for doubles.
-    LessEqualDoubles(LineCol),
+    /// Allocates an object on the heap.
+    Alloc,
 
-    /// Represents a greater-than comparison for doubles.
-    GreaterDoubles(LineCol),
+    /// Allocates a multidimensional array on the heap.
+    AllocArray,
 
-    /// Represents a greater-or-equal comparison for doubles.
-    GreaterEqualDoubles(LineCol),
+    /// Computes the bitwise AND of two integers and stores the result into a third one.
+    BitwiseAnd,
 
-    /// Represents an equality comparison for integers.
-    EqualIntegers(LineCol),
+    /// Computes the bitwise NOT of an integer value in place.
+    BitwiseNot,
 
-    /// Represents an inequality comparison for integers.
-    NotEqualIntegers(LineCol),
+    /// Computes the bitwise OR of two integers and stores the result into a third one.
+    BitwiseOr,
 
-    /// Represents a less-than comparison for integers.
-    LessIntegers(LineCol),
+    /// Computes the bitwise XOR of two integers and stores the result into a third one.
+    BitwiseXor,
 
-    /// Represents a less-or-equal comparison for integers.
-    LessEqualIntegers(LineCol),
+    /// Calls an address relative to the PC.
+    Call,
 
-    /// Represents a greater-than comparison for integers.
-    GreaterIntegers(LineCol),
+    /// Concatenates two strings and stores the pointer to the result into a third one.
+    Concat,
 
-    /// Represents a greater-or-equal comparison for integers.
-    GreaterEqualIntegers(LineCol),
+    /// Divides two doubles and stores the result into a third one.
+    DivideDouble,
 
-    /// Represents an equality comparison for strings.
-    EqualStrings(LineCol),
+    /// Divides two integers and stores the result into a third one.
+    DivideInteger,
 
-    /// Represents an inequality comparison for strings.
-    NotEqualStrings(LineCol),
-
-    /// Represents a less-than comparison for strings.
-    LessStrings(LineCol),
-
-    /// Represents a less-or-equal comparison for strings.
-    LessEqualStrings(LineCol),
-
-    /// Represents a greater-than comparison for strings.
-    GreaterStrings(LineCol),
-
-    /// Represents a greater-or-equal comparison for strings.
-    GreaterEqualStrings(LineCol),
-
-    /// Represents an arithmetic addition operation for doubles.
-    AddDoubles(LineCol),
-
-    /// Represents an arithmetic subtraction operation for doubles.
-    SubtractDoubles(LineCol),
-
-    /// Represents an arithmetic multiplication operation for doubles.
-    MultiplyDoubles(LineCol),
-
-    /// Represents an arithmetic division operation for doubles.
-    DivideDoubles(LineCol),
-
-    /// Represents an arithmetic modulo operation for doubles.
-    ModuloDoubles(LineCol),
-
-    /// Represents an arithmetic power operation for doubles.
-    PowerDoubles(LineCol),
-
-    /// Represents an arithmetic sign flip operation for a double.
-    NegateDouble(LineCol),
-
-    /// Represents an arithmetic addition operation for integers.
-    AddIntegers(LineCol),
-
-    /// Represents an arithmetic subtraction operation for integers.
-    SubtractIntegers(LineCol),
-
-    /// Represents an arithmetic multiplication operation for integers.
-    MultiplyIntegers(LineCol),
-
-    /// Represents an arithmetic division operation for integers.
-    DivideIntegers(LineCol),
-
-    /// Represents an arithmetic modulo operation for integers.
-    ModuloIntegers(LineCol),
-
-    /// Represents an arithmetic power operation for integers.
-    PowerIntegers(LineCol),
-
-    /// Represents an arithmetic sign flip operation for an integer.
-    NegateInteger(LineCol),
-
-    /// Represents the concatenation of strings.
-    ConcatStrings(LineCol),
-
-    /// Represents an assignment to an element of an array with the given number of subscripts.
-    ArrayAssignment(SymbolKey, LineCol, usize),
-
-    /// Represents a load of an array's element into the stack.
-    ArrayLoad(SymbolKey, LineCol, usize),
-
-    /// Represents an assignment of a value to a variable.
-    Assign(SymbolKey),
-
-    /// Represents a call to a builtin command such as `PRINT` with the given number of arguments.
-    BuiltinCall(BuiltinCallISpan),
-
-    /// Represents an unconditional call to a location that will return.
-    Call(JumpISpan),
-
-    /// Represents a call to the given function with the given number of arguments.
-    FunctionCall(FunctionCallISpan),
-
-    /// Represents a variable definition.
-    Dim(DimISpan),
-
-    /// Represents an array definition.
-    DimArray(DimArrayISpan),
-
-    /// Represents a request to terminate the program.  If the boolean is true, the exit ode is
-    /// at the top of the stack.
-    End(bool),
-
-    /// Represents a request to create a new scope for symbols.
-    EnterScope,
-
-    /// Represents a conversion of a float to an integer with rounding.
+    /// Converts the double value in a register to an integer.
     DoubleToInteger,
 
-    /// Represents a conversion of an integer to a float.
+    /// Compares two booleans for equality and stores the result into a third one.
+    EqualBoolean,
+
+    /// Compares two doubles for equality and stores the result into a third one.
+    EqualDouble,
+
+    /// Compares two integers for equality and stores the result into a third one.
+    EqualInteger,
+
+    /// Compares two strings for equality and stores the result into a third one.
+    EqualText,
+
+    /// Jumps to a subroutine at an address relative to the PC.
+    Gosub,
+
+    /// Compares two doubles for greater-than and stores the result into a third one.
+    GreaterDouble,
+
+    /// Compares two doubles for greater-than-or-equal and stores the result into a third one.
+    GreaterEqualDouble,
+
+    /// Compares two integers for greater-than-or-equal and stores the result into a third one.
+    GreaterEqualInteger,
+
+    /// Compares two strings for greater-than-or-equal and stores the result into a third one.
+    GreaterEqualText,
+
+    /// Compares two integers for greater-than and stores the result into a third one.
+    GreaterInteger,
+
+    /// Compares two strings for greater-than and stores the result into a third one.
+    GreaterText,
+
+    /// Converts the integer value in a register to a double.
     IntegerToDouble,
 
-    /// Represents an unconditional jump.
-    Jump(JumpISpan),
+    /// Jumps to an address relative to the PC.
+    Jump,
 
-    /// Represents an conditional jump that jumps if the variable is defined.
-    JumpIfDefined(JumpIfDefinedISpan),
+    /// Jumps to an address relative to the PC if the condition register is false (0).
+    JumpIfFalse,
 
-    /// Represents an conditional jump that jumps if the condition is met.
-    JumpIfTrue(Address),
+    /// Compares two doubles for less-than and stores the result into a third one.
+    LessDouble,
 
-    /// Represents an conditional jump that jumps if the condition is not met.
-    JumpIfNotTrue(Address),
+    /// Compares two doubles for less-than-or-equal and stores the result into a third one.
+    LessEqualDouble,
 
-    /// Represents a request to leave the current scope for symbols.
-    LeaveScope,
+    /// Compares two integers for less-than-or-equal and stores the result into a third one.
+    LessEqualInteger,
 
-    /// Represents a load of a boolean variable's value from main memory into the stack.
-    LoadBoolean(SymbolKey, LineCol),
+    /// Compares two strings for less-than-or-equal and stores the result into a third one.
+    LessEqualText,
 
-    /// Represents a load of a double variable's value from main memory into the stack.
-    LoadDouble(SymbolKey, LineCol),
+    /// Compares two integers for less-than and stores the result into a third one.
+    LessInteger,
 
-    /// Represents a load of an integer variable's value from main memory into the stack.
-    LoadInteger(SymbolKey, LineCol),
+    /// Compares two strings for less-than and stores the result into a third one.
+    LessText,
 
-    /// Represents a load of a string variable's value from main memory into the stack.
-    LoadString(SymbolKey, LineCol),
+    /// Loads an element from an array.
+    LoadArray,
 
-    /// Represents a load of a variable's reference into the stack.
-    LoadRef(SymbolKey, ExprType, LineCol),
+    /// Loads a constant into a register.
+    LoadConstant,
 
-    /// Represents an instruction that does nothing.
+    /// Loads an integer immediate into a register.
+    LoadInteger,
+
+    /// Loads a register pointer into a register.
+    LoadRegisterPointer,
+
+    /// Computes the modulo of two doubles and stores the result into a third one.
+    ModuloDouble,
+
+    /// Computes the modulo of two integers and stores the result into a third one.
+    ModuloInteger,
+
+    /// Moves (copies) data between two registers.
+    Move,
+
+    /// Multiplies two doubles and stores the result into a third one.
+    MultiplyDouble,
+
+    /// Multiplies two integers and stores the result into a third one.
+    MultiplyInteger,
+
+    /// Negates a double value in place.
+    NegateDouble,
+
+    /// Negates an integer value in place.
+    NegateInteger,
+
+    /// Compares two booleans for inequality and stores the result into a third one.
+    NotEqualBoolean,
+
+    /// Compares two doubles for inequality and stores the result into a third one.
+    NotEqualDouble,
+
+    /// Compares two integers for inequality and stores the result into a third one.
+    NotEqualInteger,
+
+    /// Compares two strings for inequality and stores the result into a third one.
+    NotEqualText,
+
+    /// The "null" instruction, used by the compiler to pad the code for fixups.
     Nop,
 
-    /// Represents a load of a literal boolean value into the top of the stack.
-    PushBoolean(bool, LineCol),
+    /// Computes the power of two doubles and stores the result into a third one.
+    PowerDouble,
 
-    /// Represents a load of a literal double value into the top of the stack.
-    PushDouble(f64, LineCol),
+    /// Computes the power of two integers and stores the result into a third one.
+    PowerInteger,
 
-    /// Represents a load of a literal integer value into the top of the stack.
-    PushInteger(i32, LineCol),
+    /// Returns from a previous `Call`.
+    Return,
 
-    /// Represents a load of a literal string value into the top of the stack.
-    PushString(String, LineCol),
+    /// Sets the error handler mode and target address.
+    SetErrorHandler,
 
-    /// Represents a return after a call.
-    Return(LineCol),
+    /// Shifts an integer left by a number of bits without rotation, storing the result into
+    /// a third register.
+    ShiftLeft,
 
-    /// Represents a change in the error handler state.
-    SetErrorHandler(ErrorHandlerISpan),
+    /// Shifts an integer right by a number of bits without rotation, storing the result into
+    /// a third register.
+    ShiftRight,
 
-    /// Represents a request to unset a variable.
-    Unset(UnsetISpan),
+    /// Stores a value into an array element.
+    StoreArray,
+
+    /// Subtracts two doubles and stores the result into a third one.
+    SubtractDouble,
+
+    /// Subtracts two integers and stores the result into a third one.
+    SubtractInteger,
+
+    /// Terminates execution with an explicit exit code.
+    End,
+
+    /// Requests the execution of an upcall, stopping VM execution.
+    Upcall,
+
+    /// Terminates execution due to natural fallthrough.
+    // KEEP THIS LAST.
+    Eof,
 }
 
-impl Instruction {
-    /// Returns the textual representation of the instruction.
-    pub fn repr(&self) -> (&'static str, Option<String>) {
-        match self {
-            Instruction::BitwiseAnd(_pos) => ("AND%", None),
-            Instruction::BitwiseOr(_pos) => ("OR%", None),
-            Instruction::BitwiseXor(_pos) => ("XOR%", None),
-            Instruction::BitwiseNot(_pos) => ("NOT%", None),
+#[rustfmt::skip]
+instr!(
+    Opcode::AddDouble, "ADDD",
+    make_add_double, parse_add_double, format_add_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
 
-            Instruction::LogicalAnd(_pos) => ("AND?", None),
-            Instruction::LogicalOr(_pos) => ("OR?", None),
-            Instruction::LogicalXor(_pos) => ("XOR?", None),
-            Instruction::LogicalNot(_pos) => ("NOT?", None),
+#[rustfmt::skip]
+instr!(
+    Opcode::AddInteger, "ADDI",
+    make_add_integer, parse_add_integer, format_add_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
 
-            Instruction::ShiftLeft(_pos) => ("SHL%", None),
-            Instruction::ShiftRight(_pos) => ("SHR%", None),
+#[rustfmt::skip]
+instr!(
+    Opcode::Alloc, "ALLOC",
+    make_alloc, parse_alloc, format_alloc,
+    Register, 0x000000ff, 8,  // Destination register in which to store the heap pointer.
+    ExprType, 0x000000ff, 0,  // Type of the object to allocate.
+);
 
-            Instruction::EqualBooleans(_pos) => ("CMPE?", None),
-            Instruction::NotEqualBooleans(_pos) => ("CMPNE?", None),
+#[rustfmt::skip]
+instr!(
+    Opcode::AllocArray, "ALLOCA",
+    make_alloc_array, parse_alloc_array, format_alloc_array,
+    Register, 0x000000ff, 16,  // Destination register to store the array pointer.
+    PackedArrayType, 0x000000ff, 8,  // Packed element type and dimension count.
+    Register, 0x000000ff, 0,  // First register containing dimension sizes.
+);
 
-            Instruction::EqualDoubles(_pos) => ("CMPE#", None),
-            Instruction::NotEqualDoubles(_pos) => ("CMPNE#", None),
-            Instruction::LessDoubles(_pos) => ("CMPL#", None),
-            Instruction::LessEqualDoubles(_pos) => ("CMPLE#", None),
-            Instruction::GreaterDoubles(_pos) => ("CMPG#", None),
-            Instruction::GreaterEqualDoubles(_pos) => ("CMPGE#", None),
+#[rustfmt::skip]
+instr!(
+    Opcode::BitwiseAnd, "AND",
+    make_bitwise_and, parse_bitwise_and, format_bitwise_and,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
 
-            Instruction::EqualIntegers(_pos) => ("CMPE%", None),
-            Instruction::NotEqualIntegers(_pos) => ("CMPNE%", None),
-            Instruction::LessIntegers(_pos) => ("CMPL%", None),
-            Instruction::LessEqualIntegers(_pos) => ("CMPLE%", None),
-            Instruction::GreaterIntegers(_pos) => ("CMPG%", None),
-            Instruction::GreaterEqualIntegers(_pos) => ("CMPGE%", None),
+#[rustfmt::skip]
+instr!(
+    Opcode::BitwiseNot, "NOT",
+    make_bitwise_not, parse_bitwise_not, format_bitwise_not,
+    Register, 0x000000ff, 0,  // Register with the value to NOT in place.
+);
 
-            Instruction::EqualStrings(_pos) => ("CMPE$", None),
-            Instruction::NotEqualStrings(_pos) => ("CMPNE$", None),
-            Instruction::LessStrings(_pos) => ("CMPL$", None),
-            Instruction::LessEqualStrings(_pos) => ("CMPLE$", None),
-            Instruction::GreaterStrings(_pos) => ("CMPG$", None),
-            Instruction::GreaterEqualStrings(_pos) => ("CMPGE$", None),
+#[rustfmt::skip]
+instr!(
+    Opcode::BitwiseOr, "OR",
+    make_bitwise_or, parse_bitwise_or, format_bitwise_or,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
 
-            Instruction::AddDoubles(_pos) => ("ADD#", None),
-            Instruction::SubtractDoubles(_pos) => ("SUB#", None),
-            Instruction::MultiplyDoubles(_pos) => ("MUL#", None),
-            Instruction::DivideDoubles(_pos) => ("DIV#", None),
-            Instruction::ModuloDoubles(_pos) => ("MOD#", None),
-            Instruction::PowerDoubles(_pos) => ("POW#", None),
-            Instruction::NegateDouble(_pos) => ("NEG#", None),
+#[rustfmt::skip]
+instr!(
+    Opcode::BitwiseXor, "XOR",
+    make_bitwise_xor, parse_bitwise_xor, format_bitwise_xor,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
 
-            Instruction::AddIntegers(_pos) => ("ADD%", None),
-            Instruction::SubtractIntegers(_pos) => ("SUB%", None),
-            Instruction::MultiplyIntegers(_pos) => ("MUL%", None),
-            Instruction::DivideIntegers(_pos) => ("DIV%", None),
-            Instruction::ModuloIntegers(_pos) => ("MOD%", None),
-            Instruction::PowerIntegers(_pos) => ("POW%", None),
-            Instruction::NegateInteger(_pos) => ("NEG%", None),
+#[rustfmt::skip]
+instr!(
+    Opcode::Call, "CALL",
+    make_call, parse_call, format_call,
+    Register, 0x000000ff, 16,  // Destination register for the return value, if any.
+    u16, 0x0000ffff, 0,  // Target address.
+);
 
-            Instruction::ConcatStrings(_pos) => ("CONCAT$", None),
+#[rustfmt::skip]
+instr!(
+    Opcode::Concat, "CONCAT",
+    make_concat, parse_concat, format_concat,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
 
-            Instruction::ArrayAssignment(key, _pos, nargs) => {
-                ("SETA", Some(format!("{}, {}", key, nargs)))
+#[rustfmt::skip]
+instr!(
+    Opcode::DivideDouble, "DIVD",
+    make_divide_double, parse_divide_double, format_divide_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::DivideInteger, "DIVI",
+    make_divide_integer, parse_divide_integer, format_divide_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::DoubleToInteger, "DTOI",
+    make_double_to_integer, parse_double_to_integer, format_double_to_integer,
+    Register, 0x000000ff, 0,  // Register with the value to convert.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::EqualBoolean, "CMPEQB",
+    make_equal_boolean, parse_equal_boolean, format_equal_boolean,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::EqualDouble, "CMPEQD",
+    make_equal_double, parse_equal_double, format_equal_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::EqualInteger, "CMPEQI",
+    make_equal_integer, parse_equal_integer, format_equal_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::EqualText, "CMPEQS",
+    make_equal_text, parse_equal_text, format_equal_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::End, "END",
+    make_end, parse_end, format_end,
+    Register, 0x000000ff, 0,  // Register with the return code.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Eof, "EOF",
+    make_eof, parse_eof, format_eof,
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Gosub, "GOSUB",
+    make_gosub, parse_gosub, format_gosub,
+    u16, 0x0000ffff, 0,  // Target address.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterDouble, "CMPGTD",
+    make_greater_double, parse_greater_double, format_greater_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterEqualDouble, "CMPGED",
+    make_greater_equal_double, parse_greater_equal_double, format_greater_equal_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterEqualInteger, "CMPGEI",
+    make_greater_equal_integer, parse_greater_equal_integer, format_greater_equal_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterEqualText, "CMPGES",
+    make_greater_equal_text, parse_greater_equal_text, format_greater_equal_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterInteger, "CMPGTI",
+    make_greater_integer, parse_greater_integer, format_greater_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::GreaterText, "CMPGTS",
+    make_greater_text, parse_greater_text, format_greater_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::IntegerToDouble, "ITOD",
+    make_integer_to_double, parse_integer_to_double, format_integer_to_double,
+    Register, 0x000000ff, 0,  // Register with the value to convert.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Jump, "JUMP",
+    make_jump, parse_jump, format_jump,
+    u16, 0x0000ffff, 0,  // Target address.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::JumpIfFalse, "JMPF",
+    make_jump_if_false, parse_jump_if_false, format_jump_if_false,
+    Register, 0x000000ff, 16,  // Condition register; if 0 (false), jump to target.
+    u16, 0x0000ffff, 0,  // Target address.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessDouble, "CMPLTD",
+    make_less_double, parse_less_double, format_less_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessEqualDouble, "CMPLED",
+    make_less_equal_double, parse_less_equal_double, format_less_equal_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessEqualInteger, "CMPLEI",
+    make_less_equal_integer, parse_less_equal_integer, format_less_equal_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessEqualText, "CMPLES",
+    make_less_equal_text, parse_less_equal_text, format_less_equal_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessInteger, "CMPLTI",
+    make_less_integer, parse_less_integer, format_less_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LessText, "CMPLTS",
+    make_less_text, parse_less_text, format_less_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LoadArray, "LOADA",
+    make_load_array, parse_load_array, format_load_array,
+    Register, 0x000000ff, 16,  // Destination register for the loaded value.
+    Register, 0x000000ff, 8,  // Register containing the array pointer.
+    Register, 0x000000ff, 0,  // First register containing subscript values.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LoadConstant, "LOADC",
+    make_load_constant, parse_load_constant, format_load_constant,
+    Register, 0x000000ff, 16,  // Destination register to load the constant into.
+    u16, 0x0000ffff, 0,  // Index of the constant to load.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LoadInteger, "LOADI",
+    make_load_integer, parse_load_integer, format_load_integer,
+    Register, 0x000000ff, 16,  // Destination register to load the immediate into.
+    u16, 0x0000ffff, 0,  // Immediate value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::LoadRegisterPointer, "LOADRP",
+    make_load_register_ptr, parse_load_register_ptr, format_load_register_ptr,
+    Register, 0x000000ff, 16,  // Destination register to load the immediate into.
+    ExprType, 0x000000ff, 8,  // Type of the value pointed to.
+    Register, 0x000000ff, 0,  // Register to load.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::ModuloDouble, "MODD",
+    make_modulo_double, parse_modulo_double, format_modulo_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::ModuloInteger, "MODI",
+    make_modulo_integer, parse_modulo_integer, format_modulo_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Move, "MOVE",
+    make_move, parse_move, format_move,
+    Register, 0x000000ff, 8,  // Destination register.
+    Register, 0x000000ff, 0,  // Source register.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::MultiplyDouble, "MULD",
+    make_multiply_double, parse_multiply_double, format_multiply_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::MultiplyInteger, "MULI",
+    make_multiply_integer, parse_multiply_integer, format_multiply_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NegateDouble,
+    "NEGD",
+    make_negate_double,
+    parse_negate_double,
+    format_negate_double,
+    Register,
+    0x000000ff,
+    0, // Register with the value to negate in place.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NegateInteger, "NEGI",
+    make_negate_integer, parse_negate_integer, format_negate_integer,
+    Register, 0x000000ff, 0,  // Register with the value to negate in place.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NotEqualBoolean, "CMPNEB",
+    make_not_equal_boolean, parse_not_equal_boolean, format_not_equal_boolean,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NotEqualDouble, "CMPNED",
+    make_not_equal_double, parse_not_equal_double, format_not_equal_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NotEqualInteger, "CMPNEI",
+    make_not_equal_integer, parse_not_equal_integer, format_not_equal_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::NotEqualText, "CMPNES",
+    make_not_equal_text, parse_not_equal_text, format_not_equal_text,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Nop, "NOP",
+    make_nop, parse_nop, format_nop,
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::PowerDouble, "POWD",
+    make_power_double, parse_power_double, format_power_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::PowerInteger, "POWI",
+    make_power_integer, parse_power_integer, format_power_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Return, "RETURN",
+    make_return, parse_return, format_return,
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::SetErrorHandler, "SETEH",
+    make_set_error_handler, parse_set_error_handler, format_set_error_handler,
+    ErrorHandlerMode, 0x000000ff, 16,  // Error handler mode.
+    u16, 0x0000ffff, 0,  // Target address for Jump mode.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::ShiftLeft, "SHL",
+    make_shift_left, parse_shift_left, format_shift_left,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Value to shift.
+    Register, 0x000000ff, 0,  // Number of bits to shift by.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::ShiftRight, "SHR",
+    make_shift_right, parse_shift_right, format_shift_right,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Value to shift.
+    Register, 0x000000ff, 0,  // Number of bits to shift by.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::StoreArray, "STOREA",
+    make_store_array, parse_store_array, format_store_array,
+    Register, 0x000000ff, 16,  // Register containing the array pointer.
+    Register, 0x000000ff, 8,  // Register containing the value to store.
+    Register, 0x000000ff, 0,  // First register containing subscript values.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::SubtractDouble, "SUBD",
+    make_subtract_double, parse_subtract_double, format_subtract_double,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::SubtractInteger, "SUBI",
+    make_subtract_integer, parse_subtract_integer, format_subtract_integer,
+    Register, 0x000000ff, 16,  // Destination register to store the result of the operation.
+    Register, 0x000000ff, 8,  // Left hand side value.
+    Register, 0x000000ff, 0,  // Right hand side value.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::Upcall, "UPCALL",
+    make_upcall, parse_upcall, format_upcall,
+    u16, 0x0000ffff, 8,  // Index of the upcall to execute.
+    Register, 0x000000ff, 0,  // First register with arguments.
+);
+
+/// Returns the opcode of an instruction.
+pub(crate) fn opcode_of(instr: u32) -> Opcode {
+    #[allow(unsafe_code)]
+    unsafe {
+        let num = unchecked_u32_as_u8(instr >> 24);
+        debug_assert!(num <= Opcode::Eof as u8);
+        std::mem::transmute::<u8, Opcode>(num)
+    }
+}
+
+/// Tags used as integer register values to identify the type stored in another register at
+/// runtime.
+///
+/// This is used in function and command calls that receive variadic arguments (such as `PRINT`)
+/// to identify the types of the arguments (which can be missing) and separators.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(u8)]
+pub enum VarArgTag {
+    /// The argument is missing.  This is only possible for command invocations.
+    Missing(ArgSep) = 0,
+
+    /// The argument is an immediate of the given type.
+    Immediate(ArgSep, ExprType) = 1,
+
+    /// The argument is a pointer.
+    Pointer(ArgSep) = 2,
+}
+
+impl VarArgTag {
+    /// Parses a register `value` into a variadic argument tag.
+    // This is not `TryFrom` because that makes this interface public and forces us to make the
+    // result type public as well, but we don't need it to be.
+    pub(crate) fn parse_u64(value: u64) -> ParseResult<Self> {
+        if value & !(0x0fff) != 0 {
+            return Err(ParseError::InvalidTypeTag(value));
+        };
+
+        let key_u8 = ((value & 0x0f00) >> 8) as u8;
+        let sep_u8 = ((value & 0x00f0) >> 4) as u8;
+        let other_u8 = (value & 0x000f) as u8;
+
+        let Ok(sep) = ArgSep::try_from(sep_u8) else {
+            return Err(ParseError::InvalidTypeTag(value));
+        };
+
+        match key_u8 {
+            0 => {
+                if other_u8 == 0 {
+                    Ok(Self::Missing(sep))
+                } else {
+                    Err(ParseError::InvalidTypeTag(value))
+                }
             }
-
-            Instruction::ArrayLoad(key, _pos, nargs) => {
-                ("LOADA", Some(format!("{}, {}", key, nargs)))
-            }
-
-            Instruction::Assign(key) => ("SETV", Some(key.to_string())),
-
-            Instruction::BuiltinCall(span) => {
-                ("CALLB", Some(format!("{} ({}), {}", span.upcall_index, span.name, span.nargs)))
-            }
-
-            Instruction::Call(span) => ("CALLA", Some(format!("{:04x}", span.addr))),
-
-            Instruction::FunctionCall(span) => {
-                let opcode = match span.return_type {
-                    ExprType::Boolean => "CALLF?",
-                    ExprType::Double => "CALLF#",
-                    ExprType::Integer => "CALLF%",
-                    ExprType::Text => "CALLF$",
-                };
-                (opcode, Some(format!("{} ({}), {}", span.upcall_index, span.name, span.nargs)))
-            }
-
-            Instruction::Dim(span) => {
-                let opcode = match (span.shared, span.vtype) {
-                    (false, ExprType::Boolean) => "DIMV?",
-                    (false, ExprType::Double) => "DIMV#",
-                    (false, ExprType::Integer) => "DIMV%",
-                    (false, ExprType::Text) => "DIMV$",
-                    (true, ExprType::Boolean) => "DIMSV?",
-                    (true, ExprType::Double) => "DIMSV#",
-                    (true, ExprType::Integer) => "DIMSV%",
-                    (true, ExprType::Text) => "DIMSV$",
-                };
-                (opcode, Some(format!("{}", span.name)))
-            }
-
-            Instruction::DimArray(span) => {
-                let opcode = match (span.shared, span.subtype) {
-                    (false, ExprType::Boolean) => "DIMA?",
-                    (false, ExprType::Double) => "DIMA#",
-                    (false, ExprType::Integer) => "DIMA%",
-                    (false, ExprType::Text) => "DIMA$",
-                    (true, ExprType::Boolean) => "DIMSA?",
-                    (true, ExprType::Double) => "DIMSA#",
-                    (true, ExprType::Integer) => "DIMSA%",
-                    (true, ExprType::Text) => "DIMSA$",
-                };
-                (opcode, Some(format!("{}, {}", span.name, span.dimensions)))
-            }
-
-            Instruction::End(has_code) => ("END", Some(format!("{}", has_code))),
-
-            Instruction::EnterScope => ("ENTER", None),
-
-            Instruction::DoubleToInteger => ("#TO%", None),
-            Instruction::IntegerToDouble => ("%TO#", None),
-
-            Instruction::Jump(span) => ("JMP", Some(format!("{:04x}", span.addr))),
-            Instruction::JumpIfDefined(span) => {
-                ("JMPVD", Some(format!("{}, {:04x}", span.var, span.addr)))
-            }
-            Instruction::JumpIfTrue(addr) => ("JMPT", Some(format!("{:04x}", addr))),
-            Instruction::JumpIfNotTrue(addr) => ("JMPNT", Some(format!("{:04x}", addr))),
-
-            Instruction::LeaveScope => ("LEAVE", None),
-
-            Instruction::LoadBoolean(key, _pos) => ("LOAD?", Some(key.to_string())),
-            Instruction::LoadDouble(key, _pos) => ("LOAD#", Some(key.to_string())),
-            Instruction::LoadInteger(key, _pos) => ("LOAD%", Some(key.to_string())),
-            Instruction::LoadString(key, _pos) => ("LOAD$", Some(key.to_string())),
-
-            Instruction::LoadRef(key, _etype, _pos) => ("LOADR", Some(key.to_string())),
-
-            Instruction::Nop => ("NOP", None),
-
-            Instruction::PushBoolean(b, _pos) => ("PUSH?", Some(format!("{}", b))),
-            Instruction::PushDouble(d, _pos) => ("PUSH#", Some(format!("{}", d))),
-            Instruction::PushInteger(i, _pos) => ("PUSH%", Some(format!("{}", i))),
-            Instruction::PushString(s, _pos) => ("PUSH$", Some(format!("\"{}\"", s))),
-
-            Instruction::Return(_pos) => ("RET", None),
-
-            Instruction::SetErrorHandler(span) => match span {
-                ErrorHandlerISpan::Jump(addr) => ("SEHA", Some(format!("{:04x}", addr))),
-                ErrorHandlerISpan::None => ("SEHN", None),
-                ErrorHandlerISpan::ResumeNext => ("SEHRN", None),
+            1 => match ExprType::try_from(other_u8) {
+                Ok(etype) => Ok(Self::Immediate(sep, etype)),
+                Err(_) => Err(ParseError::InvalidTypeTag(value)),
             },
-
-            Instruction::Unset(span) => ("UNSETV", Some(format!("{}", span.name))),
+            2 => {
+                if other_u8 == 0 {
+                    Ok(Self::Pointer(sep))
+                } else {
+                    Err(ParseError::InvalidTypeTag(value))
+                }
+            }
+            _ => Err(ParseError::InvalidTypeTag(value)),
         }
     }
 
-    /// Returns the position in the source code where this instruction originated.
-    ///
-    /// For some instructions, we cannot tell their location right now, so we return None for those.
-    pub fn pos(&self) -> Option<LineCol> {
-        match self {
-            Instruction::BitwiseAnd(pos) => Some(*pos),
-            Instruction::BitwiseOr(pos) => Some(*pos),
-            Instruction::BitwiseXor(pos) => Some(*pos),
-            Instruction::BitwiseNot(pos) => Some(*pos),
-
-            Instruction::LogicalAnd(pos) => Some(*pos),
-            Instruction::LogicalOr(pos) => Some(*pos),
-            Instruction::LogicalXor(pos) => Some(*pos),
-            Instruction::LogicalNot(pos) => Some(*pos),
-
-            Instruction::ShiftLeft(pos) => Some(*pos),
-            Instruction::ShiftRight(pos) => Some(*pos),
-
-            Instruction::EqualBooleans(pos) => Some(*pos),
-            Instruction::NotEqualBooleans(pos) => Some(*pos),
-
-            Instruction::EqualDoubles(pos) => Some(*pos),
-            Instruction::NotEqualDoubles(pos) => Some(*pos),
-            Instruction::LessDoubles(pos) => Some(*pos),
-            Instruction::LessEqualDoubles(pos) => Some(*pos),
-            Instruction::GreaterDoubles(pos) => Some(*pos),
-            Instruction::GreaterEqualDoubles(pos) => Some(*pos),
-
-            Instruction::EqualIntegers(pos) => Some(*pos),
-            Instruction::NotEqualIntegers(pos) => Some(*pos),
-            Instruction::LessIntegers(pos) => Some(*pos),
-            Instruction::LessEqualIntegers(pos) => Some(*pos),
-            Instruction::GreaterIntegers(pos) => Some(*pos),
-            Instruction::GreaterEqualIntegers(pos) => Some(*pos),
-
-            Instruction::EqualStrings(pos) => Some(*pos),
-            Instruction::NotEqualStrings(pos) => Some(*pos),
-            Instruction::LessStrings(pos) => Some(*pos),
-            Instruction::LessEqualStrings(pos) => Some(*pos),
-            Instruction::GreaterStrings(pos) => Some(*pos),
-            Instruction::GreaterEqualStrings(pos) => Some(*pos),
-
-            Instruction::AddDoubles(pos) => Some(*pos),
-            Instruction::SubtractDoubles(pos) => Some(*pos),
-            Instruction::MultiplyDoubles(pos) => Some(*pos),
-            Instruction::DivideDoubles(pos) => Some(*pos),
-            Instruction::ModuloDoubles(pos) => Some(*pos),
-            Instruction::PowerDoubles(pos) => Some(*pos),
-            Instruction::NegateDouble(pos) => Some(*pos),
-
-            Instruction::AddIntegers(pos) => Some(*pos),
-            Instruction::SubtractIntegers(pos) => Some(*pos),
-            Instruction::MultiplyIntegers(pos) => Some(*pos),
-            Instruction::DivideIntegers(pos) => Some(*pos),
-            Instruction::ModuloIntegers(pos) => Some(*pos),
-            Instruction::PowerIntegers(pos) => Some(*pos),
-            Instruction::NegateInteger(pos) => Some(*pos),
-
-            Instruction::ConcatStrings(pos) => Some(*pos),
-
-            Instruction::ArrayAssignment(_, pos, _) => Some(*pos),
-            Instruction::ArrayLoad(_, pos, _) => Some(*pos),
-            Instruction::Assign(_) => None,
-            Instruction::BuiltinCall(span) => Some(span.name_pos),
-            Instruction::Call(_) => None,
-            Instruction::FunctionCall(span) => Some(span.name_pos),
-            Instruction::Dim(_) => None,
-            Instruction::DimArray(span) => Some(span.name_pos),
-            Instruction::End(_) => None,
-            Instruction::EnterScope => None,
-            Instruction::DoubleToInteger => None,
-            Instruction::IntegerToDouble => None,
-            Instruction::Jump(_) => None,
-            Instruction::JumpIfDefined(_) => None,
-            Instruction::JumpIfTrue(_) => None,
-            Instruction::JumpIfNotTrue(_) => None,
-            Instruction::LeaveScope => None,
-            Instruction::LoadBoolean(_, pos) => Some(*pos),
-            Instruction::LoadDouble(_, pos) => Some(*pos),
-            Instruction::LoadInteger(_, pos) => Some(*pos),
-            Instruction::LoadString(_, pos) => Some(*pos),
-            Instruction::LoadRef(_, _, pos) => Some(*pos),
-            Instruction::Nop => None,
-            Instruction::PushBoolean(_, pos) => Some(*pos),
-            Instruction::PushDouble(_, pos) => Some(*pos),
-            Instruction::PushInteger(_, pos) => Some(*pos),
-            Instruction::PushString(_, pos) => Some(*pos),
-            Instruction::Return(pos) => Some(*pos),
-            Instruction::SetErrorHandler(_) => None,
-            Instruction::Unset(span) => Some(span.pos),
-        }
-    }
-
-    /// Returns true if this instruction represents the execution of a statement.
-    ///
-    /// This is a heuristic to implement `ON ERROR RESUME NEXT`.  It works for now without
-    /// additional tracking, but maybe this needs to change in the future if we add some
-    /// instruction that cannot be disambiguated.
-    pub(crate) fn is_statement(&self) -> bool {
-        match self {
-            Instruction::LogicalAnd(_)
-            | Instruction::LogicalOr(_)
-            | Instruction::LogicalXor(_)
-            | Instruction::LogicalNot(_)
-            | Instruction::BitwiseAnd(_)
-            | Instruction::BitwiseOr(_)
-            | Instruction::BitwiseXor(_)
-            | Instruction::BitwiseNot(_)
-            | Instruction::ArrayLoad(_, _, _)
-            | Instruction::ShiftLeft(_)
-            | Instruction::ShiftRight(_)
-            | Instruction::EqualBooleans(_)
-            | Instruction::NotEqualBooleans(_)
-            | Instruction::EqualDoubles(_)
-            | Instruction::NotEqualDoubles(_)
-            | Instruction::LessDoubles(_)
-            | Instruction::LessEqualDoubles(_)
-            | Instruction::GreaterDoubles(_)
-            | Instruction::GreaterEqualDoubles(_)
-            | Instruction::EqualIntegers(_)
-            | Instruction::NotEqualIntegers(_)
-            | Instruction::LessIntegers(_)
-            | Instruction::LessEqualIntegers(_)
-            | Instruction::GreaterIntegers(_)
-            | Instruction::GreaterEqualIntegers(_)
-            | Instruction::EqualStrings(_)
-            | Instruction::NotEqualStrings(_)
-            | Instruction::LessStrings(_)
-            | Instruction::LessEqualStrings(_)
-            | Instruction::GreaterStrings(_)
-            | Instruction::GreaterEqualStrings(_)
-            | Instruction::AddDoubles(_)
-            | Instruction::SubtractDoubles(_)
-            | Instruction::MultiplyDoubles(_)
-            | Instruction::DivideDoubles(_)
-            | Instruction::ModuloDoubles(_)
-            | Instruction::PowerDoubles(_)
-            | Instruction::NegateDouble(_)
-            | Instruction::AddIntegers(_)
-            | Instruction::SubtractIntegers(_)
-            | Instruction::MultiplyIntegers(_)
-            | Instruction::DivideIntegers(_)
-            | Instruction::ModuloIntegers(_)
-            | Instruction::PowerIntegers(_)
-            | Instruction::NegateInteger(_)
-            | Instruction::ConcatStrings(_)
-            | Instruction::FunctionCall(_)
-            | Instruction::DoubleToInteger
-            | Instruction::IntegerToDouble
-            | Instruction::LoadBoolean(_, _)
-            | Instruction::LoadDouble(_, _)
-            | Instruction::LoadInteger(_, _)
-            | Instruction::LoadString(_, _)
-            | Instruction::LoadRef(_, _, _)
-            | Instruction::PushBoolean(_, _)
-            | Instruction::PushDouble(_, _)
-            | Instruction::PushInteger(_, _)
-            | Instruction::PushString(_, _)
-            | Instruction::EnterScope
-            | Instruction::LeaveScope => false,
-
-            Instruction::ArrayAssignment(_, _, _)
-            | Instruction::Assign(_)
-            | Instruction::BuiltinCall(_)
-            | Instruction::Call(_)
-            | Instruction::Dim(_)
-            | Instruction::DimArray(_)
-            | Instruction::End(_)
-            | Instruction::Jump(_)
-            | Instruction::JumpIfDefined(_)
-            | Instruction::JumpIfTrue(_)
-            | Instruction::JumpIfNotTrue(_)
-            | Instruction::Nop
-            | Instruction::Return(_)
-            | Instruction::SetErrorHandler(_)
-            | Instruction::Unset(_) => true,
-        }
+    /// Makes a new tag for the type of a variadic argument.
+    pub(crate) fn make_u16(self) -> u16 {
+        let (key_u8, sep, other_u8): (u8, ArgSep, u8) = match self {
+            Self::Missing(sep) => (0, sep, 0),
+            Self::Immediate(sep, etype) => (1, sep, etype as u8),
+            Self::Pointer(sep) => (2, sep, 0),
+        };
+        u16::from(key_u8) << 8 | u16::from(sep as u8) << 4 | u16::from(other_u8)
     }
 }
 
-/// Representation of a compiled program.
-#[cfg_attr(test, derive(Debug, PartialEq))]
-pub struct Image {
-    /// List of builtin upcalls in the order in which they were assigned indexes.
-    pub upcalls: Vec<SymbolKey>,
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    /// Collection of instructions in the program.
-    ///
-    /// The indices of this vector correspond to the program counter.
-    pub instrs: Vec<Instruction>,
+    macro_rules! test_instr {
+        ( $name:ident, $make:ident, $parse:ident ) => {
+            #[test]
+            fn $name() {
+                let instr = $make();
+                $parse(instr);
+            }
+        };
 
-    /// Collection of data values in the program.
-    pub data: Vec<Option<Value>>,
+        ( $name:ident, $make:ident, $parse:ident, $v1:expr ) => {
+            #[test]
+            fn $name() {
+                let instr = $make($v1);
+                assert_eq!($v1, $parse(instr));
+            }
+        };
+
+        ( $name:ident, $make:ident, $parse:ident, $v1:expr, $v2:expr ) => {
+            #[test]
+            fn $name() {
+                let instr = $make($v1, $v2);
+                assert_eq!(($v1, $v2), $parse(instr));
+            }
+        };
+
+        ( $name:ident, $make:ident, $parse:ident, $v1:expr, $v2:expr, $v3:expr ) => {
+            #[test]
+            fn $name() {
+                let instr = $make($v1, $v2, $v3);
+                assert_eq!(($v1, $v2, $v3), $parse(instr));
+            }
+        };
+    }
+
+    test_instr!(
+        test_add_double,
+        make_add_double,
+        parse_add_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_add_integer,
+        make_add_integer,
+        parse_add_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_alloc,
+        make_alloc,
+        parse_alloc,
+        Register::local(1).unwrap(),
+        ExprType::Integer
+    );
+
+    test_instr!(
+        test_alloc_array,
+        make_alloc_array,
+        parse_alloc_array,
+        Register::local(1).unwrap(),
+        PackedArrayType::new(ExprType::Integer, 3).unwrap(),
+        Register::local(2).unwrap()
+    );
+
+    test_instr!(
+        test_bitwise_and,
+        make_bitwise_and,
+        parse_bitwise_and,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(test_bitwise_not, make_bitwise_not, parse_bitwise_not, Register::local(1).unwrap());
+
+    test_instr!(
+        test_bitwise_or,
+        make_bitwise_or,
+        parse_bitwise_or,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_bitwise_xor,
+        make_bitwise_xor,
+        parse_bitwise_xor,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(test_call, make_call, parse_call, Register::local(3).unwrap(), 12345);
+
+    test_instr!(
+        test_concat,
+        make_concat,
+        parse_concat,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_divide_double,
+        make_divide_double,
+        parse_divide_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_divide_integer,
+        make_divide_integer,
+        parse_divide_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_double_to_integer,
+        make_double_to_integer,
+        parse_double_to_integer,
+        Register::local(1).unwrap()
+    );
+
+    test_instr!(
+        test_equal_boolean,
+        make_equal_boolean,
+        parse_equal_boolean,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_equal_double,
+        make_equal_double,
+        parse_equal_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_equal_integer,
+        make_equal_integer,
+        parse_equal_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_equal_text,
+        make_equal_text,
+        parse_equal_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(test_end, make_end, parse_end, Register::local(1).unwrap());
+
+    test_instr!(test_eof, make_eof, parse_eof);
+
+    test_instr!(test_gosub, make_gosub, parse_gosub, 12345);
+
+    test_instr!(
+        test_greater_double,
+        make_greater_double,
+        parse_greater_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_greater_equal_double,
+        make_greater_equal_double,
+        parse_greater_equal_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_greater_equal_integer,
+        make_greater_equal_integer,
+        parse_greater_equal_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_greater_equal_text,
+        make_greater_equal_text,
+        parse_greater_equal_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_greater_integer,
+        make_greater_integer,
+        parse_greater_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_greater_text,
+        make_greater_text,
+        parse_greater_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_integer_to_double,
+        make_integer_to_double,
+        parse_integer_to_double,
+        Register::local(1).unwrap()
+    );
+
+    test_instr!(test_jump, make_jump, parse_jump, 12345);
+
+    test_instr!(
+        test_jump_if_false,
+        make_jump_if_false,
+        parse_jump_if_false,
+        Register::local(1).unwrap(),
+        12345
+    );
+
+    test_instr!(
+        test_less_double,
+        make_less_double,
+        parse_less_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_less_equal_double,
+        make_less_equal_double,
+        parse_less_equal_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_less_equal_integer,
+        make_less_equal_integer,
+        parse_less_equal_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_less_equal_text,
+        make_less_equal_text,
+        parse_less_equal_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_less_integer,
+        make_less_integer,
+        parse_less_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_less_text,
+        make_less_text,
+        parse_less_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_load_array,
+        make_load_array,
+        parse_load_array,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_load_constant,
+        make_load_constant,
+        parse_load_constant,
+        Register::local(1).unwrap(),
+        12345
+    );
+
+    test_instr!(
+        test_load_integer,
+        make_load_integer,
+        parse_load_integer,
+        Register::local(1).unwrap(),
+        12345
+    );
+
+    test_instr!(
+        test_load_register_ptr,
+        make_load_register_ptr,
+        parse_load_register_ptr,
+        Register::local(1).unwrap(),
+        ExprType::Double,
+        Register::local(2).unwrap()
+    );
+
+    test_instr!(
+        test_modulo_double,
+        make_modulo_double,
+        parse_modulo_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_modulo_integer,
+        make_modulo_integer,
+        parse_modulo_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_move,
+        make_move,
+        parse_move,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap()
+    );
+
+    test_instr!(
+        test_multiply_double,
+        make_multiply_double,
+        parse_multiply_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_multiply_integer,
+        make_multiply_integer,
+        parse_multiply_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_negate_double,
+        make_negate_double,
+        parse_negate_double,
+        Register::local(1).unwrap()
+    );
+
+    test_instr!(
+        test_negate_integer,
+        make_negate_integer,
+        parse_negate_integer,
+        Register::local(1).unwrap()
+    );
+
+    test_instr!(
+        test_not_equal_boolean,
+        make_not_equal_boolean,
+        parse_not_equal_boolean,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_not_equal_double,
+        make_not_equal_double,
+        parse_not_equal_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_not_equal_integer,
+        make_not_equal_integer,
+        parse_not_equal_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_not_equal_text,
+        make_not_equal_text,
+        parse_not_equal_text,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(test_nop, make_nop, parse_nop);
+
+    test_instr!(
+        test_power_double,
+        make_power_double,
+        parse_power_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_power_integer,
+        make_power_integer,
+        parse_power_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(test_return, make_return, parse_return);
+
+    test_instr!(
+        test_shift_left,
+        make_shift_left,
+        parse_shift_left,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_shift_right,
+        make_shift_right,
+        parse_shift_right,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_store_array,
+        make_store_array,
+        parse_store_array,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_subtract_double,
+        make_subtract_double,
+        parse_subtract_double,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(
+        test_subtract_integer,
+        make_subtract_integer,
+        parse_subtract_integer,
+        Register::local(1).unwrap(),
+        Register::local(2).unwrap(),
+        Register::local(3).unwrap()
+    );
+
+    test_instr!(test_upcall, make_upcall, parse_upcall, 12345, Register::local(3).unwrap());
+
+    #[test]
+    fn test_exit_code_try_ok() {
+        assert_eq!(ExitCode(0), ExitCode::try_from(0).unwrap());
+        assert_eq!(ExitCode(127), ExitCode::try_from(127).unwrap());
+        assert!(ExitCode::try_from(0).unwrap().is_success());
+        assert!(!ExitCode::try_from(127).unwrap().is_success());
+    }
+
+    #[test]
+    fn test_exit_code_try_errors() {
+        assert!(ExitCode::try_from(-1).is_err());
+        assert!(ExitCode::try_from(128).is_err());
+    }
+
+    #[test]
+    fn test_packed_array_type_round_trip() {
+        for subtype in [ExprType::Boolean, ExprType::Double, ExprType::Integer, ExprType::Text] {
+            for ndims in [1, 2, 5, 15] {
+                let packed = PackedArrayType::new(subtype, ndims).unwrap();
+                assert_eq!(subtype, packed.subtype());
+                assert_eq!(ndims, usize::from(packed.ndims()));
+            }
+        }
+    }
+
+    #[test]
+    fn test_packed_array_type_display() {
+        let p = PackedArrayType::new(ExprType::Integer, 2).unwrap();
+        assert_eq!("[2]%", format!("{}", p));
+        let p = PackedArrayType::new(ExprType::Text, 1).unwrap();
+        assert_eq!("[1]$", format!("{}", p));
+    }
+
+    #[test]
+    fn test_var_arg_tag_ok() {
+        for sep in [ArgSep::As, ArgSep::End, ArgSep::Long, ArgSep::Short] {
+            for vat in [
+                VarArgTag::Missing(sep),
+                VarArgTag::Pointer(sep),
+                VarArgTag::Immediate(sep, ExprType::Boolean),
+                VarArgTag::Immediate(sep, ExprType::Double),
+                VarArgTag::Immediate(sep, ExprType::Integer),
+                VarArgTag::Immediate(sep, ExprType::Text),
+            ] {
+                assert_eq!(vat, VarArgTag::parse_u64(u64::from(VarArgTag::make_u16(vat))).unwrap());
+            }
+        }
+    }
+
+    #[test]
+    fn test_var_arg_tag_errors() {
+        // Larger than 12 bits.
+        VarArgTag::parse_u64(1 << 12).unwrap_err();
+
+        // Invalid tag type.
+        VarArgTag::parse_u64(0x00000500).unwrap_err();
+
+        // Missing tag with invalid payload.
+        VarArgTag::parse_u64(0x00000001).unwrap_err();
+
+        // Missing tag with invalid separator.
+        VarArgTag::parse_u64(0x00000040).unwrap_err();
+
+        // ExprType tag with invalid payload.
+        VarArgTag::parse_u64(0x00000104).unwrap_err();
+
+        // ExprType tag with invalid separator.
+        VarArgTag::parse_u64(0x00000140).unwrap_err();
+
+        // Pointer tag with invalid payload.
+        VarArgTag::parse_u64(0x00000201).unwrap_err();
+
+        // Pointer tag with invalid separator.
+        VarArgTag::parse_u64(0x00000240).unwrap_err();
+    }
 }

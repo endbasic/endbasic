@@ -22,9 +22,9 @@ radix_trie = "0.2"
 thiserror = "1.0"
 time = { version = "0.3", features = ["formatting", "local-offset", "std"] }
 
-[dependencies.endbasic-core2]
+[dependencies.endbasic-core]
 version = "0.12.99" # ENDBASIC-VERSION
-path = "../core2"
+path = "../core"
 
 # We don't directly use getrandom but rand does, and we have to customize how
 # getrandom is built if we want it to work in a WASM context.
