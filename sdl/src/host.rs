@@ -122,6 +122,8 @@ fn rgb_to_color(rgb: RGB) -> Color {
 /// Given an SDL `event`, converts it to a `Key` event if it is a key press; otherwise, returns
 /// `None` for unknown events.
 fn parse_event(event: Event) -> Option<Key> {
+    let ctrl_mods = Mod::LCTRLMOD | Mod::RCTRLMOD;
+
     match event {
         Event::Quit { .. } => {
             // TODO(jmmv): This isn't really a key so we should be handling it in some other way.
@@ -132,30 +134,16 @@ fn parse_event(event: Event) -> Option<Key> {
         }
 
         Event::KeyDown { keycode: Some(keycode), keymod, .. } => match keycode {
-            Keycode::A if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => Some(Key::Home),
-            Keycode::B if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Some(Key::ArrowLeft)
-            }
-            Keycode::C if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Some(Key::Interrupt)
-            }
-            Keycode::D if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => Some(Key::Eof),
-            Keycode::E if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => Some(Key::End),
-            Keycode::F if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Some(Key::ArrowRight)
-            }
-            Keycode::J if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Some(Key::NewLine)
-            }
-            Keycode::M if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Some(Key::NewLine)
-            }
-            Keycode::N if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Some(Key::ArrowDown)
-            }
-            Keycode::P if (keymod == Mod::LCTRLMOD || keymod == Mod::RCTRLMOD) => {
-                Some(Key::ArrowUp)
-            }
+            Keycode::A if keymod.intersects(ctrl_mods) => Some(Key::Home),
+            Keycode::B if keymod.intersects(ctrl_mods) => Some(Key::ArrowLeft),
+            Keycode::C if keymod.intersects(ctrl_mods) => Some(Key::Interrupt),
+            Keycode::D if keymod.intersects(ctrl_mods) => Some(Key::Eof),
+            Keycode::E if keymod.intersects(ctrl_mods) => Some(Key::End),
+            Keycode::F if keymod.intersects(ctrl_mods) => Some(Key::ArrowRight),
+            Keycode::J if keymod.intersects(ctrl_mods) => Some(Key::NewLine),
+            Keycode::M if keymod.intersects(ctrl_mods) => Some(Key::NewLine),
+            Keycode::N if keymod.intersects(ctrl_mods) => Some(Key::ArrowDown),
+            Keycode::P if keymod.intersects(ctrl_mods) => Some(Key::ArrowUp),
 
             Keycode::Backspace => Some(Key::Backspace),
             Keycode::End => Some(Key::End),
@@ -727,6 +715,27 @@ pub(crate) fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Creates an `Event::KeyDown` struct for `keycode` with `keymod`.
+    fn key_down(keycode: Keycode, keymod: Mod) -> Event {
+        Event::KeyDown {
+            keycode: Some(keycode),
+            scancode: None,
+            keymod,
+            timestamp: 0,
+            repeat: false,
+            window_id: 0,
+        }
+    }
+
+    #[test]
+    fn test_parse_event_ctrl_keycodes_with_extra_modifiers() {
+        assert_eq!(
+            Some(Key::Interrupt),
+            parse_event(key_down(Keycode::C, Mod::LCTRLMOD | Mod::NUMMOD))
+        );
+        assert_eq!(Some(Key::Eof), parse_event(key_down(Keycode::D, Mod::RCTRLMOD | Mod::CAPSMOD)));
+    }
 
     #[test]
     fn test_rect_origin_size() {

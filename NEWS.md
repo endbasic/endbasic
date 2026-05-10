@@ -38,6 +38,13 @@ for the time being.**
     This is a side-effect of the core changes but I think is the more
     appropriate behavior.
 
+*   Fixed handling of Ctrl-based keybindings in the SDL console so that
+    `CTRL+<key>` work even when extra modifier flags are active.
+
+*   Fixed EOF handling in the terminal console so that pressing `CTRL+D`
+    during `INPUT` aborts the running command but does not immediately exit
+    the REPL.
+
 *   Because the new core has been AGPLv3+ licensed, the rest of the project
     has switched to this license as well.
 
