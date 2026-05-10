@@ -33,11 +33,11 @@ for the time being.**
     This can be seen as a regression from the core rewrite, but it should
     impact so few scenarios that it'll be fixed later and the behavior of
     this scenario is to be determined.
-    
+
 *   CTRL+C cannot be caught as a key anymore during `INPUT` or `INKEY` calls.
     This is a side-effect of the core changes but I think is the more
     appropriate behavior.
-    
+
 *   Because the new core has been AGPLv3+ licensed, the rest of the project
     has switched to this license as well.
 

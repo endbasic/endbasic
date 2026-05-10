@@ -925,6 +925,12 @@ mod tests {
             .expect_var("b", 3)
             .check();
     }
+
+    #[test]
+    fn test_input_propagates_eof_as_error() {
+        Tester::default().add_input_keys(&[Key::Eof]).run("INPUT a").expect_err("1:1: EOF").check();
+    }
+
     #[test]
     fn test_locate_ok() {
         Tester::default()

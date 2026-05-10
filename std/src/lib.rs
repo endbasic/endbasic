@@ -148,7 +148,7 @@ impl Machine {
         match self.signals_chan.1.try_recv() {
             Ok(Signal::Break) => true,
             Err(TryRecvError::Empty) => false,
-            Err(TryRecvError::Closed) => panic!("Channel unexpectedly closed"),
+            Err(TryRecvError::Closed) => false,
         }
     }
 
@@ -437,5 +437,20 @@ impl InteractiveMachineBuilder {
         help::add_all(&mut self.builder, console);
 
         self.builder.build()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_should_stop_with_closed_channel() {
+        let (signals_tx, signals_rx) = async_channel::unbounded();
+        let mut machine =
+            MachineBuilder::default().with_signals_chan((signals_tx, signals_rx)).build();
+
+        machine.signals_chan.0.close();
+        assert!(!machine.should_stop());
     }
 }
