@@ -16,15 +16,15 @@
 
 //! Virtual machine for EndBASIC execution.
 
+#[cfg(test)]
+use crate::CallError;
+use crate::CallResult;
 use crate::bytecode::{ExitCode, Register};
 use crate::callable::{Callable, Scope};
 use crate::compiler::SymbolKey;
 use crate::image::{GlobalVarInfo, Image};
 use crate::mem::{ConstantDatum, DatumPtr, HeapDatum};
 use crate::reader::LineCol;
-use crate::CallResult;
-#[cfg(test)]
-use crate::CallError;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -74,9 +74,12 @@ impl<'a> UpcallHandler<'a> {
             Ok(()) => Ok(()),
             Err(e) => {
                 let default_pos = image.debug_info.instrs[upcall_pc].linecol;
-                vm.handle_exception(image, upcall_pc, pos, message);
-                Ok(())
                 let (pos, message) = e.as_parts(default_pos);
+                if vm.handle_exception(image, upcall_pc, pos, message) {
+                    Ok(())
+                } else {
+                    Err(e.into())
+                }
             }
         }
     }
@@ -119,9 +122,6 @@ pub struct Vm {
 
     /// Last error seen by the VM, if any.
     last_error: Option<(LineCol, String)>,
-
-    /// Pending exception to report to the caller.
-    pending_exception: Option<(LineCol, String)>,
 
     /// Details about the pending upcall that has to be handled by the caller.
     ///
@@ -184,7 +184,6 @@ impl Vm {
             heap: vec![],
             context: Context::default(),
             last_error: None,
-            pending_exception: None,
             pending_upcall: None,
         }
     }
@@ -196,7 +195,6 @@ impl Vm {
         self.heap.clear();
         self.context = Context::default();
         self.last_error = None;
-        self.pending_exception = None;
         self.pending_upcall = None;
     }
 
@@ -209,7 +207,6 @@ impl Vm {
         self.heap.clear();
         self.context.clear_runtime_state();
         self.last_error = None;
-        self.pending_exception = None;
         self.pending_upcall = None;
     }
 
@@ -275,14 +272,10 @@ impl Vm {
         pos: LineCol,
         message: String,
     ) -> bool {
-        self.last_error = Some((pos, message.clone()));
-        self.pending_exception = None;
+        self.last_error = Some((pos, message));
 
         match self.context.error_handler() {
-            ErrorHandler::None => {
-                self.pending_exception = Some((pos, message));
-                false
-            }
+            ErrorHandler::None => false,
             ErrorHandler::Jump(addr) => {
                 self.context.set_pc(addr);
                 true
@@ -382,11 +375,6 @@ impl Vm {
         self.sync_upcalls(image);
 
         loop {
-            if let Some((pos, message)) = self.pending_exception.take() {
-                self.park_at_eof(image);
-                return StopReason::Exception(pos, message);
-            }
-
             if self.pending_upcall.is_some() {
                 return StopReason::Upcall(UpcallHandler { vm: self, image });
             }
@@ -399,11 +387,9 @@ impl Vm {
                 InternalStopReason::Eof => return StopReason::Eof,
                 InternalStopReason::Exception(pc, e) => {
                     let pos = image.debug_info.instrs[pc].linecol;
-                    if !self.handle_exception(image, pc, pos, e)
-                        && let Some((pos, message)) = self.pending_exception.take()
-                    {
+                    if !self.handle_exception(image, pc, pos, e.clone()) {
                         self.park_at_eof(image);
-                        return StopReason::Exception(pos, message);
+                        return StopReason::Exception(pos, e);
                     }
                 }
                 InternalStopReason::Upcall(index, first_reg, upcall_pc) => {
@@ -740,14 +726,58 @@ mod tests {
         let mut vm = Vm::new(upcalls_by_name);
 
         match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
-            _ => panic!("Execution should stop at upcall"),
-        }
+            StopReason::Upcall(handler) => handler.invoke().await.unwrap_err(),
+            _ => panic!("Execution should stop at IOFAIL upcall"),
+        };
 
         match vm.exec(&image) {
-            StopReason::Exception(_, msg) => assert_eq!("mock I/O error", msg),
-            _ => panic!("Execution should expose upcall I/O error as exception"),
+            StopReason::Eof => (),
+            _ => panic!("Execution should stop at EOF after serving error"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_exec_upcall_io_error_can_be_caught() {
+        let data = Rc::from(RefCell::from(vec![]));
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("IOFAIL"), IoErrorCommand::new());
+        upcalls_by_name.insert(SymbolKey::from("OUT"), OutCommand::new(data.clone()));
+
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler
+            .compile(
+                &mut br#"
+                    ON ERROR GOTO @recover
+                    IOFAIL
+                    END 5
+                    @recover
+                    OUT "ok"
+                "#
+                .as_slice(),
+            )
+            .unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+
+        match vm.exec(&image) {
+            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+            _ => panic!("Execution should stop at IOFAIL upcall"),
+        };
+
+        match vm.exec(&image) {
+            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+            _ => panic!("Execution should stop at OUT upcall"),
+        };
+
+        match vm.exec(&image) {
+            StopReason::Eof => (),
+            _ => panic!("Execution should have reached EOF after OUT"),
+        }
+
+        assert_eq!(["ok"], *data.borrow().as_slice());
+        assert_eq!(
+            Some((LineCol { line: 3, col: 21 }, "mock I/O error".to_owned())),
+            vm.last_error
+        );
     }
 
     #[tokio::test]
