@@ -106,7 +106,10 @@ impl Callable for ErrmsgFunction {
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
-        let message = scope.last_error().unwrap_or_default().to_owned();
+        let message = scope
+            .last_error()
+            .map(|(pos, message)| format!("{}: {}", pos, message))
+            .unwrap_or_default();
         scope.return_string(message)
     }
 }
