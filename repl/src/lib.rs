@@ -472,4 +472,22 @@ mod tests {
         block_on(run_repl_loop(&mut machine, console, program)).unwrap();
         tester.run("").expect_prints([" 123", "End of input by CTRL-D"]).check();
     }
+
+    #[test]
+    fn test_run_repl_loop_eof_during_input_does_not_exit_repl() {
+        let mut tester = Tester::default();
+        let (console, program) = (tester.get_console(), tester.get_program());
+        let mut machine =
+            endbasic_std::MachineBuilder::default().with_console(console.clone()).build();
+
+        {
+            let mut console = console.borrow_mut();
+            console.add_input_chars("INPUT a\n");
+            console.add_input_keys(&[Key::Eof]);
+            console.add_input_chars("PRINT 3\n");
+            console.add_input_keys(&[Key::Eof]);
+        }
+        block_on(run_repl_loop(&mut machine, console, program)).unwrap();
+        tester.run("").expect_prints(["ERROR: 1:1: EOF", " 3", "End of input by CTRL-D"]).check();
+    }
 }

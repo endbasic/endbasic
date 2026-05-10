@@ -111,8 +111,7 @@ impl TerminalConsole {
     async fn raw_key_handler(on_key_tx: Sender<Key>, signals_tx: Sender<Signal>) {
         use event::{KeyCode, KeyModifiers};
 
-        let mut done = false;
-        while !done {
+        loop {
             let key = match event::read() {
                 Ok(event::Event::Key(ev)) => {
                     if ev.kind != KeyEventKind::Press {
@@ -164,27 +163,22 @@ impl TerminalConsole {
                 }
             };
 
-            done = key == Key::Eof;
             if key == Key::Interrupt {
                 // Handling CTRL+C in this way isn't great because this is not the same as handling
                 // SIGINT on Unix builds.  First, we are unable to stop long-running operations like
                 // sleeps; and second, a real SIGINT will kill the interpreter completely instead of
                 // coming this way.  We need a real signal handler and we probably should not be
                 // running in raw mode all the time.
-                signals_tx
-                    .send(Signal::Break)
-                    .await
-                    .expect("Send to unbounded channel should not have failed")
+                if signals_tx.send(Signal::Break).await.is_err() {
+                    break;
+                }
             }
 
-            // This should never fail but can if the receiver outruns the console because we
-            // don't await for the handler to terminate (which we cannot do safely because
-            // `Drop` is not async).
-            let _ = on_key_tx.send(key).await;
+            // Exit the background task if the console receiver has gone away.
+            if on_key_tx.send(key).await.is_err() {
+                break;
+            }
         }
-
-        signals_tx.close();
-        on_key_tx.close();
     }
 
     /// Async task to wait for key events on a non-raw terminal and translate them into events for
