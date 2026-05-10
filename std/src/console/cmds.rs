@@ -782,6 +782,18 @@ mod tests {
     }
 
     #[test]
+    fn test_inkey_interrupt_is_break() {
+        Tester::default()
+            .add_input_keys(&[Key::Interrupt, Key::Char('x')])
+            .run("result = INKEY")
+            .expect_err("Break")
+            .check()
+            .run("result = INKEY")
+            .expect_var("result", "x")
+            .check();
+    }
+
+    #[test]
     fn test_input_ok() {
         fn t(stmt: &str, input: &str, output: &str) {
             Tester::default().add_input_chars(input).run(stmt).expect_prints([output]).check();
@@ -878,6 +890,41 @@ mod tests {
         check_stmt_err("1:11: Cannot + STRING and BOOLEAN", "INPUT \"a\" + TRUE; b?");
     }
 
+    #[test]
+    fn test_input_propagates_interrupt_as_break() {
+        Tester::default()
+            .add_input_keys(&[Key::Interrupt, Key::Char('3'), Key::NewLine])
+            .run("INPUT a")
+            .expect_err("Break")
+            .check()
+            .run("INPUT a")
+            .expect_var("a", 3)
+            .check();
+    }
+
+    #[test]
+    fn test_input_interrupt_cannot_be_caught_during_input() {
+        Tester::default()
+            .add_input_keys(&[Key::Interrupt, Key::Char('3'), Key::NewLine])
+            .run(
+                r#"
+                ON ERROR GOTO @retry
+                INPUT a
+                END
+                @retry
+                INPUT c
+            "#,
+            )
+            .expect_err("Break")
+            .check()
+            .run(
+                r#"
+                INPUT b
+            "#,
+            )
+            .expect_var("b", 3)
+            .check();
+    }
     #[test]
     fn test_locate_ok() {
         Tester::default()

@@ -191,14 +191,20 @@ impl Machine {
                     return Err(Error::RuntimeError(pos, msg));
                 }
                 StopReason::Upcall(handler) => {
-                    handler.invoke().await.map_err(|e| {
-                        let (pos, message) = e.parts();
-                        Error::RuntimeError(pos, message)
-                    })?;
+                    let upcall_result = handler.invoke().await;
 
+                    // Before checking if the upcall failed, we need to honor stop signals.
+                    // This is because we want to favor forceful termination over any errors that might
+                    // arise from the upcall so that, e.g. Ctrl+C cannot be caught as a keyboard event
+                    // and instead we abort execution.
                     if self.should_stop() {
                         self.vm.interrupt(&self.image);
                         return Err(Error::Break);
+                    }
+
+                    if let Err(e) = upcall_result {
+                        let (pos, message) = e.parts();
+                        return Err(Error::RuntimeError(pos, message));
                     }
 
                     let actions: Vec<MachineAction> = self.actions.borrow_mut().drain(..).collect();
