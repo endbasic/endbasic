@@ -18,7 +18,7 @@
 
 #[cfg(test)]
 use crate::CallError;
-use crate::CallResult;
+use crate::UpcallError;
 use crate::bytecode::{ExitCode, Register};
 use crate::callable::{Callable, Scope};
 use crate::compiler::SymbolKey;
@@ -61,7 +61,7 @@ pub struct UpcallHandler<'a> {
 
 impl<'a> UpcallHandler<'a> {
     /// Invokes the pending upcall.
-    pub async fn invoke(self) -> CallResult<()> {
+    pub async fn invoke(self) -> Result<(), UpcallError> {
         let vm = self.vm;
         let image = self.image;
         let (index, first_reg, upcall_pc) = vm
@@ -74,11 +74,12 @@ impl<'a> UpcallHandler<'a> {
             Ok(()) => Ok(()),
             Err(e) => {
                 let default_pos = image.debug_info.instrs[upcall_pc].linecol;
-                let (pos, message) = e.as_parts(default_pos);
+                let upcall_error = e.to_upcall_error(default_pos);
+                let (pos, message) = upcall_error.parts();
                 if vm.handle_exception(image, upcall_pc, pos, message) {
                     Ok(())
                 } else {
-                    Err(e.into())
+                    Err(upcall_error)
                 }
             }
         }

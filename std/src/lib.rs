@@ -191,7 +191,10 @@ impl Machine {
                     return Err(Error::RuntimeError(pos, msg));
                 }
                 StopReason::Upcall(handler) => {
-                    handler.invoke().await?;
+                    handler.invoke().await.map_err(|e| {
+                        let (pos, message) = e.parts();
+                        Error::RuntimeError(pos, message)
+                    })?;
 
                     if self.should_stop() {
                         self.vm.interrupt(&self.image);
