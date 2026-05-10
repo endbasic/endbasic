@@ -48,22 +48,52 @@ pub enum CallError {
 }
 
 impl CallError {
-    /// Obtains the error's position and message as separate parts.
+    /// Converts this call error to an upcall error with a mandatory position.
     ///
-    /// If the error does not carry an origin position on its own, uses `default_pos`.
-    pub(crate) fn as_parts(&self, default_pos: LineCol) -> (LineCol, String) {
+    /// If the error does not carry an origin position on its own, uses
+    /// `default_pos`.
+    pub(crate) fn to_upcall_error(&self, default_pos: LineCol) -> UpcallError {
         match self {
-            CallError::IoError(e) => (default_pos, e.to_string()),
+            CallError::IoError(e) => UpcallError::IoError(default_pos, e.to_string()),
 
-            CallError::Other(message) => (default_pos, message.to_string()),
+            CallError::Other(message) => UpcallError::Other(default_pos, message),
 
-            CallError::Syntax(pos, message) => (*pos, message.clone()),
+            CallError::Syntax(pos, message) => UpcallError::Syntax(*pos, message.clone()),
         }
     }
 }
 
 /// Result type for callable execution.
 pub type CallResult<T> = Result<T, CallError>;
+
+/// Error type for uncaught upcall failures.
+///
+/// This should be the same as `CallError` but with all error variants annotated with a position.
+#[derive(Debug, thiserror::Error)]
+pub enum UpcallError {
+    /// I/O error at a given source location.
+    #[error("{0}: {1}")]
+    IoError(LineCol, String),
+
+    /// Generic error with a static message at a given source location.
+    #[error("{0}: {1}")]
+    Other(LineCol, &'static str),
+
+    /// Runtime syntax error at a specific source location.
+    #[error("{0}: {1}")]
+    Syntax(LineCol, String),
+}
+
+impl UpcallError {
+    /// Returns the source position and message of this error.
+    pub fn parts(&self) -> (LineCol, String) {
+        match self {
+            UpcallError::IoError(pos, message) => (*pos, message.clone()),
+            UpcallError::Other(pos, message) => (*pos, message.to_string()),
+            UpcallError::Syntax(pos, message) => (*pos, message.clone()),
+        }
+    }
+}
 
 /// Syntax specification for a required scalar parameter.
 #[derive(Clone, Debug, PartialEq)]
