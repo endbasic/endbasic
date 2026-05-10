@@ -21,7 +21,8 @@ use crate::console::{
 };
 use crate::program::Program;
 use crate::storage::Storage;
-use crate::{Machine, MachineBuilder, gpio};
+use crate::{Machine, MachineBuilder, Signal, gpio};
+use async_channel::{Receiver, Sender};
 use async_trait::async_trait;
 use endbasic_core::{
     Callable, ConstantDatum, ExprType, GetGlobalError, GlobalDef, GlobalDefKind, StopReason,
@@ -111,21 +112,30 @@ pub struct MockConsole {
 
     /// Whether the console is interactive or not.
     interactive: bool,
+
+    /// Channel through which to send signals, if present.
+    signals_tx: Option<Sender<Signal>>,
 }
 
 impl Default for MockConsole {
     fn default() -> Self {
+        Self::new(None)
+    }
+}
+
+impl MockConsole {
+    /// Constructs a new mock console with a `signals_tx` channel.
+    fn new(signals_tx: Option<Sender<Signal>>) -> Self {
         Self {
             golden_in: VecDeque::new(),
             captured_out: vec![],
             size_chars: CharsXY::new(u16::MAX, u16::MAX),
             size_pixels: None,
             interactive: false,
+            signals_tx,
         }
     }
-}
 
-impl MockConsole {
     /// Adds a bunch of characters as golden input keys.
     ///
     /// Note that some escape characters within `s` are interpreted and added as their
@@ -245,14 +255,28 @@ impl Console for MockConsole {
 
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
         match self.golden_in.pop_front() {
-            Some(ch) => Ok(Some(ch)),
+            Some(ch) => {
+                if ch == Key::Interrupt
+                    && let Some(signals_tx) = &self.signals_tx
+                {
+                    let _ = signals_tx.send(Signal::Break).await;
+                }
+                Ok(Some(ch))
+            }
             None => Ok(None),
         }
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
         match self.golden_in.pop_front() {
-            Some(ch) => Ok(ch),
+            Some(ch) => {
+                if ch == Key::Interrupt
+                    && let Some(signals_tx) = &self.signals_tx
+                {
+                    let _ = signals_tx.send(Signal::Break).await;
+                }
+                Ok(ch)
+            }
             None => Ok(Key::Eof),
         }
     }
@@ -395,19 +419,31 @@ pub struct Tester {
     callables: Vec<Rc<dyn Callable>>,
     global_defs: Vec<GlobalDef>,
     interactive: bool,
+    signals_tx: Sender<Signal>,
+    signals_rx: Receiver<Signal>,
 }
 
 impl Default for Tester {
     /// Creates a new tester for a fully-equipped (interactive) machine.
     fn default() -> Self {
-        let console = Rc::from(RefCell::from(MockConsole::default()));
+        let (signals_tx, signals_rx) = async_channel::unbounded();
+        let console = Rc::from(RefCell::from(MockConsole::new(Some(signals_tx.clone()))));
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
         let storage = Rc::from(RefCell::from(Storage::default()));
         let callables = vec![];
         let global_defs = vec![];
         let interactive = true;
 
-        Self { console, storage, program, callables, global_defs, interactive }
+        Self {
+            console,
+            storage,
+            program,
+            callables,
+            global_defs,
+            interactive,
+            signals_tx,
+            signals_rx,
+        }
     }
 }
 
@@ -419,6 +455,7 @@ impl Tester {
         callables: Vec<Rc<dyn Callable>>,
         global_defs: Vec<GlobalDef>,
         interactive: bool,
+        signals_chan: (Sender<Signal>, Receiver<Signal>),
     ) -> Machine {
         // Default to the no-op pins that always return errors.  GPIO unit tests use MockPins
         // directly via `make_mock_machine` to validate operation; this Tester wiring is only used
@@ -427,7 +464,8 @@ impl Tester {
         let mut builder = MachineBuilder::default()
             .with_console(console)
             .with_globals(global_defs)
-            .with_gpio_pins(gpio_pins);
+            .with_gpio_pins(gpio_pins)
+            .with_signals_chan(signals_chan);
 
         for callable in callables {
             builder.add_callable(callable);
@@ -533,6 +571,7 @@ impl Tester {
             self.callables.clone(),
             self.global_defs.clone(),
             self.interactive,
+            (self.signals_tx.clone(), self.signals_rx.clone()),
         );
         let tester = TesterContinuation { tester: self, machine };
         tester.run(script)
@@ -547,6 +586,7 @@ impl Tester {
             self.callables.clone(),
             self.global_defs.clone(),
             self.interactive,
+            (self.signals_tx.clone(), self.signals_rx.clone()),
         );
         TesterContinuation { tester: self, machine }
     }
@@ -567,6 +607,7 @@ impl Tester {
             self.callables.clone(),
             self.global_defs.clone(),
             self.interactive,
+            (self.signals_tx.clone(), self.signals_rx.clone()),
         );
         let mut result = Ok(None);
         for script in scripts {
