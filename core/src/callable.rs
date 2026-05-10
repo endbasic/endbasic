@@ -43,8 +43,23 @@ pub enum CallError {
     Other(&'static str),
 
     /// Indicates a syntax error only detectable at runtime.
-    #[error("{1}")]
+    #[error("{0}: {1}")]
     Syntax(LineCol, String),
+}
+
+impl CallError {
+    /// Obtains the error's position and message as separate parts.
+    ///
+    /// If the error does not carry an origin position on its own, uses `default_pos`.
+    pub(crate) fn as_parts(&self, default_pos: LineCol) -> (LineCol, String) {
+        match self {
+            CallError::IoError(e) => (default_pos, e.to_string()),
+
+            CallError::Other(message) => (default_pos, message.to_string()),
+
+            CallError::Syntax(pos, message) => (*pos, message.clone()),
+        }
+    }
 }
 
 /// Result type for callable execution.
@@ -810,7 +825,7 @@ pub struct Scope<'a> {
     pub(crate) arg_linecols: &'a [LineCol],
 
     /// Last error raised in the VM, if any.
-    pub(crate) last_error: &'a Option<String>,
+    pub(crate) last_error: &'a Option<(LineCol, String)>,
 
     /// `DATA` values captured from the compiled source.
     pub(crate) data: &'a [Option<ConstantDatum>],
@@ -876,8 +891,8 @@ impl<'a> Scope<'a> {
     }
 
     /// Returns the last error stored in the VM, if any.
-    pub fn last_error(&self) -> Option<&str> {
-        self.last_error.as_deref()
+    pub fn last_error(&self) -> Option<(LineCol, &str)> {
+        self.last_error.as_ref().map(|(pos, message)| (*pos, message.as_str()))
     }
 
     /// Sets the return value of the function to `b`.

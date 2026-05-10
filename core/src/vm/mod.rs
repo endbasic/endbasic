@@ -22,7 +22,9 @@ use crate::compiler::SymbolKey;
 use crate::image::{GlobalVarInfo, Image};
 use crate::mem::{ConstantDatum, DatumPtr, HeapDatum};
 use crate::reader::LineCol;
-use crate::{CallError, CallResult};
+use crate::CallResult;
+#[cfg(test)]
+use crate::CallError;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -71,12 +73,10 @@ impl<'a> UpcallHandler<'a> {
         match upcall.exec(vm.upcall_scope(image, first_reg, is_function, upcall_pc)).await {
             Ok(()) => Ok(()),
             Err(e) => {
-                let pos_override = match &e {
-                    CallError::Syntax(pos, _) => Some(*pos),
-                    _ => None,
-                };
-                vm.handle_exception(image, upcall_pc, e.to_string(), pos_override);
+                let default_pos = image.debug_info.instrs[upcall_pc].linecol;
+                vm.handle_exception(image, upcall_pc, pos, message);
                 Ok(())
+                let (pos, message) = e.as_parts(default_pos);
             }
         }
     }
@@ -118,7 +118,7 @@ pub struct Vm {
     context: Context,
 
     /// Last error seen by the VM, if any.
-    last_error: Option<String>,
+    last_error: Option<(LineCol, String)>,
 
     /// Pending exception to report to the caller.
     pending_exception: Option<(LineCol, String)>,
@@ -267,16 +267,15 @@ impl Vm {
         )
     }
 
-    /// Handles an exception raised at `pc` with `message`.  Returns true if the error was handled.
+    /// Handles an exception raised at `pc`, corresponding to `pos`, with `message`.  Returns true if the error was handled.
     fn handle_exception(
         &mut self,
         image: &Image,
         pc: usize,
+        pos: LineCol,
         message: String,
-        pos_override: Option<LineCol>,
     ) -> bool {
-        let pos = pos_override.unwrap_or(image.debug_info.instrs[pc].linecol);
-        self.last_error = Some(format!("{}: {}", pos, message));
+        self.last_error = Some((pos, message.clone()));
         self.pending_exception = None;
 
         match self.context.error_handler() {
@@ -399,7 +398,8 @@ impl Vm {
                 }
                 InternalStopReason::Eof => return StopReason::Eof,
                 InternalStopReason::Exception(pc, e) => {
-                    if !self.handle_exception(image, pc, e, None)
+                    let pos = image.debug_info.instrs[pc].linecol;
+                    if !self.handle_exception(image, pc, pos, e)
                         && let Some((pos, message)) = self.pending_exception.take()
                     {
                         self.park_at_eof(image);

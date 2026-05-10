@@ -313,7 +313,7 @@ impl Context {
         constants: &'a [ConstantDatum],
         heap: &'a mut Vec<HeapDatum>,
         arg_linecols: &'a [LineCol],
-        last_error: &'a Option<String>,
+        last_error: &'a Option<(LineCol, String)>,
         data: &'a [Option<ConstantDatum>],
     ) -> Scope<'a> {
         let (is_global, index) = reg.to_parts();

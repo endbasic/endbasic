@@ -43,7 +43,10 @@ impl Callable for LastErrorFunction {
     }
 
     async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
-        let last_error = scope.last_error().map(str::to_owned).unwrap_or_default();
+        let last_error = scope
+            .last_error()
+            .map(|(pos, message)| format!("{}: {}", pos, message))
+            .unwrap_or_default();
         scope.return_string(last_error)
     }
 }
