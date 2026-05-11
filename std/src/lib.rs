@@ -190,7 +190,7 @@ impl Machine {
                 StopReason::Exception(pos, msg) => {
                     return Err(Error::RuntimeError(pos, msg));
                 }
-                StopReason::Upcall(handler) => {
+                StopReason::UpcallAsync(handler) => {
                     let upcall_result = handler.invoke().await;
 
                     // Before checking if the upcall failed, we need to honor stop signals.

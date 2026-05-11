@@ -1376,7 +1376,7 @@ mod tests {
             StopReason::End(code) => panic!("unexpected exit code: {}", code.to_i32()),
             StopReason::Eof => {}
             StopReason::Exception(pos, msg) => panic!("exception at {pos}: {msg}"),
-            StopReason::Upcall(_) => panic!("unexpected upcall"),
+            StopReason::UpcallAsync(_) => panic!("unexpected upcall"),
             StopReason::Yield => unreachable!(),
         }
         let key = SymbolKey::from(name);

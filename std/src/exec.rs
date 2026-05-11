@@ -44,6 +44,7 @@ impl ClearCommand {
     pub fn new(actions: Rc<RefCell<Vec<MachineAction>>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("CLEAR")
+                .with_async(true)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -67,7 +68,7 @@ impl Callable for ClearCommand {
         self.metadata.clone()
     }
 
-    fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, _scope: Scope<'_>) -> CallResult<()> {
         self.actions.borrow_mut().push(MachineAction::Clear);
         Ok(())
     }
