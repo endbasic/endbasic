@@ -413,6 +413,7 @@ impl HelpCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("HELP")
+                .with_async(true)
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -489,7 +490,7 @@ impl Callable for HelpCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let topics = Topics::new(&self.callables.borrow());
 
         if scope.nargs() == 0 {
@@ -570,7 +571,7 @@ Second paragraph of the extended description.",
             self.metadata.clone()
         }
 
-        async fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+        fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
             Ok(())
         }
     }
@@ -621,7 +622,7 @@ Second paragraph of the extended description.",
             self.metadata.clone()
         }
 
-        async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
             scope.return_string("irrelevant".to_owned())
         }
     }

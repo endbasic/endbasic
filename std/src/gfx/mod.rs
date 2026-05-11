@@ -17,7 +17,6 @@
 //! Commands for graphical console interaction.
 
 use crate::console::{Console, PixelsXY};
-use async_trait::async_trait;
 use endbasic_core::{
     ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
     CallableMetadataBuilder, ExprType, RequiredValueSyntax, Scope, SingularArgSyntax,
@@ -115,13 +114,12 @@ area of the circle is left untouched.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GfxCircleCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(3, scope.nargs());
         let xy = parse_coordinates(&scope, 0, 1)?;
         let r = parse_radius(&scope, 2)?;
@@ -179,13 +177,12 @@ The outline and area of the circle are drawn using the foreground color as selec
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GfxCirclefCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(3, scope.nargs());
         let xy = parse_coordinates(&scope, 0, 1)?;
         let r = parse_radius(&scope, 2)?;
@@ -219,13 +216,12 @@ See GFX_WIDTH to query the other dimension.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GfxHeightFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_pixels()?;
         scope.return_integer(i32::from(size.height))
@@ -287,13 +283,12 @@ The line is drawn using the foreground color as selected by COLOR.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GfxLineCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(4, scope.nargs());
         let x1y1 = parse_coordinates(&scope, 0, 1)?;
         let x2y2 = parse_coordinates(&scope, 2, 3)?;
@@ -344,13 +339,12 @@ The pixel is drawn using the foreground color as selected by COLOR.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GfxPixelCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
         let xy = parse_coordinates(&scope, 0, 1)?;
 
@@ -415,13 +409,12 @@ area of the rectangle is left untouched.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GfxRectCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(4, scope.nargs());
         let x1y1 = parse_coordinates(&scope, 0, 1)?;
         let x2y2 = parse_coordinates(&scope, 2, 3)?;
@@ -486,13 +479,12 @@ The outline and area of the rectangle are drawn using the foreground color as se
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GfxRectfCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(4, scope.nargs());
         let x1y1 = parse_coordinates(&scope, 0, 1)?;
         let x2y2 = parse_coordinates(&scope, 2, 3)?;
@@ -549,13 +541,12 @@ be able to see what you are typing any longer until you reenable video syncing."
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GfxSyncCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if scope.nargs() == 0 {
             self.console.borrow_mut().sync_now()?;
             Ok(())
@@ -599,13 +590,12 @@ See GFX_HEIGHT to query the other dimension.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GfxWidthFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_pixels()?;
         scope.return_integer(i32::from(size.width))

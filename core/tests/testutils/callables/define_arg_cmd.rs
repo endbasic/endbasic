@@ -16,7 +16,6 @@
 
 //! A callable exposed to integration tests.
 
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -46,13 +45,12 @@ impl DefineArgCommand {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for DefineArgCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
         Ok(())
     }
 }

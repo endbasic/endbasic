@@ -16,7 +16,6 @@
 
 //! GPIO access functions and commands for EndBASIC.
 
-use async_trait::async_trait;
 use endbasic_core::{
     ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
     CallableMetadataBuilder, ExprType, RequiredValueSyntax, Scope, SingularArgSyntax,
@@ -185,13 +184,12 @@ It is OK to reconfigure an already configured pin without clearing its state fir
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GpioSetupCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
         let pin = parse_pin(&scope, 0)?;
         let mode = parse_pin_mode(&scope, 1)?;
@@ -238,13 +236,12 @@ before.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GpioClearCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if scope.nargs() == 0 {
             self.pins.borrow_mut().clear_all().map_err(CallError::from)?;
         } else {
@@ -291,13 +288,12 @@ Returns FALSE to represent a low value, and TRUE to represent a high value.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GpioReadFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let pin = parse_pin(&scope, 0)?;
 
@@ -347,13 +343,12 @@ A FALSE value? sets the pin to low, and a TRUE value? sets the pin to high.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GpioWriteCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
         let pin = parse_pin(&scope, 0)?;
         let value = scope.get_boolean(1);
@@ -405,13 +400,12 @@ the next GPIO_READ call for the given pin% to return the given high? value.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GpioMockInjectCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
         let pin = parse_pin(&scope, 0)?;
         let high = scope.get_boolean(1);
@@ -452,13 +446,12 @@ performed since the last reset.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for GpioMockTraceFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         let pins = self.pins.borrow();
         let mock =

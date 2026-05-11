@@ -157,7 +157,7 @@ impl Callable for CdCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let target = scope.get_string(0);
 
@@ -178,6 +178,7 @@ impl CopyCommand {
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COPY")
+                .with_async(true)
                 .with_syntax(&[(
                     &[
                         SingularArgSyntax::RequiredValue(
@@ -216,7 +217,7 @@ impl Callable for CopyCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
         let src = scope.get_string(0).to_owned();
         let dest = scope.get_string(1).to_owned();
@@ -240,6 +241,7 @@ impl DirCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DIR")
+                .with_async(true)
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -268,7 +270,7 @@ impl Callable for DirCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let path = if scope.nargs() == 0 {
             ""
         } else {
@@ -293,6 +295,7 @@ impl KillCommand {
     pub fn new(storage: Rc<RefCell<Storage>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("KILL")
+                .with_async(true)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax {
@@ -321,7 +324,7 @@ impl Callable for KillCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let name = scope.get_string(0).to_owned();
 
@@ -385,7 +388,7 @@ impl Callable for MountCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if scope.nargs() == 0 {
             show_drives(&self.storage.borrow(), &mut *self.console.borrow_mut())?;
             Ok(())
@@ -432,7 +435,7 @@ impl Callable for PwdCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let storage = self.storage.borrow();
@@ -490,7 +493,7 @@ impl Callable for UnmountCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let drive = scope.get_string(0).to_owned();
 

@@ -9,7 +9,7 @@ Hello,First-Name Last-Name!
 0001:   LOADI       R66, 0              ; 16:7
 0002:   LOADI       R65, 275            ; 16:7
 0003:   LOADRP      R67, STRING, R64    ; 16:27
-0004:   UPCALL      0, R65              ; 16:1, INPUT
+0004:   UPCALLA     0, R65              ; 16:1, INPUT
 0005:   LOADI       R66, 1              ; 17:7
 0006:   LOADI       R65, 275            ; 17:7
 0007:   MOVE        R68, R64            ; 17:17

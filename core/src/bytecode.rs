@@ -631,6 +631,9 @@ pub(crate) enum Opcode {
     /// Requests the execution of an upcall, stopping VM execution.
     Upcall,
 
+    /// Requests the execution of an asynchronous upcall, stopping VM execution.
+    UpcallAsync,
+
     /// Terminates execution due to natural fallthrough.
     // KEEP THIS LAST.
     Eof,
@@ -1153,6 +1156,14 @@ instr!(
 instr!(
     Opcode::Upcall, "UPCALL",
     make_upcall, parse_upcall, format_upcall,
+    u16, 0x0000ffff, 8,  // Index of the upcall to execute.
+    Register, 0x000000ff, 0,  // First register with arguments.
+);
+
+#[rustfmt::skip]
+instr!(
+    Opcode::UpcallAsync, "UPCALLA",
+    make_upcall_async, parse_upcall_async, format_upcall_async,
     u16, 0x0000ffff, 8,  // Index of the upcall to execute.
     Register, 0x000000ff, 0,  // First register with arguments.
 );
@@ -1737,6 +1748,14 @@ mod tests {
     );
 
     test_instr!(test_upcall, make_upcall, parse_upcall, 12345, Register::local(3).unwrap());
+
+    test_instr!(
+        test_upcall_async,
+        make_upcall_async,
+        parse_upcall_async,
+        12345,
+        Register::local(3).unwrap()
+    );
 
     #[test]
     fn test_exit_code_try_ok() {

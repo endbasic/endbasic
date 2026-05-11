@@ -16,7 +16,6 @@
 
 //! A callable exposed to integration tests.
 
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -56,13 +55,12 @@ impl SumMixedFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for SumMixedFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut total = scope.get_double(0);
         let num_singular: usize = 1;
         let mut reg = num_singular;

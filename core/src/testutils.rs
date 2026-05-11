@@ -22,7 +22,6 @@ use crate::callable::{
     ArgSepSyntax, CallResult, Callable, CallableMetadata, CallableMetadataBuilder, RepeatedSyntax,
     RepeatedTypeSyntax, Scope,
 };
-use async_trait::async_trait;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -60,13 +59,12 @@ impl OutCommand {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for OutCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut first = true;
         let mut text = String::new();
         let mut reg = 0;

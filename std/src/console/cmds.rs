@@ -78,7 +78,7 @@ impl Callable for ClsCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         self.console.borrow_mut().clear(ClearType::All)?;
         Ok(())
@@ -147,7 +147,7 @@ impl Callable for ColorCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         fn get_color(scope: &Scope<'_>, narg: u8) -> CallResult<Option<u8>> {
             let i = scope.get_integer(narg);
             if i >= 0 && i <= u8::MAX as i32 {
@@ -211,6 +211,7 @@ impl InKeyFunction {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INKEY")
+                .with_async(true)
                 .with_return_type(ExprType::Text)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
@@ -240,7 +241,7 @@ impl Callable for InKeyFunction {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let key = self.console.borrow_mut().poll_key().await?;
@@ -281,6 +282,7 @@ impl InputCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("INPUT")
+                .with_async(true)
                 .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredRef(
@@ -335,7 +337,7 @@ impl Callable for InputCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
         let mut reg = 0;
         let prompt = if scope.nargs() == 1 {
             "".to_owned()
@@ -456,7 +458,7 @@ impl Callable for LocateCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         fn get_coord(scope: &Scope<'_>, narg: u8, name: &str) -> CallResult<u16> {
             let i = scope.get_integer(narg);
             match u16::try_from(i) {
@@ -538,7 +540,7 @@ impl Callable for PrintCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut text = String::new();
         let mut reg = 0;
         let mut nl;
@@ -638,7 +640,7 @@ impl Callable for ScrColsFunction {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_chars()?;
         scope.return_integer(i32::from(size.x))
@@ -675,7 +677,7 @@ impl Callable for ScrRowsFunction {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         let size = self.console.borrow().size_chars()?;
         scope.return_integer(i32::from(size.y))

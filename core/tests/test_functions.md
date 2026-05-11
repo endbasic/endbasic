@@ -1363,3 +1363,28 @@ DECLARE SUB foo
 ```plain
 2:13: Cannot redefine foo
 ```
+
+# Test: Async native function call
+
+## Source
+
+```basic
+OUT ASYNC_INCREMENT(123)
+```
+
+## Disassembly
+
+```asm
+0000:   LOADI       R67, 123            ; 1:21
+0001:   UPCALLA     0, R66              ; 1:5, ASYNC_INCREMENT
+0002:   MOVE        R65, R66            ; 1:5
+0003:   LOADI       R64, 258            ; 1:5
+0004:   UPCALL      1, R64              ; 1:1, OUT
+0005:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=124%
+```

@@ -17,7 +17,6 @@
 //! A callable exposed to integration tests.
 
 use super::{format_arg, format_vararg};
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -59,13 +58,12 @@ impl OutPositionalCommand {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for OutPositionalCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut output = self.output.borrow_mut();
 
         let mut i = 0;

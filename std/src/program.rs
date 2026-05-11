@@ -146,7 +146,7 @@ impl Callable for MetadataCallable {
         self.metadata.clone()
     }
 
-    async fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
         Err(CallError::Other("MetadataCallable::exec must not be called"))
     }
 }
@@ -160,6 +160,7 @@ impl DisasmCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DISASM")
+                .with_async(true)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -182,7 +183,7 @@ impl Callable for DisasmCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let image = {
@@ -223,6 +224,7 @@ impl EditCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("EDIT")
+                .with_async(true)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Interactively edits the stored program.")
@@ -239,7 +241,7 @@ impl Callable for EditCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let mut console = self.console.borrow_mut();
@@ -261,6 +263,7 @@ impl ListCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LIST")
+                .with_async(true)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description("Prints the currently-loaded program.")
@@ -277,7 +280,7 @@ impl Callable for ListCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let mut console = self.console.borrow_mut();
@@ -309,6 +312,7 @@ impl LoadCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOAD")
+                .with_async(true)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax {
@@ -343,7 +347,7 @@ impl Callable for LoadCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let pathname = scope.get_string(0);
 
@@ -395,6 +399,7 @@ impl NewCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("NEW")
+                .with_async(true)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -420,7 +425,7 @@ impl Callable for NewCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         if continue_if_modified(&*self.program.borrow(), &mut *self.console.borrow_mut()).await? {
@@ -470,7 +475,7 @@ impl Callable for RunCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let program = self.program.borrow().text();
@@ -496,6 +501,7 @@ impl SaveCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SAVE")
+                .with_async(true)
                 .with_syntax(&[
                     (&[], None),
                     (
@@ -532,7 +538,7 @@ impl Callable for SaveCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let name = if scope.nargs() == 0 {
             match self.program.borrow().name() {
                 Some(name) => name.to_owned(),

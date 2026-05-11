@@ -16,7 +16,6 @@
 
 //! A callable exposed to integration tests.
 
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -43,13 +42,12 @@ impl IsPositiveFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for IsPositiveFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let n = scope.get_integer(0);
         scope.return_boolean(n > 0)
     }

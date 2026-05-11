@@ -397,6 +397,9 @@ pub struct CallableMetadataBuilder {
     /// Return type of the callable, or `None` for commands/subroutines.
     return_type: Option<ExprType>,
 
+    /// Whether this callable requires asynchronous dispatch.
+    is_async: bool,
+
     /// Category for grouping related callables in help messages.
     category: Option<&'static str>,
 
@@ -419,6 +422,7 @@ impl CallableMetadataBuilder {
         Self {
             name: Cow::Borrowed(name),
             return_type: None,
+            is_async: false,
             syntaxes: vec![],
             category: None,
             description: None,
@@ -433,6 +437,7 @@ impl CallableMetadataBuilder {
         Self {
             name: Cow::Owned(name.into().to_ascii_uppercase()),
             return_type: None,
+            is_async: false,
             syntaxes: vec![],
             category: Some("User defined"),
             description: Some("User defined symbol."),
@@ -442,6 +447,12 @@ impl CallableMetadataBuilder {
     /// Sets the return type of the callable.
     pub fn with_return_type(mut self, return_type: ExprType) -> Self {
         self.return_type = Some(return_type);
+        self
+    }
+
+    /// Sets whether this callable requires asynchronous dispatch.
+    pub fn with_async(mut self, is_async: bool) -> Self {
+        self.is_async = is_async;
         self
     }
 
@@ -500,6 +511,7 @@ impl CallableMetadataBuilder {
         Rc::from(CallableMetadata {
             name: self.name,
             return_type: self.return_type,
+            is_async: self.is_async,
             syntaxes: self.syntaxes,
             category: self.category.expect("All callables must specify a category"),
             description: self.description.expect("All callables must specify a description"),
@@ -515,6 +527,7 @@ impl CallableMetadataBuilder {
         Rc::from(CallableMetadata {
             name: self.name,
             return_type: self.return_type,
+            is_async: self.is_async,
             syntaxes: self.syntaxes,
             category: self.category.unwrap_or(""),
             description: self.description.unwrap_or(""),
@@ -533,6 +546,9 @@ pub struct CallableMetadata {
 
     /// Return type of the callable, or `None` for commands/subroutines.
     return_type: Option<ExprType>,
+
+    /// Whether this callable requires asynchronous dispatch.
+    is_async: bool,
 
     /// Syntax specifications for the callable's arguments.
     syntaxes: Vec<CallableSyntax>,
@@ -553,6 +569,11 @@ impl CallableMetadata {
     /// Gets the callable's return type.
     pub fn return_type(&self) -> Option<ExprType> {
         self.return_type
+    }
+
+    /// Gets whether this callable requires asynchronous dispatch.
+    pub fn is_async(&self) -> bool {
+        self.is_async
     }
 
     /// Gets the callable's syntax specification.
@@ -980,10 +1001,13 @@ pub trait Callable {
     /// as a struct field so that calls to this function are guaranteed to be cheap.
     fn metadata(&self) -> Rc<CallableMetadata>;
 
-    /// Executes the function.
-    ///
-    /// `args` contains the arguments to the function call.
-    ///
-    /// `machine` provides mutable access to the current state of the machine invoking the function.
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()>;
+    /// Executes the callable if it is synchronous.
+    fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+        unimplemented!("Must be implemented for !is_async callables")
+    }
+
+    /// Executes the callable if it is asynchronous.
+    async fn async_exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+        unimplemented!("Must be implemented for is_async callables")
+    }
 }

@@ -114,7 +114,7 @@ Dumping GPIO trace...
 0074:   LOADI       R68, 15             ; 46:7
 0075:   LOADI       R67, 291            ; 46:7
 0076:   LOADRP      R69, STRING, R66    ; 46:71
-0077:   UPCALL      3, R67              ; 46:1, INPUT
+0077:   UPCALLA     3, R67              ; 46:1, INPUT
 0078:   UPCALL      0, R67              ; 48:1, CLS
 0079:   LOADI       R67, 11             ; 49:7
 0080:   UPCALL      1, R67              ; 49:1, COLOR
@@ -147,7 +147,7 @@ Dumping GPIO trace...
 0107:   MOVE        R67, R68            ; 63:7
 0108:   JMPF        R67, 112            ; 63:7
 0109:   LOADC       R67, 20             ; 64:11
-0110:   UPCALL      6, R67              ; 64:5, SLEEP
+0110:   UPCALLA     6, R67              ; 64:5, SLEEP
 0111:   JUMP        105                 ; 63:7
 0112:   LOADI       R68, 21             ; 68:7
 0113:   LOADI       R67, 275            ; 68:7
@@ -165,12 +165,12 @@ Dumping GPIO trace...
 0125:   LOADI       R69, 1              ; 70:21
 0126:   UPCALL      7, R68              ; 70:5, GPIO_WRITE
 0127:   LOADC       R68, 22             ; 71:11
-0128:   UPCALL      6, R68              ; 71:5, SLEEP
+0128:   UPCALLA     6, R68              ; 71:5, SLEEP
 0129:   MOVE        R68, R65            ; 72:16
 0130:   LOADI       R69, 0              ; 72:21
 0131:   UPCALL      7, R68              ; 72:5, GPIO_WRITE
 0132:   LOADC       R68, 22             ; 73:11
-0133:   UPCALL      6, R68              ; 73:5, SLEEP
+0133:   UPCALLA     6, R68              ; 73:5, SLEEP
 0134:   MOVE        R69, R67            ; 74:11
 0135:   LOADI       R68, 258            ; 74:11
 0136:   UPCALL      2, R68              ; 74:5, PRINT

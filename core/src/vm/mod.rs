@@ -64,13 +64,15 @@ impl<'a> UpcallHandler<'a> {
     pub async fn invoke(self) -> Result<(), UpcallError> {
         let vm = self.vm;
         let image = self.image;
-        let (index, first_reg, upcall_pc) = vm
+        let (index, first_reg, upcall_pc, is_async) = vm
             .pending_upcall
             .take()
             .expect("This is only reachable when the VM has a pending upcall");
         let upcall = vm.upcalls[usize::from(index)].clone();
         let is_function = upcall.metadata().return_type().is_some();
-        match upcall.exec(vm.upcall_scope(image, first_reg, is_function, upcall_pc)).await {
+        let scope = vm.upcall_scope(image, first_reg, is_function, upcall_pc);
+        let result = if is_async { upcall.async_exec(scope).await } else { upcall.exec(scope) };
+        match result {
             Ok(()) => Ok(()),
             Err(e) => {
                 let default_pos = image.debug_info.instrs[upcall_pc].linecol;
@@ -126,9 +128,10 @@ pub struct Vm {
 
     /// Details about the pending upcall that has to be handled by the caller.
     ///
-    /// The tuple contains the upcall index, the first argument register, and the PC of the
-    /// UPCALL instruction (for arg position lookup in `DebugInfo`).
-    pending_upcall: Option<(u16, Register, usize)>,
+    /// The tuple contains the upcall index, the first argument register, the PC of the
+    /// upcall instruction (for arg position lookup in `DebugInfo`), and whether dispatch
+    /// is asynchronous.
+    pending_upcall: Option<(u16, Register, usize, bool)>,
 }
 
 impl Vm {
@@ -394,7 +397,12 @@ impl Vm {
                     }
                 }
                 InternalStopReason::Upcall(index, first_reg, upcall_pc) => {
-                    self.pending_upcall = Some((index, first_reg, upcall_pc));
+                    self.pending_upcall = Some((index, first_reg, upcall_pc, false));
+                    return StopReason::Upcall(UpcallHandler { vm: self, image });
+                }
+
+                InternalStopReason::UpcallAsync(index, first_reg, upcall_pc) => {
+                    self.pending_upcall = Some((index, first_reg, upcall_pc, true));
                     return StopReason::Upcall(UpcallHandler { vm: self, image });
                 }
 
@@ -469,13 +477,12 @@ mod tests {
         }
     }
 
-    #[async_trait(?Send)]
     impl Callable for PosCapture {
         fn metadata(&self) -> Rc<CallableMetadata> {
             self.metadata.clone()
         }
 
-        async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
             let mut positions = self.positions.borrow_mut();
             for i in 0..self.nargs {
                 positions.push(scope.get_pos(i));
@@ -498,13 +505,12 @@ mod tests {
         }
     }
 
-    #[async_trait(?Send)]
     impl Callable for ReturnFortyTwoFunction {
         fn metadata(&self) -> Rc<CallableMetadata> {
             self.metadata.clone()
         }
 
-        async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
             scope.return_integer(42)
         }
     }
@@ -528,7 +534,7 @@ mod tests {
             self.metadata.clone()
         }
 
-        async fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+        fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
             Err(CallError::from(io::Error::other("mock I/O error")))
         }
     }

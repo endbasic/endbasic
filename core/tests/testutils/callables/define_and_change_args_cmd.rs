@@ -16,7 +16,6 @@
 
 //! A callable exposed to integration tests.
 
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -45,13 +44,12 @@ impl DefineAndChangeArgsCommand {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for DefineAndChangeArgsCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
         let mut i = 0;
         loop {
             let VarArgTag::Pointer(sep) = scope.get_type(i) else {

@@ -67,7 +67,7 @@ impl Callable for ClearCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
         self.actions.borrow_mut().push(MachineAction::Clear);
         Ok(())
     }
@@ -103,7 +103,7 @@ impl Callable for ErrmsgFunction {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let message = scope
@@ -137,6 +137,7 @@ impl SleepCommand {
     pub fn new(sleep_fn: SleepFn) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SLEEP")
+                .with_async(true)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax {
@@ -165,7 +166,7 @@ impl Callable for SleepCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let n = scope.get_double(0);
 

@@ -16,7 +16,6 @@
 
 //! A callable exposed to integration tests.
 
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -73,13 +72,12 @@ impl RaiseCommand {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for RaiseCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let arg = scope.get_string(0);
         match arg {
             "argument" => Err(CallError::Other("Bad argument")),

@@ -105,7 +105,7 @@ impl Callable for ReadCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
         debug_assert_ne!(0, scope.nargs());
 
         fn assign_datum(scope: &mut Scope<'_>, reg: u8, datum: ConstantDatum) -> CallResult<()> {
@@ -208,13 +208,12 @@ values defined by DATA.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for RestoreCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         *self.index.borrow_mut() = 0;
         Ok(())

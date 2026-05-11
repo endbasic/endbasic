@@ -16,7 +16,6 @@
 
 //! A callable exposed to integration tests.
 
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -47,13 +46,12 @@ impl ArrayNdimsFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for ArrayNdimsFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let ndims = {
             let typed_ptr = scope.get_ref(0);
             typed_ptr.array_dimensions().len() as i32

@@ -82,12 +82,12 @@ Thanks for playing
 0032:   LOADI       R71, 2              ; 30:7
 0033:   LOADI       R70, 275            ; 30:7
 0034:   LOADRP      R72, INTEGER, R69   ; 30:46
-0035:   UPCALL      3, R70              ; 30:1, INPUT
+0035:   UPCALLA     3, R70              ; 30:1, INPUT
 0036:   LOADI       R70, 0              ; 31:38
 0037:   LOADI       R72, 3              ; 31:7
 0038:   LOADI       R71, 275            ; 31:7
 0039:   LOADRP      R73, INTEGER, R70   ; 31:38
-0040:   UPCALL      3, R71              ; 31:1, INPUT
+0040:   UPCALLA     3, R71              ; 31:1, INPUT
 0041:   LOADI       R71, 0              ; 33:9
 0042:   LOADI       R72, 0              ; 34:11
 0043:   LOADI       R73, 1              ; 36:10
@@ -131,7 +131,7 @@ Thanks for playing
 0081:   LOADI       R78, 7              ; 47:15
 0082:   LOADI       R77, 275            ; 47:15
 0083:   LOADRP      R79, INTEGER, R76   ; 47:36
-0084:   UPCALL      3, R77              ; 47:9, INPUT
+0084:   UPCALLA     3, R77              ; 47:9, INPUT
 0085:   MOVE        R77, R76            ; 48:12
 0086:   MOVE        R78, R74            ; 48:22
 0087:   CMPNEI      R77, R77, R78       ; 48:19
@@ -215,7 +215,7 @@ Thanks for playing
 0165:   LOADI       R78, 13             ; 72:11
 0166:   LOADI       R77, 275            ; 72:11
 0167:   LOADRP      R79, BOOLEAN, R73   ; 72:40
-0168:   UPCALL      3, R77              ; 72:5, INPUT
+0168:   UPCALLA     3, R77              ; 72:5, INPUT
 0169:   JUMP        44                  ; 37:7
 0170:   UPCALL      0, R77              ; 75:1, COLOR
 0171:   UPCALL      1, R77              ; 76:1, CLS
