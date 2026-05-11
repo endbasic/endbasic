@@ -717,7 +717,7 @@ impl<'a> Checker<'a> {
         self.exp_result = Ok(match stop_reason {
             StopReason::End(code) => Some(code.to_i32()),
             StopReason::Eof => None,
-            StopReason::Exception(_, _) | StopReason::Upcall(_) | StopReason::Yield => {
+            StopReason::Exception(_, _) | StopReason::UpcallAsync(_) | StopReason::Yield => {
                 unreachable!()
             }
         });

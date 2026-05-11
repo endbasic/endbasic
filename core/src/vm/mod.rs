@@ -64,27 +64,13 @@ impl<'a> UpcallHandler<'a> {
     pub async fn invoke(self) -> Result<(), UpcallError> {
         let vm = self.vm;
         let image = self.image;
-        let (index, first_reg, upcall_pc, is_async) = vm
+        let (index, first_reg, upcall_pc) = vm
             .pending_upcall
             .take()
             .expect("This is only reachable when the VM has a pending upcall");
-        let upcall = vm.upcalls[usize::from(index)].clone();
-        let is_function = upcall.metadata().return_type().is_some();
-        let scope = vm.upcall_scope(image, first_reg, is_function, upcall_pc);
-        let result = if is_async { upcall.async_exec(scope).await } else { upcall.exec(scope) };
-        match result {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                let default_pos = image.debug_info.instrs[upcall_pc].linecol;
-                let upcall_error = e.to_upcall_error(default_pos);
-                let (pos, message) = upcall_error.parts();
-                if vm.handle_exception(image, upcall_pc, pos, message) {
-                    Ok(())
-                } else {
-                    Err(upcall_error)
-                }
-            }
-        }
+        let (upcall, scope) = vm.prepare_upcall(image, index, first_reg, upcall_pc);
+        let result = upcall.async_exec(scope).await;
+        vm.handle_upcall_result(image, upcall_pc, result)
     }
 }
 
@@ -99,8 +85,8 @@ pub enum StopReason<'a> {
     /// Execution stopped due to an instruction-level exception.
     Exception(LineCol, String),
 
-    /// Execution stopped due to an upcall that requires service from the caller.
-    Upcall(UpcallHandler<'a>),
+    /// Execution stopped due to an asynchronous upcall that requires service from the caller.
+    UpcallAsync(UpcallHandler<'a>),
 
     /// Execution stopped to yield control back to the caller.
     Yield,
@@ -128,13 +114,51 @@ pub struct Vm {
 
     /// Details about the pending upcall that has to be handled by the caller.
     ///
-    /// The tuple contains the upcall index, the first argument register, the PC of the
-    /// upcall instruction (for arg position lookup in `DebugInfo`), and whether dispatch
-    /// is asynchronous.
-    pending_upcall: Option<(u16, Register, usize, bool)>,
+    /// The tuple contains the upcall index, the first argument register, and the PC of the
+    /// upcall instruction (for arg position lookup in `DebugInfo`).
+    pending_upcall: Option<(u16, Register, usize)>,
 }
 
 impl Vm {
+    /// Resolves upcall metadata and builds an execution scope for invocation.
+    fn prepare_upcall<'a>(
+        &'a mut self,
+        image: &'a Image,
+        index: u16,
+        first_reg: Register,
+        upcall_pc: usize,
+    ) -> (Rc<dyn Callable>, Scope<'a>) {
+        let upcall = self.upcalls[usize::from(index)].clone();
+        let is_function = upcall.metadata().return_type().is_some();
+        let scope = self.upcall_scope(image, first_reg, is_function, upcall_pc);
+        (upcall, scope)
+    }
+
+    /// Handles the result of an upcall invocation.
+    ///
+    /// Returns `Ok(())` if invocation succeeded or if an exception handler consumed the
+    /// failure.  Returns `Err` only if execution must stop with an uncaught exception.
+    fn handle_upcall_result(
+        &mut self,
+        image: &Image,
+        upcall_pc: usize,
+        result: crate::callable::CallResult<()>,
+    ) -> Result<(), UpcallError> {
+        match result {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let default_pos = image.debug_info.instrs[upcall_pc].linecol;
+                let upcall_error = e.to_upcall_error(default_pos);
+                let (pos, message) = upcall_error.parts();
+                if self.handle_exception(image, upcall_pc, pos, message) {
+                    Ok(())
+                } else {
+                    Err(upcall_error)
+                }
+            }
+        }
+    }
+
     /// Returns the scalar value named `key` from `vars`, decoding values from `read_raw`.
     fn get_scalar_var(
         &self,
@@ -380,7 +404,7 @@ impl Vm {
 
         loop {
             if self.pending_upcall.is_some() {
-                return StopReason::Upcall(UpcallHandler { vm: self, image });
+                return StopReason::UpcallAsync(UpcallHandler { vm: self, image });
             }
 
             match self.context.exec(image, &mut self.heap) {
@@ -397,13 +421,18 @@ impl Vm {
                     }
                 }
                 InternalStopReason::Upcall(index, first_reg, upcall_pc) => {
-                    self.pending_upcall = Some((index, first_reg, upcall_pc, false));
-                    return StopReason::Upcall(UpcallHandler { vm: self, image });
+                    let (upcall, scope) = self.prepare_upcall(image, index, first_reg, upcall_pc);
+                    let result = upcall.exec(scope);
+                    if let Err(upcall_error) = self.handle_upcall_result(image, upcall_pc, result) {
+                        let (pos, message) = upcall_error.parts();
+                        self.park_at_eof(image);
+                        return StopReason::Exception(pos, message);
+                    }
                 }
 
                 InternalStopReason::UpcallAsync(index, first_reg, upcall_pc) => {
-                    self.pending_upcall = Some((index, first_reg, upcall_pc, true));
-                    return StopReason::Upcall(UpcallHandler { vm: self, image });
+                    self.pending_upcall = Some((index, first_reg, upcall_pc));
+                    return StopReason::UpcallAsync(UpcallHandler { vm: self, image });
                 }
 
                 InternalStopReason::Yield => return StopReason::Yield,
@@ -434,6 +463,7 @@ mod tests {
     use crate::reader::LineCol;
     use crate::testutils::OutCommand;
     use async_trait::async_trait;
+    use futures_lite::future::yield_now;
     use std::borrow::Cow;
     use std::cell::RefCell;
     use std::collections::HashMap;
@@ -528,6 +558,43 @@ mod tests {
         }
     }
 
+    struct AsyncIncrementFunction {
+        metadata: Rc<CallableMetadata>,
+    }
+
+    impl AsyncIncrementFunction {
+        fn new() -> Rc<Self> {
+            let md = CallableMetadataBuilder::new("ASYNC_INCREMENT")
+                .with_return_type(ExprType::Integer)
+                .with_async(true)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("value"),
+                            vtype: ExprType::Integer,
+                        },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .test_build();
+            Rc::from(Self { metadata: md })
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl Callable for AsyncIncrementFunction {
+        fn metadata(&self) -> Rc<CallableMetadata> {
+            self.metadata.clone()
+        }
+
+        async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
+            let value = scope.get_integer(0) + 1;
+            yield_now().await;
+            scope.return_integer(value)
+        }
+    }
+
     #[async_trait(?Send)]
     impl Callable for IoErrorCommand {
         fn metadata(&self) -> Rc<CallableMetadata> {
@@ -546,7 +613,7 @@ mod tests {
                 StopReason::End(_) => break,
                 StopReason::Eof => break,
                 StopReason::Exception(_, msg) => panic!("Unexpected exception: {}", msg),
-                StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+                StopReason::UpcallAsync(handler) => handler.invoke().await.unwrap(),
                 StopReason::Yield => (),
             }
         }
@@ -595,28 +662,36 @@ mod tests {
         let mut vm = Vm::new(upcalls_by_name);
 
         match vm.exec(&image) {
-            StopReason::Upcall(_handler) => (),
-            _ => panic!("First exec should stop at the first upcall"),
+            StopReason::Eof => (),
+            _ => panic!("Execution should stop at EOF"),
         }
+        assert_eq!(["30", "20"], *data.borrow().as_slice());
+    }
+
+    #[tokio::test]
+    async fn test_exec_async_upcall_flow() {
+        let data = Rc::from(RefCell::from(vec![]));
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("ASYNC_INCREMENT"), AsyncIncrementFunction::new());
+        upcalls_by_name.insert(SymbolKey::from("OUT"), OutCommand::new(data.clone()));
+
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"OUT ASYNC_INCREMENT(123): OUT 5".as_slice()).unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+
+        match vm.exec(&image) {
+            StopReason::UpcallAsync(handler) => handler.invoke().await.unwrap(),
+            _ => panic!("Execution should stop at ASYNC_INCREMENT upcall"),
+        }
+
         assert!(data.borrow().is_empty());
 
         match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
-            _ => panic!("Second exec should stop at the same upcall (not yet executed)"),
-        }
-        assert_eq!(["30"], *data.borrow().as_slice());
-
-        match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
-            _ => panic!("Third exec should stop at the second upcall"),
-        }
-        assert_eq!(["30", "20"], *data.borrow().as_slice());
-
-        match vm.exec(&image) {
             StopReason::Eof => (),
-            _ => panic!("Fourth exec should stop at EOF"),
+            _ => panic!("Execution should stop at EOF"),
         }
-        assert_eq!(["30", "20"], *data.borrow().as_slice());
+
+        assert_eq!(["124", "5"], *data.borrow().as_slice());
     }
 
     #[tokio::test]
@@ -663,7 +738,7 @@ mod tests {
 
         compiler.compile_more(&mut image, &mut b"OUT 2".as_slice()).unwrap();
         match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+            StopReason::Eof => (),
             _ => panic!("Execution should resume at newly appended code"),
         }
         assert_eq!(["2"], *data.borrow().as_slice());
@@ -696,7 +771,7 @@ mod tests {
 
         compiler.compile_more(&mut image, &mut b"OUT 2".as_slice()).unwrap();
         match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
+            StopReason::Eof => (),
             _ => panic!("Execution should resume at newly appended code"),
         }
         assert_eq!(["2"], *data.borrow().as_slice());
@@ -733,8 +808,8 @@ mod tests {
         let mut vm = Vm::new(upcalls_by_name);
 
         match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap_err(),
-            _ => panic!("Execution should stop at IOFAIL upcall"),
+            StopReason::Exception(_, msg) if msg == "mock I/O error" => (),
+            _ => panic!("Execution should stop at an IOFAIL exception"),
         };
 
         match vm.exec(&image) {
@@ -766,13 +841,8 @@ mod tests {
         let mut vm = Vm::new(upcalls_by_name);
 
         match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
-            _ => panic!("Execution should stop at IOFAIL upcall"),
-        };
-
-        match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
-            _ => panic!("Execution should stop at OUT upcall"),
+            StopReason::Eof => (),
+            _ => panic!("Execution should complete after handling IOFAIL"),
         };
 
         match vm.exec(&image) {
@@ -851,17 +921,17 @@ mod tests {
         let mut vm = Vm::new(upcalls_by_name);
 
         match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
-            _ => panic!("Execution should stop at first upcall"),
+            StopReason::Eof => (),
+            _ => panic!("Execution should stop at EOF"),
         }
-        assert_eq!(["1"], *data.borrow().as_slice());
+        assert_eq!(["1", "2"], *data.borrow().as_slice());
 
         vm.interrupt(&image);
         match vm.exec(&image) {
             StopReason::Eof => (),
             _ => panic!("Execution should be parked at EOF after interruption"),
         }
-        assert_eq!(["1"], *data.borrow().as_slice());
+        assert_eq!(["1", "2"], *data.borrow().as_slice());
     }
 
     #[tokio::test]
@@ -895,16 +965,16 @@ mod tests {
         let mut vm = Vm::new(upcalls_by_name);
 
         match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
-            _ => panic!("Execution should stop at first upcall"),
+            StopReason::Eof => (),
+            _ => panic!("Execution should stop at EOF"),
         }
         assert_eq!(["3"], *data.borrow().as_slice());
 
         vm.clear();
 
         match vm.exec(&image) {
-            StopReason::Upcall(handler) => handler.invoke().await.unwrap(),
-            _ => panic!("Execution should still stop at upcall after clear"),
+            StopReason::Eof => (),
+            _ => panic!("Execution should still stop at EOF after clear"),
         }
         assert_eq!(["3", "3"], *data.borrow().as_slice());
     }

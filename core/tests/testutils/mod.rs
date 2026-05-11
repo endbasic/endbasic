@@ -501,7 +501,7 @@ async fn run_image(vm: &mut Vm, image: &Image) -> Result<i32, String> {
         match vm.exec(image) {
             StopReason::End(code) => return Ok(code.to_i32()),
             StopReason::Eof => return Ok(0),
-            StopReason::Upcall(handle) => {
+            StopReason::UpcallAsync(handle) => {
                 if let Err(e) = handle.invoke().await {
                     return Err(e.to_string());
                 }

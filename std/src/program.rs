@@ -455,6 +455,7 @@ impl RunCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("RUN")
+                .with_async(true)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -475,7 +476,7 @@ impl Callable for RunCommand {
         self.metadata.clone()
     }
 
-    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let program = self.program.borrow().text();

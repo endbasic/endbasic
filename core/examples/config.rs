@@ -93,7 +93,7 @@ fn main() {
             eprintln!("Script raised an exception at {}: {}", pos, msg);
             std::process::exit(1);
         }
-        StopReason::Upcall(_) => {
+        StopReason::UpcallAsync(_) => {
             eprintln!("Unexpected upcall (no upcalls are registered)");
             std::process::exit(1);
         }
