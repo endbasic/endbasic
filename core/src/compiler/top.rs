@@ -828,7 +828,7 @@ fn compile_stmt(
             define_new_args(&span, &md, symtable, &mut ctx.codegen)?;
             let (first_temp, arg_linecols) = {
                 let mut symtable = symtable.frozen();
-                compile_args(span, md, &mut symtable, &mut ctx.codegen)?
+                compile_args(span, md.clone(), &mut symtable, &mut ctx.codegen)?
             };
 
             if is_user_defined {
@@ -837,7 +837,12 @@ fn compile_stmt(
                 ctx.codegen.add_fixup(addr, Fixup::Call(first_temp, key));
             } else {
                 let upcall = ctx.codegen.get_upcall(key, None, key_pos)?;
-                let addr = ctx.codegen.emit(bytecode::make_upcall(upcall, first_temp), key_pos);
+                let op = if md.is_async() {
+                    bytecode::make_upcall_async(upcall, first_temp)
+                } else {
+                    bytecode::make_upcall(upcall, first_temp)
+                };
+                let addr = ctx.codegen.emit(op, key_pos);
                 ctx.codegen.set_arg_linecols(addr, arg_linecols);
             }
         }

@@ -16,25 +16,28 @@
 
 //! A callable exposed to integration tests.
 
+use async_trait::async_trait;
 use endbasic_core::*;
+use futures_lite::future::yield_now;
 use std::borrow::Cow;
 use std::rc::Rc;
 
-/// A command that increments the argument passed in as a reference.
-pub(super) struct IncrementRequiredIntCommand {
+/// A function that increments the given integer asynchronously.
+pub(super) struct AsyncIncrementFunction {
     metadata: Rc<CallableMetadata>,
 }
 
-impl IncrementRequiredIntCommand {
+impl AsyncIncrementFunction {
     pub(super) fn new() -> Rc<Self> {
         Rc::from(Self {
-            metadata: CallableMetadataBuilder::new("INCREMENT_REQUIRED_INT")
+            metadata: CallableMetadataBuilder::new("ASYNC_INCREMENT")
+                .with_return_type(ExprType::Integer)
+                .with_async(true)
                 .with_syntax(&[(
-                    &[SingularArgSyntax::RequiredRef(
-                        RequiredRefSyntax {
-                            name: Cow::Borrowed("arg"),
-                            require_array: false,
-                            define_undefined: false,
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("value"),
+                            vtype: ExprType::Integer,
                         },
                         ArgSepSyntax::End,
                     )],
@@ -45,22 +48,16 @@ impl IncrementRequiredIntCommand {
     }
 }
 
-impl Callable for IncrementRequiredIntCommand {
+#[async_trait(?Send)]
+impl Callable for AsyncIncrementFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
-        let mut typed_ptr = scope.get_mut_ref(0);
-        if typed_ptr.vtype != ExprType::Integer {
-            // TODO(jmmv): Make this error type more specific and determine the position of the
-            // problematic argument via the `DebugInfo` which we should propagate through the
-            // `Scope`.
-            return Err(CallError::Other("Invalid type in argument"));
-        }
-        let mut i = typed_ptr.deref_integer();
-        i += 1;
-        typed_ptr.set_integer(i);
-        Ok(())
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let incremented = scope.get_integer(0) + 1;
+        yield_now().await;
+        scope.return_integer(incremented)
     }
 }

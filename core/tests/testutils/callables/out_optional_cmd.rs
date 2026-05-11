@@ -17,7 +17,6 @@
 //! A callable exposed to integration tests.
 
 use super::format_vararg;
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -52,13 +51,12 @@ impl OutOptionalCommand {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for OutOptionalCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let (formatted, _present, sep) = format_vararg(&scope, 0);
         assert_eq!(ArgSep::End, sep, "Command only expects one argument");
 

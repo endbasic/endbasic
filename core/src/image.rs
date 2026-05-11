@@ -89,6 +89,7 @@ pub(crate) fn format_instr(instr: u32) -> String {
         Opcode::SubtractDouble => bytecode::format_subtract_double(instr),
         Opcode::SubtractInteger => bytecode::format_subtract_integer(instr),
         Opcode::Upcall => bytecode::format_upcall(instr),
+        Opcode::UpcallAsync => bytecode::format_upcall_async(instr),
     }
 }
 
@@ -291,6 +292,12 @@ impl Image {
 
                 Opcode::Upcall => {
                     let (index, _first_reg) = bytecode::parse_upcall(instr);
+                    let name = &self.upcalls[usize::from(index)];
+                    line.push_str(&format!(", {}", name))
+                }
+
+                Opcode::UpcallAsync => {
+                    let (index, _first_reg) = bytecode::parse_upcall_async(instr);
                     let name = &self.upcalls[usize::from(index)];
                     line.push_str(&format!(", {}", name))
                 }

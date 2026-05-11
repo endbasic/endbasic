@@ -16,7 +16,6 @@
 
 //! A callable exposed to integration tests.
 
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -49,13 +48,12 @@ impl MaxDoublesFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for MaxDoublesFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut max = f64::MIN;
         let num_singular: usize = 0;
         let mut reg = num_singular;

@@ -16,7 +16,6 @@
 
 //! A callable exposed to integration tests.
 
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::rc::Rc;
 
@@ -36,13 +35,12 @@ impl LastErrorFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for LastErrorFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let last_error = scope
             .last_error()
             .map(|(pos, message)| format!("{}: {}", pos, message))

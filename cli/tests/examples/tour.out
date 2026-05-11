@@ -220,7 +220,7 @@ you know, to keep me motivated in writing stuff and building this project:
 0049:   UPCALL      3, R64              ; 37:5, PRINT
 0050:   LOADI       R64, 1              ; 38:14
 0051:   UPCALL      1, R64              ; 38:5, GFX_SYNC
-0052:   UPCALL      5, R64              ; 40:21, INKEY
+0052:   UPCALLA     5, R64              ; 40:21, INKEY
 0053:   MOVE        R65, R64            ; 41:14
 0054:   LOADI       R66, 4              ; 41:14
 0055:   CMPEQS      R67, R65, R66       ; 41:14
@@ -240,7 +240,7 @@ you know, to keep me motivated in writing stuff and building this project:
 0069:   JUMP        451                 ; 42:26
 0070:   JUMP        73                  ; 44:9
 0071:   LOADC       R64, 6              ; 43:26
-0072:   UPCALL      6, R64              ; 43:20, SLEEP
+0072:   UPCALLA     6, R64              ; 43:20, SLEEP
 0073:   JUMP        52                  ; 0:0
 0074:   RETURN                          ; 46:1
 ;; WAIT (END)

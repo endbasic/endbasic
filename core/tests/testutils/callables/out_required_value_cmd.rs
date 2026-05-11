@@ -17,7 +17,6 @@
 //! A callable exposed to integration tests.
 
 use super::format_arg;
-use async_trait::async_trait;
 use endbasic_core::*;
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -49,13 +48,12 @@ impl OutRequiredValueCommand {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for OutRequiredValueCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut output = self.output.borrow_mut();
         output.push_str(&format_arg(&scope, 0, ExprType::Integer));
         output.push('\n');

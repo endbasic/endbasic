@@ -16,7 +16,6 @@
 
 //! Array-related functions for EndBASIC.
 
-use async_trait::async_trait;
 use endbasic_core::{
     ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
     CallableMetadataBuilder, ExprType, RequiredRefSyntax, RequiredValueSyntax, Scope,
@@ -124,13 +123,12 @@ dimension% is a 1-indexed integer.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for LboundFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let (_dimensions, _dim) = parse_bound_args(&scope)?;
         scope.return_integer(0)
     }
@@ -193,13 +191,12 @@ dimension% is a 1-indexed integer.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for UboundFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let (dimensions, dim) = parse_bound_args(&scope)?;
         scope.return_integer((dimensions[dim - 1] - 1) as i32)
     }

@@ -64,6 +64,7 @@ impl LoginCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOGIN")
+                .with_async(true)
                 .with_syntax(&[
                     (
                         &[SingularArgSyntax::RequiredValue(
@@ -140,7 +141,7 @@ impl Callable for LoginCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if self.service.borrow().is_logged_in() {
             return Err(CallError::Other("Cannot LOGIN again before LOGOUT"));
         }
@@ -176,6 +177,7 @@ impl LogoutCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LOGOUT")
+                .with_async(true)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -197,7 +199,7 @@ impl Callable for LogoutCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         if !self.service.borrow().is_logged_in() {
@@ -261,6 +263,7 @@ impl ShareCommand {
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SHARE")
+                .with_async(true)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax {
@@ -353,7 +356,7 @@ impl Callable for ShareCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_ne!(0, scope.nargs());
         let filename = scope.get_string(0).to_owned();
 
@@ -443,6 +446,7 @@ impl SignupCommand {
     pub fn new(service: Rc<RefCell<dyn Service>>, console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SIGNUP")
+                .with_async(true)
                 .with_syntax(&[(&[], None)])
                 .with_category(CATEGORY)
                 .with_description(
@@ -501,7 +505,7 @@ impl Callable for SignupCommand {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
 
         let console = &mut *self.console.borrow_mut();

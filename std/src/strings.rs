@@ -16,7 +16,6 @@
 
 //! String functions for EndBASIC.
 
-use async_trait::async_trait;
 use endbasic_core::{
     AnyValueSyntax, ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
     CallableMetadataBuilder, ExprType, RequiredValueSyntax, Scope, SingularArgSyntax, VarArgTag,
@@ -105,13 +104,12 @@ See CHR$() for the inverse of this function.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for AscFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let s = scope.get_string(0);
 
@@ -172,13 +170,12 @@ See ASC%() for the inverse of this function.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for ChrFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let i = scope.get_integer(0);
 
@@ -240,13 +237,12 @@ If n% is greater than or equal to the number of characters in expr$, returns exp
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for LeftFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
         let s = scope.get_string(0).to_owned();
         let n = scope.get_integer(1);
@@ -285,13 +281,12 @@ impl LenFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for LenFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let s = scope.get_string(0);
 
@@ -325,13 +320,12 @@ impl LtrimFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for LtrimFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let s = scope.get_string(0).to_owned();
 
@@ -409,13 +403,12 @@ until the end of the string.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for MidFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert!((2..=3).contains(&scope.nargs()));
         let s = scope.get_string(0).to_owned();
         let start = scope.get_integer(1);
@@ -486,13 +479,12 @@ If n% is greater than or equal to the number of characters in expr$, returns exp
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for RightFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
         let s = scope.get_string(0).to_owned();
         let n = scope.get_integer(1);
@@ -531,13 +523,12 @@ impl RtrimFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for RtrimFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let s = scope.get_string(0).to_owned();
 
@@ -579,13 +570,12 @@ in it, do LTRIM$(STR$(expr)).",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for StrFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(2, scope.nargs());
         match scope.get_type(0) {
             VarArgTag::Immediate(_, ExprType::Boolean) => {

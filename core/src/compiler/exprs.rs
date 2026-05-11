@@ -640,7 +640,12 @@ pub(super) fn compile_expr(
                     codegen.add_fixup(addr, Fixup::Call(ret_reg, key));
                 } else {
                     let upcall = codegen.get_upcall(key, Some(etype), key_pos)?;
-                    let addr = codegen.emit(bytecode::make_upcall(upcall, ret_reg), key_pos);
+                    let op = if md.is_async() {
+                        bytecode::make_upcall_async(upcall, ret_reg)
+                    } else {
+                        bytecode::make_upcall(upcall, ret_reg)
+                    };
+                    let addr = codegen.emit(op, key_pos);
                     codegen.set_arg_linecols(addr, arg_linecols);
                 }
                 if reg != ret_reg {
@@ -709,13 +714,20 @@ pub(super) fn compile_expr(
                 } else {
                     let upcall = codegen.get_upcall(key, Some(etype), span.pos)?;
                     let (is_global, _) = reg.to_parts();
+                    let make_upcall = |ret_reg| {
+                        if md.is_async() {
+                            bytecode::make_upcall_async(upcall, ret_reg)
+                        } else {
+                            bytecode::make_upcall(upcall, ret_reg)
+                        }
+                    };
                     if is_global {
                         let mut scope = symtable.temp_scope();
                         let temp = scope.alloc().map_err(|e| Error::from_syms(e, span.pos))?;
-                        codegen.emit(bytecode::make_upcall(upcall, temp), span.pos);
+                        codegen.emit(make_upcall(temp), span.pos);
                         codegen.emit(bytecode::make_move(reg, temp), span.pos);
                     } else {
-                        codegen.emit(bytecode::make_upcall(upcall, reg), span.pos);
+                        codegen.emit(make_upcall(reg), span.pos);
                     }
                 }
                 Ok(etype)

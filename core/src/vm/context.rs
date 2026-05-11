@@ -45,6 +45,9 @@ pub(super) enum InternalStopReason {
     /// The fields are: upcall index, first argument register, and the PC of the UPCALL instruction.
     Upcall(u16, Register, Address),
 
+    /// The fields are: upcall index, first argument register, and the PC of the UPCALLA instruction.
+    UpcallAsync(u16, Register, Address),
+
     /// Execution stopped to yield control back to the caller.
     Yield,
 }
@@ -427,6 +430,7 @@ impl Context {
                 Opcode::SubtractDouble => self.do_subtract_double(instr),
                 Opcode::SubtractInteger => self.do_subtract_integer(instr),
                 Opcode::Upcall => self.do_upcall(instr),
+                Opcode::UpcallAsync => self.do_upcall_async(instr),
             }
         }
         self.stop.take().expect("The loop above can only exit when there is a stop reason")
@@ -1090,5 +1094,13 @@ impl Context {
         let upcall_pc = self.pc;
         self.pc += 1;
         self.stop = Some(InternalStopReason::Upcall(index, first_reg, upcall_pc));
+    }
+
+    /// Implements the `UpcallAsync` opcode.
+    pub(super) fn do_upcall_async(&mut self, instr: u32) {
+        let (index, first_reg) = bytecode::parse_upcall_async(instr);
+        let upcall_pc = self.pc;
+        self.pc += 1;
+        self.stop = Some(InternalStopReason::UpcallAsync(index, first_reg, upcall_pc));
     }
 }

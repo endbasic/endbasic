@@ -141,13 +141,12 @@ the DEG and RAD commands.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for AtnFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let n = scope.get_double(0);
 
@@ -190,13 +189,12 @@ integer.  For example, 4.4 becomes 4, but both 4.5 and 4.6 become 5.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for CintFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let value = scope.get_double(0);
 
@@ -218,6 +216,7 @@ impl CosFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COS")
                 .with_return_type(ExprType::Double)
+                .with_async(true)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax {
@@ -246,7 +245,7 @@ impl Callable for CosFunction {
         self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
         let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
         scope.return_double(angle.cos())
     }
@@ -276,13 +275,12 @@ environment to use degrees until instructed otherwise.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for DegCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         *self.angle_mode.borrow_mut() = AngleMode::Degrees;
         Ok(())
@@ -321,13 +319,12 @@ integer that is not larger than the double value.  For example, all of 4.4, 4.5 
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for IntFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let value = scope.get_double(0);
 
@@ -365,13 +362,12 @@ impl MaxFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for MaxFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut max = f64::MIN;
         for i in 0..(scope.nargs() as u8) {
             let n = scope.get_double(i);
@@ -411,13 +407,12 @@ impl MinFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for MinFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let mut min = f64::MAX;
         for i in 0..(scope.nargs() as u8) {
             let n = scope.get_double(i);
@@ -448,13 +443,12 @@ impl PiFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for PiFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         scope.return_double(std::f64::consts::PI)
     }
@@ -484,13 +478,12 @@ degrees with the DEG command.  RAD restores the environment to use radians mode.
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for RadCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(0, scope.nargs());
         *self.angle_mode.borrow_mut() = AngleMode::Radians;
         Ok(())
@@ -533,13 +526,12 @@ WARNING: These random numbers offer no cryptographic guarantees.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for RandomizeCommand {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if scope.nargs() == 0 {
             *self.prng.borrow_mut() = Prng::new_from_entryopy();
         } else {
@@ -591,13 +583,12 @@ WARNING: These random numbers offer no cryptographic guarantees.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for RndFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if scope.nargs() == 0 {
             scope.return_double(self.prng.borrow_mut().next())
         } else {
@@ -626,6 +617,7 @@ impl SinFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SIN")
                 .with_return_type(ExprType::Double)
+                .with_async(true)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax {
@@ -654,7 +646,7 @@ impl Callable for SinFunction {
         self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
         let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
         scope.return_double(angle.sin())
     }
@@ -685,13 +677,12 @@ impl SqrFunction {
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for SqrFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         debug_assert_eq!(1, scope.nargs());
         let num = scope.get_double(0);
 
@@ -717,6 +708,7 @@ impl TanFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("TAN")
                 .with_return_type(ExprType::Double)
+                .with_async(true)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax {
@@ -745,7 +737,7 @@ impl Callable for TanFunction {
         self.metadata.clone()
     }
 
-    async fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
+    async fn async_exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
         let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
         scope.return_double(angle.tan())
     }
