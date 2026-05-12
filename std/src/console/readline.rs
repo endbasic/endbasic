@@ -1224,6 +1224,32 @@ mod tests {
     }
 
     #[test]
+    fn test_read_line_without_echo_delete() {
+        ReadLineInteractiveTest::default()
+            .set_echo(false)
+            .set_prompt("> ")
+            .set_previous("secret")
+            .add_output(CapturedOut::Write("> ******".to_string()))
+            .add_output(CapturedOut::SyncNow)
+            // -
+            .add_key(Key::Home)
+            .add_output(CapturedOut::MoveWithinLine(-6))
+            // -
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            // -
+            .add_key(Key::Delete)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::Write("****".to_string()))
+            .add_output_bytes(" ")
+            .add_output(CapturedOut::MoveWithinLine(-5))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("scret")
+            .accept();
+    }
+
+    #[test]
     fn test_read_line_secure_trivial_test() {
         let mut console = MockConsole::default();
         console.set_interactive(true);
