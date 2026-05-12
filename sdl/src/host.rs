@@ -146,6 +146,7 @@ fn parse_event(event: Event) -> Option<Key> {
             Keycode::P if keymod.intersects(ctrl_mods) => Some(Key::ArrowUp),
 
             Keycode::Backspace => Some(Key::Backspace),
+            Keycode::Delete => Some(Key::Delete),
             Keycode::End => Some(Key::End),
             Keycode::Escape => Some(Key::Escape),
             Keycode::Home => Some(Key::Home),

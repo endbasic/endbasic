@@ -53,6 +53,7 @@ fn on_key_event_into_key(dom_event: KeyboardEvent) -> Key {
         38 => Key::ArrowUp,
         39 => Key::ArrowRight,
         40 => Key::ArrowDown,
+        46 => Key::Delete,
         b'A' if dom_event.ctrl_key() => Key::Home,
         b'B' if dom_event.ctrl_key() => Key::ArrowLeft,
         b'C' if dom_event.ctrl_key() => Key::Interrupt,

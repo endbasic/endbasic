@@ -214,6 +214,21 @@ async fn read_line_interactive(
                 pos += 1;
             }
 
+            Key::Delete => {
+                if pos < line.len() {
+                    console.hide_cursor()?;
+                    if echo {
+                        console.write(&line.end(pos + 1))?;
+                    } else {
+                        console.write(&SECURE_CHAR.repeat(line.len() - pos - 1))?;
+                    }
+                    console.write(" ")?;
+                    console.move_within_line(-((line.len() - pos) as i16))?;
+                    console.show_cursor()?;
+                    line.remove(pos);
+                }
+            }
+
             Key::End => {
                 let offset = line.len() - pos;
                 if offset > 0 {
@@ -287,6 +302,7 @@ async fn read_line_raw(console: &mut dyn Console) -> io::Result<String> {
                 }
             }
             Key::Char(ch) => line.push(ch),
+            Key::Delete => (),
             Key::End | Key::Home => (),
             Key::Escape => (),
             Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
@@ -745,6 +761,51 @@ mod tests {
     }
 
     #[test]
+    fn test_read_line_interactive_delete_trailing() {
+        ReadLineInteractiveTest::default()
+            .add_key_chars("abc")
+            .add_output_bytes("abc")
+            // -
+            .add_key(Key::Delete)
+            // -
+            .set_line("abc")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_delete_middle() {
+        ReadLineInteractiveTest::default()
+            .add_key_chars("has a tYpo")
+            .add_output_bytes("has a tYpo")
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::Delete)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::Write("po".to_string()))
+            .add_output_bytes(" ")
+            .add_output(CapturedOut::MoveWithinLine(-3))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .add_key_chars("y")
+            .add_output(CapturedOut::HideCursor)
+            .add_output_bytes("y")
+            .add_output(CapturedOut::Write("po".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("has a typo")
+            .accept();
+    }
+
+    #[test]
     fn test_read_line_interactive_test_move_bounds() {
         ReadLineInteractiveTest::default()
             .set_previous("12")
@@ -1119,6 +1180,10 @@ mod tests {
             .add_output_bytes("affected")
             // -
             .set_line("not affected")
+            .accept();
+
+        ReadLineInteractiveTest::default()
+            .add_key(Key::Delete)
             .accept();
     }
 

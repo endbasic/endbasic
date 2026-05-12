@@ -364,6 +364,22 @@ impl Editor {
                     self.dirty = true;
                 }
 
+                Key::Delete => {
+                    let line = &mut self.content[self.file_pos.line];
+                    if self.file_pos.col < line.len() {
+                        line.remove(self.file_pos.col);
+                        // TODO(jmmv): Refresh only the affected line.
+                        need_refresh = true;
+                        self.dirty = true;
+                    } else if self.file_pos.line < self.content.len() - 1 {
+                        let next_line = self.content.remove(self.file_pos.line + 1);
+                        let current_line = &mut self.content[self.file_pos.line];
+                        current_line.push_str(&next_line);
+                        need_refresh = true;
+                        self.dirty = true;
+                    }
+                }
+
                 Key::End => {
                     self.file_pos.col = self.content[self.file_pos.line].len();
                     self.insert_col = self.file_pos.col;

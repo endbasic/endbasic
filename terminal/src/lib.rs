@@ -120,6 +120,7 @@ impl TerminalConsole {
 
                     match ev.code {
                         KeyCode::Backspace => Key::Backspace,
+                        KeyCode::Delete => Key::Delete,
                         KeyCode::End => Key::End,
                         KeyCode::Esc => Key::Escape,
                         KeyCode::Home => Key::Home,

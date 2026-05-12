@@ -70,6 +70,9 @@ pub enum Key {
     /// A printable character.
     Char(char),
 
+    /// Deletes the next character.
+    Delete,
+
     /// The end key or `Ctrl-E`.
     End,
 
