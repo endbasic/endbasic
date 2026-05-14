@@ -51,6 +51,18 @@ use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
+/// Raises the current app to the front.
+#[cfg(target_os = "macos")]
+fn activate_app() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+
+    let mtm = MainThreadMarker::new().expect("activate_app must be called from the main thread");
+    let app = NSApplication::sharedApplication(mtm);
+    let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
+    app.activate();
+}
+
 /// Number of loop iterations to poll for requests or events before sleeping.
 ///
 /// We do this to avoid pauses that might occur if the client is sending us consecutive requests
@@ -254,6 +266,13 @@ impl Context {
         .opengl()
         .build()
         .map_err(window_build_error_to_io_error)?;
+
+        // macOS causes graphical apps started from the terminal to go into the background
+        // (the end of the Command+Tab switcher), which is confusing and unexpected.  We have
+        // to force the app to raise to the front.
+        #[cfg(target_os = "macos")]
+        activate_app();
+        window.raise();
 
         let size_pixels = {
             let (width, height) = window.drawable_size();

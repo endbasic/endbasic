@@ -31,6 +31,10 @@ path = "../std"
 version = "0.38"
 default-features = false
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSRunningApplication"] }
+
 [dev-dependencies]
 flate2 = "1.0"
 futures-lite = "2.2"
