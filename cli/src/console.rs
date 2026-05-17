@@ -18,75 +18,72 @@
 
 use async_channel::Sender;
 use endbasic_std::Signal;
-use endbasic_std::console::{Console, ConsoleSpec};
+use endbasic_std::console::{Console, ConsoleFactory, ConsoleSpec};
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
 
-/// Sets up the console.
-pub(crate) fn setup_console(
-    console_spec: Option<&str>,
-    signals_tx: Sender<Signal>,
-) -> io::Result<Rc<RefCell<dyn Console>>> {
-    /// Creates the textual console when crossterm support is built in.
+/// Console factory for a terminal-backed console.
+struct TextConsoleFactory {}
+
+impl ConsoleFactory for TextConsoleFactory {
     #[cfg(feature = "crossterm")]
-    fn setup_text_console(signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
+    fn build(self: Box<Self>, signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
         Ok(Rc::from(RefCell::from(endbasic_terminal::TerminalConsole::from_stdio(signals_tx)?)))
     }
 
-    /// Creates the textual console with very basic features when crossterm support is not built in.
     #[cfg(not(feature = "crossterm"))]
-    fn setup_text_console(_signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
+    fn build(self: Box<Self>, signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
         Ok(Rc::from(RefCell::from(endbasic_std::console::TrivialConsole::default())))
     }
+}
 
-    /// Creates the graphical console when SDL support is built in.
-    #[cfg(feature = "sdl")]
-    fn setup_sdl_console(
-        signals_tx: Sender<Signal>,
-        spec: &mut ConsoleSpec,
-    ) -> io::Result<Rc<RefCell<dyn Console>>> {
-        endbasic_sdl::setup(spec, &endbasic_std::gfx::lcd::fonts::Fonts::all(), signals_tx)
-    }
+/// Instantiates a console factory for a terminal-backed console.
+fn setup_text_console() -> Box<dyn ConsoleFactory> {
+    Box::from(TextConsoleFactory {})
+}
 
-    /// Errors out during the creation of the graphical console when SDL support is not compiled in.
-    #[cfg(not(feature = "sdl"))]
-    fn setup_sdl_console(
-        _signals_tx: Sender<Signal>,
-        _spec: &mut ConsoleSpec,
-    ) -> io::Result<Rc<RefCell<dyn Console>>> {
-        // TODO(jmmv): Make this io::ErrorKind::Unsupported when our MSRV allows it.
-        Err(io::Error::new(io::ErrorKind::InvalidInput, "SDL support not compiled in"))
-    }
+/// Instantiates a console factory for an SDL-backed console with the given `spec`.
+#[cfg(feature = "sdl")]
+pub fn setup_sdl_console(spec: &mut ConsoleSpec) -> io::Result<Box<dyn ConsoleFactory>> {
+    let factory =
+        endbasic_sdl::SdlConsoleFactory::new(spec, &endbasic_std::gfx::lcd::fonts::Fonts::all())?;
+    Ok(Box::from(factory))
+}
 
-    #[cfg(feature = "rpi")]
-    fn setup_st7735s_console(
-        signals_tx: Sender<Signal>,
-        spec: &mut ConsoleSpec,
-    ) -> io::Result<Rc<RefCell<dyn Console>>> {
-        let console = endbasic_st7735s::new_console(
-            endbasic_rpi::RppalPins::default(),
-            endbasic_rpi::spi_bus_open,
-            endbasic_terminal::TerminalConsole::from_stdio(signals_tx)?,
-            spec,
-            &endbasic_std::gfx::lcd::fonts::Fonts::all(),
-        )?;
-        Ok(Rc::from(RefCell::from(console)))
-    }
+/// Instantiates a console factory for an SDL-backed console with the given `spec`.
+#[cfg(not(feature = "sdl"))]
+pub fn setup_sdl_console(_spec: &mut ConsoleSpec) -> io::Result<Box<dyn ConsoleFactory>> {
+    // TODO(jmmv): Make this io::ErrorKind::Unsupported when our MSRV allows it.
+    Err(io::Error::new(io::ErrorKind::InvalidInput, "SDL support not compiled in"))
+}
 
-    #[cfg(not(feature = "rpi"))]
-    fn setup_st7735s_console(
-        _signals_tx: Sender<Signal>,
-        _spec: &mut ConsoleSpec,
-    ) -> io::Result<Rc<RefCell<dyn Console>>> {
-        Err(io::Error::new(io::ErrorKind::InvalidInput, "ST7735S support not compiled in"))
-    }
+/// Instantiates a console factory for an ST7735s-backed console with the given `spec`.
+#[cfg(feature = "rpi")]
+fn setup_st7735s_console(spec: &mut ConsoleSpec) -> io::Result<Box<dyn ConsoleFactory>> {
+    let factory = endbasic_st7735s::St7735sConsoleFactory::new(
+        endbasic_rpi::RppalPins::default(),
+        endbasic_rpi::spi_bus_open,
+        endbasic_terminal::TerminalConsole::from_stdio,
+        spec,
+        &endbasic_std::gfx::lcd::fonts::Fonts::all(),
+    )?;
+    Ok(Box::from(factory))
+}
 
+/// Instantiates a console factory for an ST7735s-backed console with the given `spec`.
+#[cfg(not(feature = "rpi"))]
+fn setup_st7735s_console(_spec: &mut ConsoleSpec) -> io::Result<Box<dyn ConsoleFactory>> {
+    Err(io::Error::new(io::ErrorKind::InvalidInput, "ST7735S support not compiled in"))
+}
+
+/// Sets up the console.
+pub fn setup_console(console_spec: Option<&str>) -> io::Result<Box<dyn ConsoleFactory>> {
     let mut console_spec = ConsoleSpec::init(console_spec.unwrap_or("text"));
-    let console: Rc<RefCell<dyn Console>> = match console_spec.driver {
-        "sdl" => setup_sdl_console(signals_tx, &mut console_spec)?,
-        "st7735s" => setup_st7735s_console(signals_tx, &mut console_spec)?,
-        "text" => setup_text_console(signals_tx)?,
+    let console: Box<dyn ConsoleFactory> = match console_spec.driver {
+        "sdl" => setup_sdl_console(&mut console_spec)?,
+        "st7735s" => setup_st7735s_console(&mut console_spec)?,
+        "text" => setup_text_console(),
         driver => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,

@@ -17,7 +17,9 @@ Arguments:
     [program-file]      script to execute without entering interactive mode
 
 CONSOLE-SPEC can be one of the following:
-    st7735s             enables the ST7735S LCD console
+    st7735s[:SPEC]      enables the ST7735S LCD console and configures it
+                        with the settings in SPEC, which is of the form:
+                        fg_color=COLOR,bg_color=COLOR,font=NAME
     text                enables the text-based console
 
 GPIO-PINS-SPEC can be one of the following:

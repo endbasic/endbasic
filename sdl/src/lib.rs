@@ -18,8 +18,8 @@
 
 use async_channel::Sender;
 use endbasic_std::Signal;
-use endbasic_std::console::{Console, ConsoleSpec, Resolution};
-use endbasic_std::gfx::lcd::fonts::{FONT_VGA8X16, Fonts};
+use endbasic_std::console::{Console, ConsoleFactory, ConsoleSpec, Resolution};
+use endbasic_std::gfx::lcd::fonts::{FONT_VGA8X16, Font, Fonts};
 use std::cell::RefCell;
 use std::io;
 use std::num::NonZeroU32;
@@ -36,25 +36,42 @@ fn string_error_to_io_error(e: String) -> io::Error {
     io::Error::other(e)
 }
 
-/// Creates the graphical console based on the given `spec`.
-pub fn setup(
-    spec: &mut ConsoleSpec,
-    fonts: &Fonts,
-    signals_tx: Sender<Signal>,
-) -> io::Result<Rc<RefCell<dyn Console>>> {
-    let resolution: Resolution = spec.take_keyed_flag("resolution")?.unwrap_or_else(|| {
-        let width = NonZeroU32::new(DEFAULT_RESOLUTION_PIXELS.0).unwrap();
-        let height = NonZeroU32::new(DEFAULT_RESOLUTION_PIXELS.1).unwrap();
-        Resolution::Windowed((width, height))
-    });
+/// Console factory for an SDL-backed graphical console.
+pub struct SdlConsoleFactory {
+    resolution: Resolution,
+    default_fg_color: Option<u8>,
+    default_bg_color: Option<u8>,
+    font: &'static Font,
+}
 
-    let default_fg_color = spec.take_keyed_flag::<u8>("fg_color")?;
-    let default_bg_color = spec.take_keyed_flag::<u8>("bg_color")?;
+impl SdlConsoleFactory {
+    /// Creates an SDL console factory based on the given `spec`.
+    pub fn new(spec: &mut ConsoleSpec<'_>, fonts: &Fonts) -> io::Result<Self> {
+        let resolution: Resolution = spec.take_keyed_flag("resolution")?.unwrap_or_else(|| {
+            let width = NonZeroU32::new(DEFAULT_RESOLUTION_PIXELS.0).unwrap();
+            let height = NonZeroU32::new(DEFAULT_RESOLUTION_PIXELS.1).unwrap();
+            Resolution::Windowed((width, height))
+        });
 
-    let font_name = spec.take_keyed_flag_str("font").unwrap_or(FONT_VGA8X16.name);
-    let font = fonts.get(font_name)?;
+        let default_fg_color = spec.take_keyed_flag::<u8>("fg_color")?;
+        let default_bg_color = spec.take_keyed_flag::<u8>("bg_color")?;
 
-    let console =
-        console::SdlConsole::new(resolution, default_fg_color, default_bg_color, font, signals_tx)?;
-    Ok(Rc::from(RefCell::from(console)))
+        let font_name = spec.take_keyed_flag_str("font").unwrap_or(FONT_VGA8X16.name);
+        let font = fonts.get(font_name)?;
+
+        Ok(SdlConsoleFactory { resolution, default_fg_color, default_bg_color, font })
+    }
+}
+
+impl ConsoleFactory for SdlConsoleFactory {
+    fn build(self: Box<Self>, signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
+        let console = console::SdlConsole::new(
+            self.resolution,
+            self.default_fg_color,
+            self.default_bg_color,
+            self.font,
+            signals_tx,
+        )?;
+        Ok(Rc::from(RefCell::from(console)))
+    }
 }

@@ -23,17 +23,21 @@
 
 //! Console driver for the ST7735S LCD.
 
-use async_channel::{Receiver, TryRecvError};
+use async_channel::{Receiver, Sender, TryRecvError};
 use async_trait::async_trait;
+use endbasic_std::Signal;
 use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
-    CharsXY, ClearType, Console, ConsoleSpec, GraphicsConsole, Key, PixelsXY, RGB, SizeInPixels,
+    CharsXY, ClearType, Console, ConsoleFactory, ConsoleSpec, GraphicsConsole, Key, PixelsXY, RGB,
+    SizeInPixels,
 };
-use endbasic_std::gfx::lcd::fonts::{FONT_5X8, Fonts};
+use endbasic_std::gfx::lcd::fonts::{FONT_5X8, Font, Fonts};
 use endbasic_std::gfx::lcd::{BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel, to_xy_size};
 use endbasic_std::gpio::{Pin, PinMode, Pins};
 use endbasic_std::spi::{SpiBus, SpiMode};
+use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -488,32 +492,71 @@ impl<P: Pins + Send, B: SpiBus, K: InputOps> Console for ST7735SConsole<P, B, K>
     }
 }
 
-/// Initializes a new console on a ST7735S LCD.
-pub fn new_console<P, F, B, K>(
-    pins: P,
-    new_spi: F,
-    keyboard: K,
-    spec: &mut ConsoleSpec,
-    fonts: &Fonts,
-) -> io::Result<ST7735SConsole<P, B, K>>
+/// Console factory for the ST7735S LCD.
+pub struct St7735sConsoleFactory<P, F, B, KF, K>
 where
     P: Pins + Send + 'static,
-    F: FnOnce(u8, u8, u32, SpiMode) -> io::Result<B>,
-    B: SpiBus,
-    K: InputOps,
+    F: Fn(u8, u8, u32, SpiMode) -> io::Result<B> + Send,
+    B: SpiBus + Send + 'static,
+    KF: FnOnce(Sender<Signal>) -> io::Result<K> + Send,
+    K: InputOps + Send + 'static,
 {
-    let default_fg_color = spec.take_keyed_flag::<u8>("fg_color")?;
-    let default_bg_color = spec.take_keyed_flag::<u8>("bg_color")?;
+    pins: P,
+    new_spi: F,
+    keyboard_factory: KF,
+    default_fg_color: Option<u8>,
+    default_bg_color: Option<u8>,
+    font: &'static Font,
+}
 
-    let font_name = spec.take_keyed_flag_str("font").unwrap_or(FONT_5X8.name);
-    let font = fonts.get(font_name)?;
+impl<P, F, B, KF, K> St7735sConsoleFactory<P, F, B, KF, K>
+where
+    P: Pins + Send + 'static,
+    F: Fn(u8, u8, u32, SpiMode) -> io::Result<B> + Send,
+    B: SpiBus + Send + 'static,
+    KF: FnOnce(Sender<Signal>) -> io::Result<K> + Send,
+    K: InputOps + Send + 'static,
+{
+    /// Creates an ST7735s console factory based on the given `spec` and wires it to
+    /// various other pieces.
+    pub fn new(
+        pins: P,
+        new_spi: F,
+        keyboard_factory: KF,
+        spec: &mut ConsoleSpec<'_>,
+        fonts: &Fonts,
+    ) -> io::Result<Self> {
+        let default_fg_color = spec.take_keyed_flag::<u8>("fg_color")?;
+        let default_bg_color = spec.take_keyed_flag::<u8>("bg_color")?;
 
-    let pins = Arc::from(Mutex::from(pins));
-    let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
-    let input = ST7735SInput::new(pins, keyboard)?;
-    let lcd = BufferedLcd::new(lcd, font);
-    let inner = GraphicsConsole::new(input, lcd, default_fg_color, default_bg_color)?;
-    Ok(ST7735SConsole { inner })
+        let font_name = spec.take_keyed_flag_str("font").unwrap_or(FONT_5X8.name);
+        let font = fonts.get(font_name)?;
+
+        Ok(Self { pins, new_spi, keyboard_factory, default_fg_color, default_bg_color, font })
+    }
+}
+
+impl<P, F, B, KF, K> ConsoleFactory for St7735sConsoleFactory<P, F, B, KF, K>
+where
+    P: Pins + Send + 'static,
+    F: Fn(u8, u8, u32, SpiMode) -> io::Result<B> + Send,
+    B: SpiBus + Send + 'static,
+    KF: FnOnce(Sender<Signal>) -> io::Result<K> + Send,
+    K: InputOps + Send + 'static,
+{
+    fn build(self: Box<Self>, signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
+        let Self { pins, new_spi, keyboard_factory, default_fg_color, default_bg_color, font } =
+            *self;
+
+        let keyboard = keyboard_factory(signals_tx)?;
+        let pins = Arc::from(Mutex::from(pins));
+        let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
+        let input = ST7735SInput::new(pins, keyboard)?;
+        let lcd = BufferedLcd::new(lcd, font);
+        let inner = GraphicsConsole::new(input, lcd, default_fg_color, default_bg_color)?;
+        let console = ST7735SConsole { inner };
+        Ok(Rc::from(RefCell::from(console)))
+    }
 }
 
 #[cfg(test)]
