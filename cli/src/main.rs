@@ -19,6 +19,7 @@
 use endbasic::*;
 use getoptsargs::prelude::*;
 use std::io;
+use std::thread;
 
 /// Prints extra usage information into `o`.
 fn app_extra_help(o: &mut dyn io::Write) -> io::Result<()> {
@@ -66,7 +67,7 @@ fn app_build(builder: Builder) -> Builder {
         .extra_help(app_extra_help)
 }
 
-async fn app_main(matches: Matches) -> Result<i32> {
+fn app_main(matches: Matches) -> Result<i32> {
     let console_spec = matches.opt_str("console");
 
     let gpio_pins_spec = matches.opt_str("gpio-pins");
@@ -75,9 +76,18 @@ async fn app_main(matches: Matches) -> Result<i32> {
         .opt_str("service-url")
         .unwrap_or_else(|| endbasic_client::PROD_API_ADDRESS.to_owned());
 
+    let console_factory = setup_console(console_spec.as_deref())?;
+
     let app_mode = AppMode::from_matches(matches)?;
 
-    async_app_main(app_mode, console_spec.as_deref(), gpio_pins_spec, service_url).await
+    let interpreter = thread::spawn(move || -> Result<i32> {
+        let runtime = tokio::runtime::Runtime::new()?;
+        runtime.block_on(async move {
+            async_app_main(app_mode, console_factory, gpio_pins_spec, service_url).await
+        })
+    });
+
+    interpreter.join().expect("Interpreter thread shoult not have panicked")
 }
 
-tokio_app!("EndBASIC", app_build, app_main);
+app!("EndBASIC", app_build, app_main);

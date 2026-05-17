@@ -17,6 +17,8 @@
 //! Console representation and manipulation.
 
 use crate::Clearable;
+use crate::Signal;
+use async_channel::Sender;
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -326,6 +328,17 @@ pub trait Console {
     ///
     /// Returns the previous status of the video syncing flag.
     fn set_sync(&mut self, _enabled: bool) -> io::Result<bool>;
+}
+
+/// Trait for an object that is able to instantiate a console.
+///
+/// Console objects are not `Send` so we must instantiate them within the thread that runs
+/// the REPL.  But in some cases, we need to create the console in a thread that's different than
+/// the one that will run it.  The factory allows us to prepare the console elsewhere, passing the
+/// Send-safe factory into the REPL thread.
+pub trait ConsoleFactory: Send {
+    /// Creates a new console and wires it up to inject signals into `signals_tx`.
+    fn build(self: Box<Self>, signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>>;
 }
 
 /// Resets the state of a console in a best-effort manner.

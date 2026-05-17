@@ -18,6 +18,7 @@
 
 use anyhow::Result;
 use endbasic_client::CloudService;
+use endbasic_std::console::ConsoleFactory;
 use endbasic_std::storage::Storage;
 use endbasic_std::{Error as StdError, MachineBuilder};
 use getoptsargs::prelude::*;
@@ -27,7 +28,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 mod console;
-use console::setup_console;
+pub use console::setup_console;
 
 mod gpio;
 use gpio::setup_gpio_pins;
@@ -40,12 +41,13 @@ const INTERRUPTED_EXIT_CODE: i32 = 128 + 2;
 
 /// Creates a new EndBASIC machine builder based on the features enabled in this crate.
 fn new_machine_builder(
-    console_spec: Option<&str>,
+    console_factory: Box<dyn ConsoleFactory>,
     gpio_pins_spec: Option<&str>,
 ) -> Result<MachineBuilder> {
     let signals_chan = async_channel::unbounded();
+    let console = console_factory.build(signals_chan.0.clone())?;
     let mut builder = MachineBuilder::default();
-    builder = builder.with_console(setup_console(console_spec, signals_chan.0.clone())?);
+    builder = builder.with_console(console);
     builder = builder.with_signals_chan(signals_chan);
     builder = builder.with_gpio_pins(setup_gpio_pins(gpio_pins_spec)?);
     Ok(builder)
@@ -56,12 +58,12 @@ fn new_machine_builder(
 /// `local_drive` is the optional local drive to mount and use as the default location.
 /// `service_url` is the base URL of the cloud service.
 pub async fn run_repl_loop(
-    console_spec: Option<&str>,
+    console_factory: Box<dyn ConsoleFactory>,
     gpio_pins_spec: Option<&str>,
     local_drive_spec: &str,
     service_url: &str,
 ) -> Result<i32> {
-    let mut builder = new_machine_builder(console_spec, gpio_pins_spec)?;
+    let mut builder = new_machine_builder(console_factory, gpio_pins_spec)?;
     let console = builder.get_console();
     let program = Rc::from(RefCell::from(endbasic_repl::editor::Editor::default()));
     let storage = Rc::from(RefCell::from(Storage::default()));
@@ -89,10 +91,10 @@ pub async fn run_repl_loop(
 /// Executes the `path` program in a fresh machine.
 pub async fn run_script<P: AsRef<Path>>(
     path: P,
-    console_spec: Option<&str>,
+    console_factory: Box<dyn ConsoleFactory>,
     gpio_pins_spec: Option<&str>,
 ) -> Result<i32> {
-    let builder = new_machine_builder(console_spec, gpio_pins_spec)?;
+    let builder = new_machine_builder(console_factory, gpio_pins_spec)?;
     let mut machine = builder.build();
     let mut input = File::open(path)?;
 
@@ -115,12 +117,12 @@ pub async fn run_script<P: AsRef<Path>>(
 /// just in the web and helps test this feature.
 pub async fn run_interactive(
     path: &str,
-    console_spec: Option<&str>,
+    console_factory: Box<dyn ConsoleFactory>,
     gpio_pins_spec: Option<&str>,
     local_drive_spec: &str,
     service_url: &str,
 ) -> Result<i32> {
-    let mut builder = new_machine_builder(console_spec, gpio_pins_spec)?;
+    let mut builder = new_machine_builder(console_factory, gpio_pins_spec)?;
     let console = builder.get_console();
     let program = Rc::from(RefCell::from(endbasic_repl::editor::Editor::default()));
     let storage = Rc::from(RefCell::from(Storage::default()));
@@ -210,25 +212,28 @@ impl AppMode {
 /// Runs the EndBASIC CLI depending on the provided `app_mode`.
 pub async fn async_app_main(
     app_mode: AppMode,
-    console_spec: Option<&str>,
+    console_factory: Box<dyn ConsoleFactory>,
     gpio_pins_spec: Option<String>,
     service_url: String,
 ) -> Result<i32> {
     match app_mode {
-        AppMode::Repl(local_drive) => {
-            Ok(run_repl_loop(console_spec, gpio_pins_spec.as_deref(), &local_drive, &service_url)
-                .await?)
-        }
+        AppMode::Repl(local_drive) => Ok(run_repl_loop(
+            console_factory,
+            gpio_pins_spec.as_deref(),
+            &local_drive,
+            &service_url,
+        )
+        .await?),
         AppMode::RunInteractive(file, local_drive) => Ok(run_interactive(
             &file,
-            console_spec,
+            console_factory,
             gpio_pins_spec.as_deref(),
             &local_drive,
             &service_url,
         )
         .await?),
         AppMode::RunScript(file) => {
-            Ok(run_script(file, console_spec, gpio_pins_spec.as_deref()).await?)
+            Ok(run_script(file, console_factory, gpio_pins_spec.as_deref()).await?)
         }
     }
 }
