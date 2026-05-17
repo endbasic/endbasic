@@ -20,6 +20,7 @@ use anyhow::Result;
 use endbasic_client::CloudService;
 use endbasic_std::storage::Storage;
 use endbasic_std::{Error as StdError, MachineBuilder};
+use getoptsargs::prelude::*;
 use std::cell::RefCell;
 use std::fs::File;
 use std::path::Path;
@@ -32,8 +33,7 @@ mod gpio;
 use gpio::setup_gpio_pins;
 
 mod storage;
-pub use storage::get_local_drive_spec;
-use storage::setup_storage;
+use storage::{get_local_drive_spec, setup_storage};
 
 /// Exit code representing `SIGINT` following shell semantics.
 const INTERRUPTED_EXIT_CODE: i32 = 128 + 2;
@@ -163,6 +163,72 @@ pub async fn run_interactive(
                 Err(StdError::Break) => Ok(INTERRUPTED_EXIT_CODE),
                 Err(e) => Err(e.into()),
             }
+        }
+    }
+}
+
+/// Representation of the CLI execution mode and the arguments required for each.
+pub enum AppMode {
+    /// Enter the REPL.
+    ///
+    /// The first argument contains the local drive spec.
+    Repl(String),
+
+    /// Run a file as if it had invoked in a REPL context.
+    ///
+    /// The first argument contains the file to run and the second argument contains the local
+    /// drive spec.
+    RunInteractive(String, String),
+
+    /// Run a file in scripting mode.
+    ///
+    /// The first argument contains the file to run.
+    RunScript(String),
+}
+
+impl AppMode {
+    /// Determines the app mode by parsing the remainder of `matches`.
+    pub fn from_matches(matches: Matches) -> Result<AppMode> {
+        match matches.arg_trail() {
+            [] => {
+                let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
+                Ok(AppMode::Repl(local_drive))
+            }
+            [file] => {
+                if matches.opt_present("interactive") {
+                    let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
+                    Ok(AppMode::RunInteractive((*file).to_owned(), local_drive))
+                } else {
+                    Ok(AppMode::RunScript((*file).to_owned()))
+                }
+            }
+            [_, ..] => Err(bad_usage!("Too many arguments").into()),
+        }
+    }
+}
+
+/// Runs the EndBASIC CLI depending on the provided `app_mode`.
+pub async fn async_app_main(
+    app_mode: AppMode,
+    console_spec: Option<&str>,
+    gpio_pins_spec: Option<String>,
+    service_url: String,
+) -> Result<i32> {
+    match app_mode {
+        AppMode::Repl(local_drive) => {
+            Ok(run_repl_loop(console_spec, gpio_pins_spec.as_deref(), &local_drive, &service_url)
+                .await?)
+        }
+        AppMode::RunInteractive(file, local_drive) => Ok(run_interactive(
+            &file,
+            console_spec,
+            gpio_pins_spec.as_deref(),
+            &local_drive,
+            &service_url,
+        )
+        .await?),
+        AppMode::RunScript(file) => {
+            Ok(run_script(file, console_spec, gpio_pins_spec.as_deref()).await?)
         }
     }
 }

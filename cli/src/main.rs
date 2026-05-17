@@ -75,34 +75,9 @@ async fn app_main(matches: Matches) -> Result<i32> {
         .opt_str("service-url")
         .unwrap_or_else(|| endbasic_client::PROD_API_ADDRESS.to_owned());
 
-    match matches.arg_trail() {
-        [] => {
-            let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-            Ok(run_repl_loop(
-                console_spec.as_deref(),
-                gpio_pins_spec.as_deref(),
-                &local_drive,
-                &service_url,
-            )
-            .await?)
-        }
-        [file] => {
-            if matches.opt_present("interactive") {
-                let local_drive = get_local_drive_spec(matches.opt_str("local-drive"))?;
-                Ok(run_interactive(
-                    file,
-                    console_spec.as_deref(),
-                    gpio_pins_spec.as_deref(),
-                    &local_drive,
-                    &service_url,
-                )
-                .await?)
-            } else {
-                Ok(run_script(file, console_spec.as_deref(), gpio_pins_spec.as_deref()).await?)
-            }
-        }
-        [_, ..] => Err(bad_usage!("Too many arguments").into()),
-    }
+    let app_mode = AppMode::from_matches(matches)?;
+
+    async_app_main(app_mode, console_spec.as_deref(), gpio_pins_spec, service_url).await
 }
 
 tokio_app!("EndBASIC", app_build, app_main);
