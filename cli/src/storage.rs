@@ -22,7 +22,7 @@ use endbasic_std::storage::{DirectoryDriveFactory, Storage};
 use std::io;
 
 /// Returns `flag` if present, or else returns the URI of the default `LOCAL` drive.
-pub fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
+pub(crate) fn get_local_drive_spec(flag: Option<String>) -> Result<String> {
     let dir = flag.or_else(|| {
         dirs::document_dir().map(|d| format!("file://{}", d.join("endbasic").display())).or_else(
             || {
