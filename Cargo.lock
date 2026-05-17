@@ -258,7 +258,6 @@ dependencies = [
  "getoptsargs",
  "regex",
  "tempfile",
- "thiserror",
  "tokio",
 ]
 
@@ -574,9 +573,9 @@ dependencies = [
 
 [[package]]
 name = "getoptsargs"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bef060f9bf206eaada7ee03e1ac21e44c273c78cd91a31822abfc1da64d1d374"
+checksum = "0947f8936691c13a2e8d2eca537e2d3edf0106d544f8082b96b38bd7cf7185b6"
 dependencies = [
  "anyhow",
  "getopts",

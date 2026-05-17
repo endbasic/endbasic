@@ -30,20 +30,6 @@ use std::io;
 use std::path::Path;
 use std::rc::Rc;
 
-/// Errors caused by the user when invoking this binary (invalid options or arguments).
-#[derive(Debug, thiserror::Error)]
-#[error("{message}")]
-struct UsageError {
-    message: String,
-}
-
-impl UsageError {
-    /// Creates a new usage error with `message`.
-    fn new<T: Into<String>>(message: T) -> Self {
-        Self { message: message.into() }
-    }
-}
-
 /// Prints extra usage information into `o`.
 fn app_extra_help(o: &mut dyn io::Write) -> io::Result<()> {
     writeln!(o, "CONSOLE-SPEC can be one of the following:")?;
@@ -84,7 +70,7 @@ fn setup_gpio_pins_rppal() -> Result<Rc<RefCell<dyn gpio::Pins>>> {
 /// Errors out for rppal when the rpi feature is not compiled in.
 #[cfg(not(feature = "rpi"))]
 fn setup_gpio_pins_rppal() -> Result<Rc<RefCell<dyn gpio::Pins>>> {
-    Err(UsageError::new("--gpio-pins=rppal requires the rpi feature to be compiled in").into())
+    Err(bad_usage!("--gpio-pins=rppal requires the rpi feature to be compiled in").into())
 }
 
 /// Parses the `--gpio-pins` flag value and constructs the pins backend.
@@ -94,7 +80,7 @@ fn setup_gpio_pins(spec: Option<&str>) -> Result<Rc<RefCell<dyn gpio::Pins>>> {
         "mock" => Ok(Rc::new(RefCell::new(gpio::MockPins::default()))),
         "noop" => Ok(Rc::new(RefCell::new(gpio::NoopPins::default()))),
         "rppal" => setup_gpio_pins_rppal(),
-        other => Err(UsageError::new(format!("Unknown --gpio-pins backend: {}", other)).into()),
+        other => Err(bad_usage!(format!("Unknown --gpio-pins backend: {}", other)).into()),
     }
 }
 
@@ -393,7 +379,7 @@ async fn app_main(matches: Matches) -> Result<i32> {
                 Ok(run_script(file, console_spec.as_deref(), gpio_pins_spec.as_deref()).await?)
             }
         }
-        [_, ..] => Err(UsageError::new("Too many arguments").into()),
+        [_, ..] => Err(bad_usage!("Too many arguments").into()),
     }
 }
 
