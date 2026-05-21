@@ -16,7 +16,6 @@
 
 //! Numerical functions for EndBASIC.
 
-use async_trait::async_trait;
 use endbasic_core::{
     ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
     CallableMetadataBuilder, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax,
@@ -65,7 +64,7 @@ impl Clearable for ClearableAngleMode {
 
 /// Gets the single argument to a trigonometric function, which is its angle.  Applies units
 /// conversion based on `angle_mode`.
-async fn get_angle(scope: &mut Scope<'_>, angle_mode: &AngleMode) -> CallResult<f64> {
+fn get_angle(scope: &mut Scope<'_>, angle_mode: &AngleMode) -> CallResult<f64> {
     debug_assert_eq!(1, scope.nargs());
     let angle = scope.get_double(0);
 
@@ -216,7 +215,6 @@ impl CosFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("COS")
                 .with_return_type(ExprType::Double)
-                .with_async(true)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax {
@@ -239,14 +237,13 @@ selected by the DEG and RAD commands.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for CosFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn async_exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
-        let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
+    fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
+        let angle = get_angle(&mut scope, &self.angle_mode.borrow())?;
         scope.return_double(angle.cos())
     }
 }
@@ -617,7 +614,6 @@ impl SinFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SIN")
                 .with_return_type(ExprType::Double)
-                .with_async(true)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax {
@@ -640,14 +636,13 @@ selected by the DEG and RAD commands.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for SinFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn async_exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
-        let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
+    fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
+        let angle = get_angle(&mut scope, &self.angle_mode.borrow())?;
         scope.return_double(angle.sin())
     }
 }
@@ -708,7 +703,6 @@ impl TanFunction {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("TAN")
                 .with_return_type(ExprType::Double)
-                .with_async(true)
                 .with_syntax(&[(
                     &[SingularArgSyntax::RequiredValue(
                         RequiredValueSyntax {
@@ -731,14 +725,13 @@ selected by the DEG and RAD commands.",
     }
 }
 
-#[async_trait(?Send)]
 impl Callable for TanFunction {
     fn metadata(&self) -> Rc<CallableMetadata> {
         self.metadata.clone()
     }
 
-    async fn async_exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
-        let angle = get_angle(&mut scope, &self.angle_mode.borrow()).await?;
+    fn exec(&self, mut scope: Scope<'_>) -> CallResult<()> {
+        let angle = get_angle(&mut scope, &self.angle_mode.borrow())?;
         scope.return_double(angle.tan())
     }
 }
