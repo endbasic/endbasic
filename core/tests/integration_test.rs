@@ -30,6 +30,13 @@ macro_rules! one_test {
             run_one_test(stringify!($name)).await
         }
     };
+    ( $name:ident, $ignore:expr ) => {
+        #[tokio::test]
+        #[ignore = $ignore]
+        async fn $name() -> io::Result<()> {
+            run_one_test(stringify!($name)).await
+        }
+    };
 }
 
 one_test!(test_args);
@@ -61,6 +68,7 @@ one_test!(test_gosub);
 one_test!(test_goto);
 one_test!(test_if);
 one_test!(test_incremental);
+one_test!(test_limits, "Very slow for regular development");
 one_test!(test_locals);
 one_test!(test_numerics);
 one_test!(test_on_error);
@@ -89,7 +97,8 @@ fn test_all_md_files_registered() -> io::Result<()> {
             let line = line?;
 
             if line.starts_with("one_test!(") {
-                let name = &line["one_test!(".len()..line.len() - 2];
+                let delim = line.find([',', ')']).unwrap();
+                let name = &line["one_test!(".len()..delim];
                 registered.push(format!("{}.md", name));
             }
         }

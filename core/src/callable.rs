@@ -20,6 +20,7 @@ use crate::ast::ArgSep;
 use crate::ast::ExprType;
 use crate::bytecode::TaggedRegisterRef;
 use crate::bytecode::VarArgTag;
+use crate::mem::HeapOverflowError;
 use crate::mem::{ConstantDatum, DatumPtr, Heap, HeapDatum};
 use crate::reader::LineCol;
 use async_trait::async_trait;
@@ -44,6 +45,12 @@ pub enum CallError {
     /// Indicates a syntax error only detectable at runtime.
     #[error("{0}: {1}")]
     Syntax(LineCol, String),
+}
+
+impl From<HeapOverflowError> for CallError {
+    fn from(value: HeapOverflowError) -> Self {
+        Self::Other(value.to_string())
+    }
 }
 
 impl CallError {
@@ -831,9 +838,10 @@ impl<'a, 'vm> RegisterRefMut<'a, 'vm> {
     }
 
     /// Sets a string via this register reference.
-    pub fn set_string<S: Into<String>>(&mut self, s: S) {
+    pub fn set_string<S: Into<String>>(&mut self, s: S) -> CallResult<()> {
         assert_eq!(ExprType::Text, self.vtype);
-        self.scope.regs[self.index] = self.scope.heap.push(HeapDatum::Text(s.into()));
+        self.scope.regs[self.index] = self.scope.heap.push(HeapDatum::Text(s.into()))?;
+        Ok(())
     }
 }
 
@@ -975,7 +983,7 @@ impl<'a> Scope<'a> {
     /// Always returns success.  The returned value is only to support the idiomatic invocation
     /// `return scope.return_string(...)`.
     pub fn return_string<S: Into<String>>(self, s: S) -> CallResult<()> {
-        self.regs[self.fp] = self.heap.push(HeapDatum::Text(s.into()));
+        self.regs[self.fp] = self.heap.push(HeapDatum::Text(s.into()))?;
         Ok(())
     }
 }

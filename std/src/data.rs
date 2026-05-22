@@ -134,7 +134,7 @@ impl Callable for ReadCommand {
                     Ok(())
                 }
                 (ExprType::Text, ConstantDatum::Text(s)) => {
-                    scope.get_mut_ref(reg).set_string(s);
+                    scope.get_mut_ref(reg).set_string(s)?;
                     Ok(())
                 }
                 (target_type, source_value) => Err(CallError::Syntax(
