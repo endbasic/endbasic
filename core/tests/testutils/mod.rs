@@ -533,7 +533,10 @@ async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()
         callables::register_all(&mut upcalls_by_name, console.clone());
         let mut compiler = Compiler::new(&upcalls_by_name, &[]).expect("Cannot fail");
         let mut image = Image::default();
-        let mut vm = Vm::new(upcalls_by_name.clone());
+        let mut vm = Vm::new_with_limits(
+            upcalls_by_name.clone(),
+            Limits { max_heap_entries: U24::from(128) },
+        );
 
         for source in test.sources {
             write!(generated, "\n{}\n\n", labels.source)?;

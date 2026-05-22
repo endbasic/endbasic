@@ -36,8 +36,9 @@ pub use compiler::{
 };
 pub use image::Image;
 pub use mem::ConstantDatum;
+pub use num::U24;
 pub use reader::LineCol;
-pub use vm::{GetGlobalError, GetGlobalResult, StopReason, Vm};
+pub use vm::{GetGlobalError, GetGlobalResult, Limits, StopReason, Vm};
 
 #[cfg(test)]
 mod testutils;

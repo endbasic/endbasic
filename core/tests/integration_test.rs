@@ -30,13 +30,6 @@ macro_rules! one_test {
             run_one_test(stringify!($name)).await
         }
     };
-    ( $name:ident, $ignore:expr ) => {
-        #[tokio::test]
-        #[ignore = $ignore]
-        async fn $name() -> io::Result<()> {
-            run_one_test(stringify!($name)).await
-        }
-    };
 }
 
 one_test!(test_args);
@@ -68,7 +61,7 @@ one_test!(test_gosub);
 one_test!(test_goto);
 one_test!(test_if);
 one_test!(test_incremental);
-one_test!(test_limits, "Very slow for regular development");
+one_test!(test_limits);
 one_test!(test_locals);
 one_test!(test_numerics);
 one_test!(test_on_error);
