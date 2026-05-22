@@ -80,14 +80,14 @@ impl Callable for RaiseCommand {
     fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
         let arg = scope.get_string(0);
         match arg {
-            "argument" => Err(CallError::Other("Bad argument")),
-            "eval" => Err(CallError::Other("Some eval error")),
-            "internal" => Err(CallError::Other("Some internal error")),
-            "io" => Err(CallError::Other("Some I/O error")),
+            "argument" => Err(CallError::Other("Bad argument".to_owned())),
+            "eval" => Err(CallError::Other("Some eval error".to_owned())),
+            "internal" => Err(CallError::Other("Some internal error".to_owned())),
+            "io" => Err(CallError::Other("Some I/O error".to_owned())),
             "syntax" => Err(CallError::Syntax(scope.get_pos(0), "Some syntax error".to_owned())),
             "syntax0" => Err(CallError::Syntax(scope.get_pos(0), "Some syntax error".to_owned())),
             "syntax1" => Err(CallError::Syntax(scope.get_pos(1), "Some syntax error".to_owned())),
-            _ => Err(CallError::Other("Invalid arguments")),
+            _ => Err(CallError::Other("Invalid arguments".to_owned())),
         }
     }
 }

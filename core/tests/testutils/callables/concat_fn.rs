@@ -59,12 +59,14 @@ impl Callable for ConcatFunction {
                     reg += 1;
                     match etype {
                         ExprType::Text => result.push_str(scope.get_string(reg)),
-                        _ => return Err(CallError::Other("Only accepts string values")),
+                        _ => {
+                            return Err(CallError::Other("Only accepts string values".to_owned()));
+                        }
                     }
                     sep
                 }
 
-                _ => return Err(CallError::Other("Only accepts string values")),
+                _ => return Err(CallError::Other("Only accepts string values".to_owned())),
             };
             reg += 1;
 

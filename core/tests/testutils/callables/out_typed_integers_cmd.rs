@@ -57,12 +57,12 @@ impl Callable for OutTypedIntegersCommand {
         let mut reg = 0;
         loop {
             let VarArgTag::Immediate(sep, etype) = scope.get_type(reg) else {
-                return Err(CallError::Other("Only accepts integer values"));
+                return Err(CallError::Other("Only accepts integer values".to_owned()));
             };
             reg += 1;
 
             if etype != ExprType::Integer {
-                return Err(CallError::Other("Only accepts integer values"));
+                return Err(CallError::Other("Only accepts integer values".to_owned()));
             }
 
             line.push_str(&format!("{}{}", scope.get_integer(reg), ExprType::Integer.annotation()));
