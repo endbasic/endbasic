@@ -564,8 +564,7 @@ impl Context {
     pub(super) fn do_alloc(&mut self, instr: u32, heap: &mut Heap) {
         let (dest, etype) = bytecode::parse_alloc(instr);
         debug_assert_eq!(ExprType::Text, etype, "Alloc is only emitted for strings right now");
-        let ptr = heap.push(HeapDatum::Text(String::new()));
-        self.set_reg(dest, ptr);
+        self.set_reg(dest, heap.empty_text_ptr());
         self.pc += 1;
     }
 
@@ -595,16 +594,16 @@ impl Context {
             ExprType::Boolean | ExprType::Double | ExprType::Integer => {
                 vec![0; total]
             }
-            ExprType::Text => {
-                let mut values = Vec::with_capacity(total);
-                for _ in 0..total {
-                    values.push(heap.push(HeapDatum::Text(String::new())));
-                }
-                values
-            }
+            ExprType::Text => vec![heap.empty_text_ptr(); total],
         };
         let array = ArrayData { dimensions, values };
-        let ptr = heap.push(HeapDatum::Array(array));
+        let ptr = match heap.push(HeapDatum::Array(array)) {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                self.set_exception(e.to_string());
+                return;
+            }
+        };
         self.set_reg(dest, ptr);
         self.pc += 1;
     }
@@ -648,7 +647,13 @@ impl Context {
         let lhs = self.deref_string(src1, constants, heap).to_owned();
         let rhs = self.deref_string(src2, constants, heap);
         let result = lhs + rhs;
-        let ptr = heap.push(HeapDatum::Text(result));
+        let ptr = match heap.push(HeapDatum::Text(result)) {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                self.set_exception(e.to_string());
+                return;
+            }
+        };
         self.set_reg(dest, ptr);
         self.pc += 1;
     }

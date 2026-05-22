@@ -31,6 +31,20 @@ impl TryFrom<u32> for U24 {
     }
 }
 
+impl TryFrom<usize> for U24 {
+    type Error = ();
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        if value >= (1 << 24) { Err(()) } else { Ok(Self(value as u32)) }
+    }
+}
+
+impl From<U24> for u32 {
+    fn from(value: U24) -> Self {
+        value.0
+    }
+}
+
 impl TryFrom<U24> for usize {
     type Error = TryFromIntError;
 
@@ -82,7 +96,6 @@ impl_unchecked_cast!(unchecked_u32_as_u16, u32, u16, primitive);
 impl_unchecked_cast!(unchecked_u32_as_usize, u32, usize, primitive);
 impl_unchecked_cast!(unchecked_u64_as_u8, u64, u8, primitive);
 impl_unchecked_cast!(unchecked_usize_as_u8, usize, u8, primitive);
-impl_unchecked_cast!(unchecked_usize_as_u32, usize, u32, primitive);
 
 impl UncheckedFrom for usize {
     type T = U24;
@@ -121,11 +134,6 @@ mod tests {
     #[test]
     fn test_unchecked_usize_as_u8() {
         assert_eq!(10u8, unchecked_usize_as_u8(10_usize));
-    }
-
-    #[test]
-    fn test_unchecked_usize_as_u32() {
-        assert_eq!(10u32, unchecked_usize_as_u32(10_usize));
     }
 
     #[test]

@@ -17,7 +17,7 @@
 //! Memory representation and related types.
 
 use crate::ExprType;
-use crate::num::{U24, unchecked_u24_as_usize, unchecked_usize_as_u32};
+use crate::num::{U24, unchecked_u24_as_usize};
 use std::convert::TryFrom;
 use std::hash::Hash;
 
@@ -175,6 +175,11 @@ pub(crate) enum HeapDatum {
     Text(String),
 }
 
+/// Error reported when the heap cannot grow any further.
+#[derive(Debug, thiserror::Error)]
+#[error("Out of heap space")]
+pub(crate) struct HeapOverflowError;
+
 /// Heap-allocated data used at runtime.
 pub(crate) struct Heap {
     data: Vec<HeapDatum>,
@@ -183,12 +188,12 @@ pub(crate) struct Heap {
 impl Heap {
     /// Creates a new empty heap.
     pub(crate) fn new() -> Self {
-        Self { data: vec![] }
+        Self { data: vec![HeapDatum::Text(String::new())] }
     }
 
     /// Removes all entries from the heap.
     pub(crate) fn clear(&mut self) {
-        self.data.clear();
+        *self = Self::new();
     }
 
     /// Returns the number of entries in the heap.
@@ -196,11 +201,21 @@ impl Heap {
         self.data.len()
     }
 
+    /// Returns the pointer to the shared empty string.
+    pub(crate) fn empty_text_ptr(&self) -> u64 {
+        debug_assert!(matches!(self.data.first(), Some(HeapDatum::Text(s)) if s.is_empty()));
+        DatumPtr::for_heap(0)
+    }
+
     /// Allocates `datum` in the heap and returns its pointer.
-    pub(crate) fn push(&mut self, datum: HeapDatum) -> u64 {
-        let index = self.len();
+    pub(crate) fn push(&mut self, datum: HeapDatum) -> Result<u64, HeapOverflowError> {
+        if matches!(&datum, HeapDatum::Text(s) if s.is_empty()) {
+            return Ok(self.empty_text_ptr());
+        }
+
+        let index = U24::try_from(self.len()).map_err(|_| HeapOverflowError)?;
         self.data.push(datum);
-        DatumPtr::for_heap(unchecked_usize_as_u32(index))
+        Ok(DatumPtr::for_heap(u32::from(index)))
     }
 
     /// Returns the heap entry at `index`.

@@ -397,7 +397,7 @@ impl Callable for InputCommand {
                         },
 
                         ExprType::Text => {
-                            regref.set_string(trimmed_answer);
+                            regref.set_string(trimmed_answer)?;
                             return Ok(());
                         }
                     };

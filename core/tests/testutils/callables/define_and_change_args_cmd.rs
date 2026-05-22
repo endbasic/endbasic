@@ -77,7 +77,7 @@ impl Callable for DefineAndChangeArgsCommand {
 
                 ExprType::Text => {
                     let s = typed_ptr.deref_string();
-                    typed_ptr.set_string(format!("{}.", s));
+                    typed_ptr.set_string(format!("{}.", s))?;
                 }
             }
             i += 1;
