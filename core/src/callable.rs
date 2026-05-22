@@ -20,8 +20,7 @@ use crate::ast::ArgSep;
 use crate::ast::ExprType;
 use crate::bytecode::TaggedRegisterRef;
 use crate::bytecode::VarArgTag;
-use crate::mem::{ConstantDatum, DatumPtr, HeapDatum};
-use crate::num::unchecked_usize_as_u32;
+use crate::mem::{ConstantDatum, DatumPtr, Heap, HeapDatum};
 use crate::reader::LineCol;
 use async_trait::async_trait;
 use std::borrow::Cow;
@@ -711,7 +710,7 @@ fn deref_string<'a>(
     index: usize,
     vtype: ExprType,
     constants: &'a [ConstantDatum],
-    heap: &'a [HeapDatum],
+    heap: &'a Heap,
 ) -> &'a str {
     assert_eq!(ExprType::Text, vtype);
     let ptr = DatumPtr::from(regs[index]);
@@ -719,10 +718,10 @@ fn deref_string<'a>(
 }
 
 /// Dereferences this register reference as an array and returns its dimensions.
-fn array_dimensions<'a>(regs: &'a [u64], index: usize, heap: &'a [HeapDatum]) -> &'a [usize] {
+fn array_dimensions<'a>(regs: &'a [u64], index: usize, heap: &'a Heap) -> &'a [usize] {
     let ptr = DatumPtr::from(regs[index]);
     let heap_idx = ptr.heap_index();
-    let HeapDatum::Array(a) = &heap[heap_idx] else {
+    let HeapDatum::Array(a) = heap.get(heap_idx) else {
         panic!("Scalar variable does not point to an array on the heap");
     };
     &a.dimensions
@@ -834,9 +833,7 @@ impl<'a, 'vm> RegisterRefMut<'a, 'vm> {
     /// Sets a string via this register reference.
     pub fn set_string<S: Into<String>>(&mut self, s: S) {
         assert_eq!(ExprType::Text, self.vtype);
-        let index = self.scope.heap.len();
-        self.scope.heap.push(HeapDatum::Text(s.into()));
-        self.scope.regs[self.index] = DatumPtr::for_heap(unchecked_usize_as_u32(index));
+        self.scope.regs[self.index] = self.scope.heap.push(HeapDatum::Text(s.into()));
     }
 }
 
@@ -855,7 +852,7 @@ pub struct Scope<'a> {
     pub(crate) constants: &'a [ConstantDatum],
 
     /// Reference to the heap for resolving heap pointers.
-    pub(crate) heap: &'a mut Vec<HeapDatum>,
+    pub(crate) heap: &'a mut Heap,
 
     /// Start of the current frame (where the arguments to the upcall start).
     pub(crate) fp: usize,
@@ -978,9 +975,7 @@ impl<'a> Scope<'a> {
     /// Always returns success.  The returned value is only to support the idiomatic invocation
     /// `return scope.return_string(...)`.
     pub fn return_string<S: Into<String>>(self, s: S) -> CallResult<()> {
-        let index = self.heap.len();
-        self.heap.push(HeapDatum::Text(s.into()));
-        self.regs[self.fp] = DatumPtr::for_heap(unchecked_usize_as_u32(index));
+        self.regs[self.fp] = self.heap.push(HeapDatum::Text(s.into()));
         Ok(())
     }
 }

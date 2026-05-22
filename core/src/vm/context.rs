@@ -22,7 +22,7 @@ use crate::bytecode::{
     self, ErrorHandlerMode, ExitCode, Opcode, Register, TaggedRegisterRef, opcode_of,
 };
 use crate::image::Image;
-use crate::mem::{ArrayData, ConstantDatum, DatumPtr, HeapDatum};
+use crate::mem::{ArrayData, ConstantDatum, DatumPtr, Heap, HeapDatum};
 use crate::num::unchecked_usize_as_u8;
 use crate::reader::LineCol;
 
@@ -240,7 +240,7 @@ impl Context {
         &self,
         reg: Register,
         constants: &'b [ConstantDatum],
-        heap: &'b [HeapDatum],
+        heap: &'b Heap,
     ) -> &'b str {
         let raw_addr = self.get_reg(reg);
         DatumPtr::from(raw_addr).resolve_string(constants, heap)
@@ -269,11 +269,11 @@ impl Context {
         &mut self,
         arr_reg: Register,
         first_sub_reg: Register,
-        heap: &[HeapDatum],
+        heap: &Heap,
     ) -> Option<(usize, usize)> {
         let arr_ptr = DatumPtr::from(self.get_reg(arr_reg));
         let heap_idx = arr_ptr.heap_index();
-        let array = match &heap[heap_idx] {
+        let array = match heap.get(heap_idx) {
             HeapDatum::Array(a) => a,
             _ => unreachable!("Register must point to an array"),
         };
@@ -314,7 +314,7 @@ impl Context {
         reg: Register,
         is_function: bool,
         constants: &'a [ConstantDatum],
-        heap: &'a mut Vec<HeapDatum>,
+        heap: &'a mut Heap,
         arg_linecols: &'a [LineCol],
         last_error: &'a Option<(LineCol, String)>,
         data: &'a [Option<ConstantDatum>],
@@ -356,7 +356,7 @@ impl Context {
     /// Panics if the processor state is out of sync with `image` or if the contents of `image`
     /// are invalid.  We assume that the image comes from the result of an in-process compilation
     /// (not stored bytecode) and that the compiler guarantees that the image is valid.
-    pub(super) fn exec(&mut self, image: &Image, heap: &mut Vec<HeapDatum>) -> InternalStopReason {
+    pub(super) fn exec(&mut self, image: &Image, heap: &mut Heap) -> InternalStopReason {
         while self.stop.is_none() {
             if self.yield_pending && image.debug_info.instrs[self.pc].is_stmt_start {
                 self.yield_pending = false;
@@ -537,7 +537,7 @@ impl Context {
         &mut self,
         instr: u32,
         constants: &[ConstantDatum],
-        heap: &[HeapDatum],
+        heap: &Heap,
         parse: fn(u32) -> (Register, Register, Register),
         op: F,
     ) where
@@ -561,17 +561,16 @@ impl Context {
     }
 
     /// Implements the `Alloc` opcode.
-    pub(super) fn do_alloc(&mut self, instr: u32, heap: &mut Vec<HeapDatum>) {
+    pub(super) fn do_alloc(&mut self, instr: u32, heap: &mut Heap) {
         let (dest, etype) = bytecode::parse_alloc(instr);
         debug_assert_eq!(ExprType::Text, etype, "Alloc is only emitted for strings right now");
-        heap.push(HeapDatum::Text(String::new()));
-        let ptr = DatumPtr::for_heap((heap.len() - 1) as u32);
+        let ptr = heap.push(HeapDatum::Text(String::new()));
         self.set_reg(dest, ptr);
         self.pc += 1;
     }
 
     /// Implements the `AllocArray` opcode.
-    pub(super) fn do_alloc_array(&mut self, instr: u32, heap: &mut Vec<HeapDatum>) {
+    pub(super) fn do_alloc_array(&mut self, instr: u32, heap: &mut Heap) {
         let (dest, packed, first_dim_reg) = bytecode::parse_alloc_array(instr);
         let subtype = packed.subtype();
         let ndims = usize::from(packed.ndims());
@@ -599,15 +598,13 @@ impl Context {
             ExprType::Text => {
                 let mut values = Vec::with_capacity(total);
                 for _ in 0..total {
-                    heap.push(HeapDatum::Text(String::new()));
-                    values.push(DatumPtr::for_heap((heap.len() - 1) as u32));
+                    values.push(heap.push(HeapDatum::Text(String::new())));
                 }
                 values
             }
         };
         let array = ArrayData { dimensions, values };
-        heap.push(HeapDatum::Array(array));
-        let ptr = DatumPtr::for_heap((heap.len() - 1) as u32);
+        let ptr = heap.push(HeapDatum::Array(array));
         self.set_reg(dest, ptr);
         self.pc += 1;
     }
@@ -646,18 +643,12 @@ impl Context {
     }
 
     /// Implements the `Concat` opcode.
-    pub(super) fn do_concat(
-        &mut self,
-        instr: u32,
-        constants: &[ConstantDatum],
-        heap: &mut Vec<HeapDatum>,
-    ) {
+    pub(super) fn do_concat(&mut self, instr: u32, constants: &[ConstantDatum], heap: &mut Heap) {
         let (dest, src1, src2) = bytecode::parse_concat(instr);
         let lhs = self.deref_string(src1, constants, heap).to_owned();
         let rhs = self.deref_string(src2, constants, heap);
         let result = lhs + rhs;
-        heap.push(HeapDatum::Text(result));
-        let ptr = DatumPtr::for_heap((heap.len() - 1) as u32);
+        let ptr = heap.push(HeapDatum::Text(result));
         self.set_reg(dest, ptr);
         self.pc += 1;
     }
@@ -701,12 +692,7 @@ impl Context {
     }
 
     /// Implements the `EqualText` opcode.
-    pub(super) fn do_equal_text(
-        &mut self,
-        instr: u32,
-        constants: &[ConstantDatum],
-        heap: &[HeapDatum],
-    ) {
+    pub(super) fn do_equal_text(&mut self, instr: u32, constants: &[ConstantDatum], heap: &Heap) {
         self.do_binary_text_op(instr, constants, heap, bytecode::parse_equal_text, |l, r| l == r);
     }
 
@@ -763,7 +749,7 @@ impl Context {
         &mut self,
         instr: u32,
         constants: &[ConstantDatum],
-        heap: &[HeapDatum],
+        heap: &Heap,
     ) {
         self.do_binary_text_op(
             instr,
@@ -780,12 +766,7 @@ impl Context {
     }
 
     /// Implements the `GreaterText` opcode.
-    pub(super) fn do_greater_text(
-        &mut self,
-        instr: u32,
-        constants: &[ConstantDatum],
-        heap: &[HeapDatum],
-    ) {
+    pub(super) fn do_greater_text(&mut self, instr: u32, constants: &[ConstantDatum], heap: &Heap) {
         self.do_binary_text_op(instr, constants, heap, bytecode::parse_greater_text, |l, r| l > r);
     }
 
@@ -843,7 +824,7 @@ impl Context {
         &mut self,
         instr: u32,
         constants: &[ConstantDatum],
-        heap: &[HeapDatum],
+        heap: &Heap,
     ) {
         self.do_binary_text_op(instr, constants, heap, bytecode::parse_less_equal_text, |l, r| {
             l <= r
@@ -856,21 +837,16 @@ impl Context {
     }
 
     /// Implements the `LessText` opcode.
-    pub(super) fn do_less_text(
-        &mut self,
-        instr: u32,
-        constants: &[ConstantDatum],
-        heap: &[HeapDatum],
-    ) {
+    pub(super) fn do_less_text(&mut self, instr: u32, constants: &[ConstantDatum], heap: &Heap) {
         self.do_binary_text_op(instr, constants, heap, bytecode::parse_less_text, |l, r| l < r);
     }
 
     /// Implements the `LoadArray` opcode.
-    pub(super) fn do_load_array(&mut self, instr: u32, heap: &[HeapDatum]) {
+    pub(super) fn do_load_array(&mut self, instr: u32, heap: &Heap) {
         let (dest, arr_reg, first_sub_reg) = bytecode::parse_load_array(instr);
 
         if let Some((heap_idx, flat_idx)) = self.resolve_array_index(arr_reg, first_sub_reg, heap) {
-            let array = match &heap[heap_idx] {
+            let array = match heap.get(heap_idx) {
                 HeapDatum::Array(a) => a,
                 _ => unreachable!("Register must point to an array"),
             };
@@ -979,7 +955,7 @@ impl Context {
         &mut self,
         instr: u32,
         constants: &[ConstantDatum],
-        heap: &[HeapDatum],
+        heap: &Heap,
     ) {
         self.do_binary_text_op(instr, constants, heap, bytecode::parse_not_equal_text, |l, r| {
             l != r
@@ -1064,12 +1040,12 @@ impl Context {
     }
 
     /// Implements the `StoreArray` opcode.
-    pub(super) fn do_store_array(&mut self, instr: u32, heap: &mut [HeapDatum]) {
+    pub(super) fn do_store_array(&mut self, instr: u32, heap: &mut Heap) {
         let (arr_reg, val_reg, first_sub_reg) = bytecode::parse_store_array(instr);
 
         let value = self.get_reg(val_reg);
         if let Some((heap_idx, flat_idx)) = self.resolve_array_index(arr_reg, first_sub_reg, heap) {
-            let array = match &mut heap[heap_idx] {
+            let array = match heap.get_mut(heap_idx) {
                 HeapDatum::Array(a) => a,
                 _ => unreachable!("Register must point to an array"),
             };

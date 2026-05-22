@@ -17,7 +17,7 @@
 //! Memory representation and related types.
 
 use crate::ExprType;
-use crate::num::{U24, unchecked_u24_as_usize};
+use crate::num::{U24, unchecked_u24_as_usize, unchecked_usize_as_u32};
 use std::convert::TryFrom;
 use std::hash::Hash;
 
@@ -148,7 +148,7 @@ impl ConstantDatum {
         value: u64,
         etype: ExprType,
         constants: &[ConstantDatum],
-        heap: &[HeapDatum],
+        heap: &Heap,
     ) -> Self {
         match etype {
             ExprType::Boolean => Self::Boolean(value != 0),
@@ -173,6 +173,45 @@ pub(crate) enum HeapDatum {
 
     /// A string value.
     Text(String),
+}
+
+/// Heap-allocated data used at runtime.
+pub(crate) struct Heap {
+    data: Vec<HeapDatum>,
+}
+
+impl Heap {
+    /// Creates a new empty heap.
+    pub(crate) fn new() -> Self {
+        Self { data: vec![] }
+    }
+
+    /// Removes all entries from the heap.
+    pub(crate) fn clear(&mut self) {
+        self.data.clear();
+    }
+
+    /// Returns the number of entries in the heap.
+    pub(crate) fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Allocates `datum` in the heap and returns its pointer.
+    pub(crate) fn push(&mut self, datum: HeapDatum) -> u64 {
+        let index = self.len();
+        self.data.push(datum);
+        DatumPtr::for_heap(unchecked_usize_as_u32(index))
+    }
+
+    /// Returns the heap entry at `index`.
+    pub(crate) fn get(&self, index: usize) -> &HeapDatum {
+        &self.data[index]
+    }
+
+    /// Returns the heap entry at `index` for mutation.
+    pub(crate) fn get_mut(&mut self, index: usize) -> &mut HeapDatum {
+        &mut self.data[index]
+    }
 }
 
 /// Tagged pointers for constant and heap addresses.
@@ -217,14 +256,14 @@ impl DatumPtr {
     pub(crate) fn resolve_string<'b>(
         &self,
         constants: &'b [ConstantDatum],
-        heap: &'b [HeapDatum],
+        heap: &'b Heap,
     ) -> &'b str {
         match self {
             DatumPtr::Constant(index) => match &constants[unchecked_u24_as_usize(*index)] {
                 ConstantDatum::Text(s) => s,
                 _ => panic!("Constant pointer does not point to a Text value"),
             },
-            DatumPtr::Heap(index) => match &heap[unchecked_u24_as_usize(*index)] {
+            DatumPtr::Heap(index) => match heap.get(unchecked_u24_as_usize(*index)) {
                 HeapDatum::Text(s) => s,
                 _ => panic!("Heap pointer does not point to a Text value"),
             },
@@ -274,21 +313,21 @@ mod tests {
     fn test_constant_datum_from_raw() {
         assert_eq!(
             ConstantDatum::Boolean(true),
-            ConstantDatum::from_raw(1, ExprType::Boolean, &[], &[])
+            ConstantDatum::from_raw(1, ExprType::Boolean, &[], &Heap::new())
         );
         assert_eq!(
             ConstantDatum::Double(3.25),
-            ConstantDatum::from_raw(3.25f64.to_bits(), ExprType::Double, &[], &[])
+            ConstantDatum::from_raw(3.25f64.to_bits(), ExprType::Double, &[], &Heap::new())
         );
         assert_eq!(
             ConstantDatum::Integer(-7),
-            ConstantDatum::from_raw((-7i32) as u64, ExprType::Integer, &[], &[])
+            ConstantDatum::from_raw((-7i32) as u64, ExprType::Integer, &[], &Heap::new())
         );
 
         let constants = vec![ConstantDatum::Text("hello".to_owned())];
         assert_eq!(
             ConstantDatum::Text("hello".to_owned()),
-            ConstantDatum::from_raw(0, ExprType::Text, &constants, &[])
+            ConstantDatum::from_raw(0, ExprType::Text, &constants, &Heap::new())
         );
     }
 }

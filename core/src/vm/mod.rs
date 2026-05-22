@@ -23,7 +23,7 @@ use crate::bytecode::{ExitCode, Register};
 use crate::callable::{Callable, Scope};
 use crate::compiler::SymbolKey;
 use crate::image::{GlobalVarInfo, Image};
-use crate::mem::{ConstantDatum, DatumPtr, HeapDatum};
+use crate::mem::{ConstantDatum, DatumPtr, Heap, HeapDatum};
 use crate::reader::LineCol;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -104,7 +104,7 @@ pub struct Vm {
     upcalls: Vec<Rc<dyn Callable>>,
 
     /// Heap memory for dynamic allocations.
-    heap: Vec<HeapDatum>,
+    heap: Heap,
 
     /// Processor context for execution.
     context: Context,
@@ -195,7 +195,7 @@ impl Vm {
         let raw = read_raw(&self.context, info.reg);
         let ptr = DatumPtr::from(raw);
         let heap_idx = ptr.heap_index();
-        let HeapDatum::Array(a) = &self.heap[heap_idx] else {
+        let HeapDatum::Array(a) = self.heap.get(heap_idx) else {
             panic!("Array variable does not point to an array on the heap");
         };
         let flat_idx = a.flat_index(subscripts).map_err(GetGlobalError::SubscriptOutOfBounds)?;
@@ -209,7 +209,7 @@ impl Vm {
             upcalls_by_name,
             upcall_names: vec![],
             upcalls: vec![],
-            heap: vec![],
+            heap: Heap::new(),
             context: Context::default(),
             last_error: None,
             pending_upcall: None,
