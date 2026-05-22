@@ -56,7 +56,7 @@ impl Callable for IncrementRequiredIntCommand {
             // TODO(jmmv): Make this error type more specific and determine the position of the
             // problematic argument via the `DebugInfo` which we should propagate through the
             // `Scope`.
-            return Err(CallError::Other("Invalid type in argument"));
+            return Err(CallError::Other("Invalid type in argument".to_owned()));
         }
         let mut i = typed_ptr.deref_integer();
         i += 1;

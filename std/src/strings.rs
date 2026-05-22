@@ -290,7 +290,8 @@ impl Callable for LenFunction {
         debug_assert_eq!(1, scope.nargs());
         let s = scope.get_string(0);
 
-        let len = i32::try_from(s.len()).map_err(|_| CallError::Other("String too long"))?;
+        let len =
+            i32::try_from(s.len()).map_err(|_| CallError::Other("String too long".to_owned()))?;
         scope.return_integer(len)
     }
 }

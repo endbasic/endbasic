@@ -38,9 +38,9 @@ pub enum CallError {
     #[error("{0}")]
     IoError(#[from] io::Error),
 
-    /// Generic error with a static message.
+    /// Generic error with an owned message.
     #[error("{0}")]
-    Other(&'static str),
+    Other(String),
 
     /// Indicates a syntax error only detectable at runtime.
     #[error("{0}: {1}")]
@@ -56,7 +56,7 @@ impl CallError {
         match self {
             CallError::IoError(e) => UpcallError::IoError(default_pos, e.to_string()),
 
-            CallError::Other(message) => UpcallError::Other(default_pos, message),
+            CallError::Other(message) => UpcallError::Other(default_pos, message.clone()),
 
             CallError::Syntax(pos, message) => UpcallError::Syntax(*pos, message.clone()),
         }
@@ -75,9 +75,9 @@ pub enum UpcallError {
     #[error("{0}: {1}")]
     IoError(LineCol, String),
 
-    /// Generic error with a static message at a given source location.
+    /// Generic error with an owned message at a given source location.
     #[error("{0}: {1}")]
-    Other(LineCol, &'static str),
+    Other(LineCol, String),
 
     /// Runtime syntax error at a specific source location.
     #[error("{0}: {1}")]
@@ -89,7 +89,7 @@ impl UpcallError {
     pub fn parts(&self) -> (LineCol, String) {
         match self {
             UpcallError::IoError(pos, message) => (*pos, message.clone()),
-            UpcallError::Other(pos, message) => (*pos, message.to_string()),
+            UpcallError::Other(pos, message) => (*pos, message.clone()),
             UpcallError::Syntax(pos, message) => (*pos, message.clone()),
         }
     }
