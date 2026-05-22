@@ -24,12 +24,26 @@ use crate::callable::{Callable, Scope};
 use crate::compiler::SymbolKey;
 use crate::image::{GlobalVarInfo, Image};
 use crate::mem::{ConstantDatum, DatumPtr, Heap, HeapDatum};
+use crate::num::U24;
 use crate::reader::LineCol;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 mod context;
 use context::{Context, ErrorHandler, InternalStopReason};
+
+/// Limits for VM execution resources.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Limits {
+    /// Maximum number of entries the heap can contain.
+    pub max_heap_entries: U24,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self { max_heap_entries: U24::MAX }
+    }
+}
 
 /// Error returned when a global variable access encounters a type or shape mismatch.
 ///
@@ -205,11 +219,19 @@ impl Vm {
 
     /// Creates a new VM with the given `upcalls_by_name` as the available built-in callables.
     pub fn new(upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>>) -> Self {
+        Self::new_with_limits(upcalls_by_name, Limits::default())
+    }
+
+    /// Creates a new VM with the given `upcalls_by_name` and resource `limits`.
+    pub fn new_with_limits(
+        upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>>,
+        limits: Limits,
+    ) -> Self {
         Self {
             upcalls_by_name,
             upcall_names: vec![],
             upcalls: vec![],
-            heap: Heap::new(),
+            heap: Heap::new(limits.max_heap_entries),
             context: Context::default(),
             last_error: None,
             pending_upcall: None,

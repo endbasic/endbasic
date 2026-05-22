@@ -20,8 +20,14 @@ use std::convert::TryFrom;
 use std::num::TryFromIntError;
 
 /// An unsigned integer constrained to 24 bits.
-#[derive(Clone, Copy)]
-pub(crate) struct U24(u32);
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct U24(u32);
+
+impl From<u16> for U24 {
+    fn from(value: u16) -> Self {
+        Self(u32::from(value))
+    }
+}
 
 impl TryFrom<u32> for U24 {
     type Error = ();
@@ -51,6 +57,11 @@ impl TryFrom<U24> for usize {
     fn try_from(value: U24) -> Result<Self, Self::Error> {
         Self::try_from(value.0)
     }
+}
+
+impl U24 {
+    /// Maximum value that a `U24` can carry.
+    pub(crate) const MAX: U24 = U24(1 << 24);
 }
 
 /// A trait to perform an unchecked cast from one type to another.

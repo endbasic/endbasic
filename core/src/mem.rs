@@ -183,17 +183,18 @@ pub(crate) struct HeapOverflowError;
 /// Heap-allocated data used at runtime.
 pub(crate) struct Heap {
     data: Vec<HeapDatum>,
+    max_entries: U24,
 }
 
 impl Heap {
     /// Creates a new empty heap.
-    pub(crate) fn new() -> Self {
-        Self { data: vec![HeapDatum::Text(String::new())] }
+    pub(crate) fn new(max_entries: U24) -> Self {
+        Self { data: vec![HeapDatum::Text(String::new())], max_entries }
     }
 
     /// Removes all entries from the heap.
     pub(crate) fn clear(&mut self) {
-        *self = Self::new();
+        *self = Self::new(self.max_entries);
     }
 
     /// Returns the number of entries in the heap.
@@ -214,6 +215,9 @@ impl Heap {
         }
 
         let index = U24::try_from(self.len()).map_err(|_| HeapOverflowError)?;
+        if self.len() >= unchecked_u24_as_usize(self.max_entries) {
+            return Err(HeapOverflowError);
+        }
         self.data.push(datum);
         Ok(DatumPtr::for_heap(u32::from(index)))
     }
@@ -328,21 +332,31 @@ mod tests {
     fn test_constant_datum_from_raw() {
         assert_eq!(
             ConstantDatum::Boolean(true),
-            ConstantDatum::from_raw(1, ExprType::Boolean, &[], &Heap::new())
+            ConstantDatum::from_raw(1, ExprType::Boolean, &[], &Heap::new(U24::from(64)))
         );
         assert_eq!(
             ConstantDatum::Double(3.25),
-            ConstantDatum::from_raw(3.25f64.to_bits(), ExprType::Double, &[], &Heap::new())
+            ConstantDatum::from_raw(
+                3.25f64.to_bits(),
+                ExprType::Double,
+                &[],
+                &Heap::new(U24::from(64))
+            )
         );
         assert_eq!(
             ConstantDatum::Integer(-7),
-            ConstantDatum::from_raw((-7i32) as u64, ExprType::Integer, &[], &Heap::new())
+            ConstantDatum::from_raw(
+                (-7i32) as u64,
+                ExprType::Integer,
+                &[],
+                &Heap::new(U24::from(64))
+            )
         );
 
         let constants = vec![ConstantDatum::Text("hello".to_owned())];
         assert_eq!(
             ConstantDatum::Text("hello".to_owned()),
-            ConstantDatum::from_raw(0, ExprType::Text, &constants, &Heap::new())
+            ConstantDatum::from_raw(0, ExprType::Text, &constants, &Heap::new(U24::from(64)))
         );
     }
 }
