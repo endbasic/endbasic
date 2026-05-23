@@ -32,16 +32,22 @@ use std::rc::Rc;
 mod context;
 use context::{Context, ErrorHandler, InternalStopReason};
 
+/// Default maximum number of call stack frames.
+const DEFAULT_MAX_CALL_STACK: usize = 4096;
+
 /// Limits for VM execution resources.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Limits {
+    /// Maximum number of frames the call stack can contain.
+    pub max_call_stack: usize,
+
     /// Maximum number of entries the heap can contain.
     pub max_heap_entries: U24,
 }
 
 impl Default for Limits {
     fn default() -> Self {
-        Self { max_heap_entries: U24::MAX }
+        Self { max_call_stack: DEFAULT_MAX_CALL_STACK, max_heap_entries: U24::MAX }
     }
 }
 
@@ -232,7 +238,7 @@ impl Vm {
             upcall_names: vec![],
             upcalls: vec![],
             heap: Heap::new(limits.max_heap_entries),
-            context: Context::default(),
+            context: Context::new(limits.max_call_stack),
             last_error: None,
             pending_upcall: None,
         }
@@ -243,7 +249,7 @@ impl Vm {
         self.upcall_names.clear();
         self.upcalls.clear();
         self.heap.clear();
-        self.context = Context::default();
+        self.context.clear_runtime_state();
         self.last_error = None;
         self.pending_upcall = None;
     }
@@ -999,6 +1005,41 @@ mod tests {
             _ => panic!("Execution should still stop at EOF after clear"),
         }
         assert_eq!(["3", "3"], *data.borrow().as_slice());
+    }
+
+    #[tokio::test]
+    async fn test_reset_preserves_call_stack_limit() {
+        let compiler = Compiler::new(&HashMap::default(), &[]).unwrap();
+        let image = compiler
+            .compile(
+                &mut br#"
+                    SUB recurse(n%)
+                        IF n < 20 THEN
+                            recurse n + 1
+                        END IF
+                    END SUB
+
+                    recurse 0
+                "#
+                .as_slice(),
+            )
+            .unwrap();
+        let mut vm = Vm::new_with_limits(
+            HashMap::default(),
+            Limits { max_call_stack: 8, max_heap_entries: U24::MAX },
+        );
+
+        match vm.exec(&image) {
+            StopReason::Exception(_, msg) if msg == "Out of call stack space" => (),
+            _ => panic!("Execution should stop when the call stack limit is reached"),
+        }
+
+        vm.reset();
+
+        match vm.exec(&image) {
+            StopReason::Exception(_, msg) if msg == "Out of call stack space" => (),
+            _ => panic!("Execution should preserve the configured call stack limit after reset"),
+        }
     }
 
     #[tokio::test]
