@@ -332,7 +332,9 @@ impl Vm {
 
         match self.context.error_handler() {
             ErrorHandler::None => false,
-            ErrorHandler::Jump(addr) => {
+            ErrorHandler::Jump { active: true, .. } => false,
+            ErrorHandler::Jump { active: false, addr } => {
+                self.context.set_error_handler_active();
                 self.context.set_pc(addr);
                 true
             }
