@@ -34,13 +34,21 @@ use std::str::Lines;
 /// Error types for callable execution.
 #[derive(Debug, thiserror::Error)]
 pub enum CallError {
+    /// Invalid callable argument.
+    #[error("{0}")]
+    Argument(String),
+
+    /// Runtime evaluation error.
+    #[error("{0}")]
+    Eval(String),
+
     /// I/O error.
     #[error("{0}")]
     IoError(#[from] io::Error),
 
-    /// Generic error with an owned message.
+    /// Callable precondition failure.
     #[error("{0}")]
-    Other(String),
+    Precondition(String),
 
     /// Indicates a syntax error only detectable at runtime.
     #[error("{0}: {1}")]
@@ -49,7 +57,7 @@ pub enum CallError {
 
 impl From<HeapOverflowError> for CallError {
     fn from(value: HeapOverflowError) -> Self {
-        Self::Other(value.to_string())
+        Self::Eval(value.to_string())
     }
 }
 
@@ -60,9 +68,15 @@ impl CallError {
     /// `default_pos`.
     pub(crate) fn to_upcall_error(&self, default_pos: LineCol) -> UpcallError {
         match self {
+            CallError::Argument(message) => UpcallError::Argument(default_pos, message.clone()),
+
+            CallError::Eval(message) => UpcallError::Eval(default_pos, message.clone()),
+
             CallError::IoError(e) => UpcallError::IoError(default_pos, e.to_string()),
 
-            CallError::Other(message) => UpcallError::Other(default_pos, message.clone()),
+            CallError::Precondition(message) => {
+                UpcallError::Precondition(default_pos, message.clone())
+            }
 
             CallError::Syntax(pos, message) => UpcallError::Syntax(*pos, message.clone()),
         }
@@ -77,13 +91,21 @@ pub type CallResult<T> = Result<T, CallError>;
 /// This should be the same as `CallError` but with all error variants annotated with a position.
 #[derive(Debug, thiserror::Error)]
 pub enum UpcallError {
+    /// Invalid callable argument at a given source location.
+    #[error("{0}: {1}")]
+    Argument(LineCol, String),
+
+    /// Runtime evaluation error at a given source location.
+    #[error("{0}: {1}")]
+    Eval(LineCol, String),
+
     /// I/O error at a given source location.
     #[error("{0}: {1}")]
     IoError(LineCol, String),
 
-    /// Generic error with an owned message at a given source location.
+    /// Callable precondition failure at a given source location.
     #[error("{0}: {1}")]
-    Other(LineCol, String),
+    Precondition(LineCol, String),
 
     /// Runtime syntax error at a specific source location.
     #[error("{0}: {1}")]
@@ -94,8 +116,10 @@ impl UpcallError {
     /// Returns the source position and message of this error.
     pub fn parts(&self) -> (LineCol, String) {
         match self {
+            UpcallError::Argument(pos, message) => (*pos, message.clone()),
+            UpcallError::Eval(pos, message) => (*pos, message.clone()),
             UpcallError::IoError(pos, message) => (*pos, message.clone()),
-            UpcallError::Other(pos, message) => (*pos, message.clone()),
+            UpcallError::Precondition(pos, message) => (*pos, message.clone()),
             UpcallError::Syntax(pos, message) => (*pos, message.clone()),
         }
     }

@@ -143,7 +143,7 @@ impl Callable for LoginCommand {
 
     async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
         if self.service.borrow().is_logged_in() {
-            return Err(CallError::Other("Cannot LOGIN again before LOGOUT".to_owned()));
+            return Err(CallError::Precondition("Cannot LOGIN again before LOGOUT".to_owned()));
         }
 
         let username = scope.get_string(0).to_owned();
@@ -206,14 +206,14 @@ impl Callable for LogoutCommand {
             // TODO(jmmv): Now that the access tokens are part of the service, we can easily allow
             // logging in more than once within a session.  Consider adding a LOGOUT command first
             // to make it easier to handle the CLOUD: drive on a second login.
-            return Err(CallError::Other("Must LOGIN first".to_owned()));
+            return Err(CallError::Precondition("Must LOGIN first".to_owned()));
         }
 
         let unmounted = match self.storage.borrow_mut().unmount("CLOUD") {
             Ok(()) => true,
             Err(e) if e.kind() == io::ErrorKind::NotFound => false,
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                return Err(CallError::Other(
+                return Err(CallError::Precondition(
                     "Cannot log out while the CLOUD drive is active".to_owned(),
                 ));
             }

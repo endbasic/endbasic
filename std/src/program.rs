@@ -147,7 +147,7 @@ impl Callable for MetadataCallable {
     }
 
     fn exec(&self, _scope: Scope<'_>) -> CallResult<()> {
-        Err(CallError::Other("MetadataCallable::exec must not be called".to_owned()))
+        unreachable!("MetadataCallable::exec must not be called")
     }
 }
 
@@ -544,7 +544,7 @@ impl Callable for SaveCommand {
             match self.program.borrow().name() {
                 Some(name) => name.to_owned(),
                 None => {
-                    return Err(CallError::Other(
+                    return Err(CallError::Precondition(
                         "Unnamed program; please provide a filename".to_owned(),
                     ));
                 }
