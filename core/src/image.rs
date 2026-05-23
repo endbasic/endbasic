@@ -296,6 +296,12 @@ impl Image {
                     line.push_str(&format!(", {}", name))
                 }
 
+                Opcode::LoadConstant => {
+                    let (_reg, index) = bytecode::parse_load_constant(instr);
+                    let constant = &self.constants[usize::from(index)];
+                    line.push_str(&format!(", {}", constant.as_disassembly()))
+                }
+
                 Opcode::UpcallAsync => {
                     let (index, _first_reg) = bytecode::parse_upcall_async(instr);
                     let name = &self.upcalls[usize::from(index)];

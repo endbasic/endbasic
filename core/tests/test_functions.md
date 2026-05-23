@@ -531,11 +531,11 @@ OUT SUM_DOUBLES(3.4, 2, 7.1)
 ## Disassembly
 
 ```asm
-0000:   LOADC       R68, 0              ; 1:17
+0000:   LOADC       R68, 0              ; 1:17, 3.4
 0001:   LOADI       R67, 289            ; 1:17
 0002:   LOADI       R70, 2              ; 1:22
 0003:   LOADI       R69, 290            ; 1:22
-0004:   LOADC       R72, 1              ; 1:25
+0004:   LOADC       R72, 1              ; 1:25, 7.1
 0005:   LOADI       R71, 257            ; 1:25
 0006:   UPCALL      0, R66              ; 1:5, SUM_DOUBLES
 0007:   MOVE        R65, R66            ; 1:5
@@ -672,9 +672,9 @@ OUT x
 
 ```asm
 0000:   LOADI       R0, 0               ; 1:12
-0001:   LOADC       R66, 0              ; 2:17
+0001:   LOADC       R66, 0              ; 2:17, 1.5
 0002:   LOADI       R65, 289            ; 2:17
-0003:   LOADC       R68, 1              ; 2:22
+0003:   LOADC       R68, 1              ; 2:22, 2.5
 0004:   LOADI       R67, 257            ; 2:22
 0005:   UPCALL      0, R64              ; 2:5, SUM_DOUBLES
 0006:   MOVE        R0, R64             ; 2:5
@@ -729,15 +729,15 @@ OUT SUM_DOUBLES(1.0, 2.0) + SUM_DOUBLES(3.0, 4.0)
 ## Disassembly
 
 ```asm
-0000:   LOADC       R68, 0              ; 1:17
+0000:   LOADC       R68, 0              ; 1:17, 1
 0001:   LOADI       R67, 289            ; 1:17
-0002:   LOADC       R70, 1              ; 1:22
+0002:   LOADC       R70, 1              ; 1:22, 2
 0003:   LOADI       R69, 257            ; 1:22
 0004:   UPCALL      0, R66              ; 1:5, SUM_DOUBLES
 0005:   MOVE        R65, R66            ; 1:5
-0006:   LOADC       R69, 2              ; 1:41
+0006:   LOADC       R69, 2              ; 1:41, 3
 0007:   LOADI       R68, 289            ; 1:41
-0008:   LOADC       R71, 3              ; 1:46
+0008:   LOADC       R71, 3              ; 1:46, 4
 0009:   LOADI       R70, 257            ; 1:46
 0010:   UPCALL      0, R67              ; 1:29, SUM_DOUBLES
 0011:   MOVE        R66, R67            ; 1:29

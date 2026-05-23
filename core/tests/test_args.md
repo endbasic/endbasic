@@ -59,7 +59,7 @@ OUT_REQUIRED_VALUE 7.8
 ## Disassembly
 
 ```asm
-0000:   LOADC       R64, 0              ; 1:20
+0000:   LOADC       R64, 0              ; 1:20, 7.8
 0001:   DTOI        R64                 ; 1:20
 0002:   UPCALL      0, R64              ; 1:1, OUT_REQUIRED_VALUE
 0003:   EOF                             ; 0:0
@@ -231,7 +231,7 @@ OUT_POSITIONAL ; 0 AS 8.2
 ```asm
 0000:   LOADI       R65, 3              ; 1:16
 0001:   LOADI       R64, 290            ; 1:16
-0002:   LOADC       R66, 0              ; 1:19
+0002:   LOADC       R66, 0              ; 1:19, 5.6
 0003:   DTOI        R66                 ; 1:19
 0004:   LOADI       R68, 1              ; 1:26
 0005:   LOADI       R67, 259            ; 1:26
@@ -244,7 +244,7 @@ OUT_POSITIONAL ; 0 AS 8.2
 0012:   UPCALL      0, R64              ; 2:1, OUT_POSITIONAL
 0013:   LOADI       R64, 16             ; 3:16
 0014:   LOADI       R65, 0              ; 3:18
-0015:   LOADC       R67, 3              ; 3:23
+0015:   LOADC       R67, 3              ; 3:23, 8.2
 0016:   LOADI       R66, 257            ; 3:23
 0017:   UPCALL      0, R64              ; 3:1, OUT_POSITIONAL
 0018:   EOF                             ; 0:0
@@ -954,7 +954,7 @@ OUT MAX_DOUBLES(3.5)
 ## Disassembly
 
 ```asm
-0000:   LOADC       R67, 0              ; 1:17
+0000:   LOADC       R67, 0              ; 1:17, 3.5
 0001:   UPCALL      0, R66              ; 1:5, MAX_DOUBLES
 0002:   MOVE        R65, R66            ; 1:5
 0003:   LOADI       R64, 257            ; 1:5
@@ -979,9 +979,9 @@ OUT MAX_DOUBLES(3.5, 7.2, 1.8)
 ## Disassembly
 
 ```asm
-0000:   LOADC       R67, 0              ; 1:17
-0001:   LOADC       R68, 1              ; 1:22
-0002:   LOADC       R69, 2              ; 1:27
+0000:   LOADC       R67, 0              ; 1:17, 3.5
+0001:   LOADC       R68, 1              ; 1:22, 7.2
+0002:   LOADC       R69, 2              ; 1:27, 1.8
 0003:   UPCALL      0, R66              ; 1:5, MAX_DOUBLES
 0004:   MOVE        R65, R66            ; 1:5
 0005:   LOADI       R64, 257            ; 1:5
@@ -1110,7 +1110,7 @@ OUT SUM_MIXED(1.5)
 ## Disassembly
 
 ```asm
-0000:   LOADC       R67, 0              ; 1:15
+0000:   LOADC       R67, 0              ; 1:15, 1.5
 0001:   UPCALL      0, R66              ; 1:5, SUM_MIXED
 0002:   MOVE        R65, R66            ; 1:5
 0003:   LOADI       R64, 257            ; 1:5
@@ -1135,7 +1135,7 @@ OUT SUM_MIXED(1.5, 3, 2, 7)
 ## Disassembly
 
 ```asm
-0000:   LOADC       R67, 0              ; 1:15
+0000:   LOADC       R67, 0              ; 1:15, 1.5
 0001:   LOADI       R68, 3              ; 1:20
 0002:   LOADI       R69, 2              ; 1:23
 0003:   LOADI       R70, 7              ; 1:26

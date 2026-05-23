@@ -9,7 +9,7 @@ OUT -3.5
 ## Disassembly
 
 ```asm
-0000:   LOADC       R65, 0              ; 1:6
+0000:   LOADC       R65, 0              ; 1:6, 3.5
 0001:   NEGD        R65                 ; 1:5
 0002:   LOADI       R64, 257            ; 1:5
 0003:   UPCALL      0, R64              ; 1:1, OUT
@@ -95,7 +95,7 @@ a = -(&x80000000)
 ## Disassembly
 
 ```asm
-0000:   LOADC       R64, 0              ; 1:7
+0000:   LOADC       R64, 0              ; 1:7, -2147483648
 0001:   NEGI        R64                 ; 1:5
 0002:   EOF                             ; 0:0
 ```
