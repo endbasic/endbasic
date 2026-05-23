@@ -1197,16 +1197,15 @@ impl<'a> Parser<'a> {
     ///
     /// Returns the step as an expression, an `Ordering` value representing how the step value
     /// compares to zero, and whether the step is a double or not.
-    fn parse_step(&mut self) -> Result<(Expr, Ordering, bool)> {
+    fn parse_step(&mut self, default_pos: LineCol) -> Result<(Expr, Ordering, bool)> {
         let peeked = self.lexer.peek()?;
         match peeked.token {
             Token::Step => self.lexer.consume_peeked(),
             _ => {
-                // The position we return here for the step isn't truly the right value, but given
-                // that we know the hardcoded step of 1 is valid, the caller will not error out and
-                // will not print the slightly invalid position.
+                // Anchor the implicit STEP to the FOR token so later debug info remains stable
+                // if the rest of the loop header changes width.
                 return Ok((
-                    Expr::Integer(IntegerSpan { value: 1, pos: peeked.pos }),
+                    Expr::Integer(IntegerSpan { value: 1, pos: default_pos }),
                     Ordering::Greater,
                     false,
                 ));
@@ -1276,7 +1275,7 @@ impl<'a> Parser<'a> {
         let to_span = self.expect_and_consume(Token::To, "No TO in FOR statement")?;
         let end = self.parse_required_expr("No end expression in FOR statement")?;
 
-        let (step, step_sign, iter_double) = self.parse_step()?;
+        let (step, step_sign, iter_double) = self.parse_step(for_pos)?;
         let end_condition = match step_sign {
             Ordering::Greater => Expr::LessEqual(Box::from(BinaryOpSpan {
                 lhs: Expr::Symbol(SymbolSpan { vref: iterator.clone(), pos: iterator_pos }),
@@ -4138,7 +4137,7 @@ mod tests {
                 })),
                 next: Expr::Add(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(auto_iter, 1, 5),
-                    rhs: expr_integer(1, 1, 16),
+                    rhs: expr_integer(1, 1, 1),
                     pos: lc(1, 11),
                 })),
                 body: vec![],
@@ -4160,7 +4159,7 @@ mod tests {
                 })),
                 next: Expr::Add(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(typed_iter, 1, 5),
-                    rhs: expr_integer(1, 1, 21),
+                    rhs: expr_integer(1, 1, 1),
                     pos: lc(1, 14),
                 })),
                 body: vec![],
@@ -4185,7 +4184,7 @@ mod tests {
                 })),
                 next: Expr::Add(Box::from(BinaryOpSpan {
                     lhs: expr_symbol(iter, 1, 5),
-                    rhs: expr_integer(1, 1, 15),
+                    rhs: expr_integer(1, 1, 1),
                     pos: lc(1, 11),
                 })),
                 body: vec![make_bare_builtin_call("A", 2, 1), make_bare_builtin_call("B", 3, 1)],

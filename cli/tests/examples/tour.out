@@ -191,7 +191,7 @@ you know, to keep me motivated in writing stuff and building this project:
 0024:   CONCAT      R67, R67, R68       ; 25:33
 0025:   MOVE        R65, R67            ; 25:9
 0026:   MOVE        R67, R66            ; 24:9
-0027:   LOADI       R68, 1              ; 24:34
+0027:   LOADI       R68, 1              ; 24:5
 0028:   ADDI        R67, R67, R68       ; 24:15
 0029:   MOVE        R66, R67            ; 24:9
 0030:   JUMP        14                  ; 24:9
@@ -502,7 +502,7 @@ you know, to keep me motivated in writing stuff and building this project:
 0329:   LOADI       R67, 258            ; 146:28
 0330:   UPCALL      3, R65              ; 146:5, PRINT
 0331:   MOVE        R65, R64            ; 143:5
-0332:   LOADI       R66, 1              ; 143:16
+0332:   LOADI       R66, 1              ; 143:1
 0333:   ADDI        R65, R65, R66       ; 143:12
 0334:   MOVE        R64, R65            ; 143:5
 0335:   JUMP        315                 ; 143:5
@@ -526,7 +526,7 @@ you know, to keep me motivated in writing stuff and building this project:
 0353:   LOADI       R67, 258            ; 151:28
 0354:   UPCALL      3, R65              ; 151:5, PRINT
 0355:   MOVE        R65, R64            ; 148:5
-0356:   LOADI       R66, 1              ; 148:17
+0356:   LOADI       R66, 1              ; 148:1
 0357:   ADDI        R65, R65, R66       ; 148:12
 0358:   MOVE        R64, R65            ; 148:5
 0359:   JUMP        337                 ; 148:5
