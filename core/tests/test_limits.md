@@ -25,7 +25,7 @@ OUT "success"
 0008:   CONCAT      R66, R66, R67       ; 4:13
 0009:   MOVE        R64, R66            ; 4:5
 0010:   MOVE        R66, R65            ; 2:5
-0011:   LOADI       R67, 1              ; 2:21
+0011:   LOADI       R67, 1              ; 2:1
 0012:   ADDI        R66, R66, R67       ; 2:12
 0013:   MOVE        R65, R66            ; 2:5
 0014:   JUMP        2                   ; 2:5
@@ -71,7 +71,7 @@ OUT "success"
 0009:   MOVE        R64, R66            ; 4:5
 0010:   LOADI       R64, 0              ; 6:10
 0011:   MOVE        R66, R65            ; 2:5
-0012:   LOADI       R67, 1              ; 2:21
+0012:   LOADI       R67, 1              ; 2:1
 0013:   ADDI        R66, R66, R67       ; 2:12
 0014:   MOVE        R65, R66            ; 2:5
 0015:   JUMP        2                   ; 2:5

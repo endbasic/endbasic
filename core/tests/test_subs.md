@@ -316,7 +316,7 @@ NEXT
 0018:   MOVE        R65, R64            ; 8:16
 0019:   CALL        R65, 1              ; 8:5, MAYBE_EXIT
 0020:   MOVE        R65, R64            ; 7:5
-0021:   LOADI       R66, 1              ; 7:15
+0021:   LOADI       R66, 1              ; 7:1
 0022:   ADDI        R65, R65, R66       ; 7:11
 0023:   MOVE        R64, R65            ; 7:5
 0024:   JUMP        14                  ; 7:5
