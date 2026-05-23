@@ -535,7 +535,7 @@ async fn regenerate<W: Write>(golden: &Path, generated: &mut W) -> io::Result<()
         let mut image = Image::default();
         let mut vm = Vm::new_with_limits(
             upcalls_by_name.clone(),
-            Limits { max_heap_entries: U24::from(128) },
+            Limits { max_call_stack: 4096, max_heap_entries: U24::from(128) },
         );
 
         for source in test.sources {

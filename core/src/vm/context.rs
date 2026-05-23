@@ -26,6 +26,11 @@ use crate::mem::{ArrayData, ConstantDatum, DatumPtr, Heap, HeapDatum};
 use crate::num::unchecked_usize_as_u8;
 use crate::reader::LineCol;
 
+/// Default max call stack.
+const DEFAULT_MAX_CALL_STACK: usize = 4096;
+
+const CALL_STACK_OVERFLOW_MSG: &str = "Out of call stack space";
+
 /// Alias for the type representing a program address.
 type Address = usize;
 
@@ -177,12 +182,22 @@ pub(super) struct Context {
     /// Stack of call frames for tracking subroutine and function calls.
     call_stack: Vec<Frame>,
 
+    /// Maximum number of frames the call stack can contain.
+    max_call_stack: usize,
+
     /// Indicates whether execution should yield once we hit the next statement boundary.
     yield_pending: bool,
 }
 
 impl Default for Context {
     fn default() -> Self {
+        Self::new(DEFAULT_MAX_CALL_STACK)
+    }
+}
+
+impl Context {
+    /// Creates a new execution context with the given call stack limit.
+    pub(super) fn new(max_call_stack: usize) -> Self {
         Self {
             pc: 0,
             fp: usize::from(Register::MAX_GLOBAL),
@@ -190,6 +205,7 @@ impl Default for Context {
             err_handler: ErrorHandler::None,
             regs: vec![0; usize::from(Register::MAX)],
             call_stack: vec![],
+            max_call_stack,
             yield_pending: false,
         }
     }
@@ -301,6 +317,16 @@ impl Context {
     /// to stop execution if needed.
     fn set_exception<S: Into<String>>(&mut self, message: S) {
         self.stop = Some(InternalStopReason::Exception(self.pc, message.into()));
+    }
+
+    fn push_frame(&mut self, frame: Frame) -> bool {
+        if self.call_stack.len() >= self.max_call_stack {
+            self.set_exception(CALL_STACK_OVERFLOW_MSG);
+            false
+        } else {
+            self.call_stack.push(frame);
+            true
+        }
     }
 
     /// Constructs a `Scope` for an upcall with arguments starting at `reg`.
@@ -634,7 +660,9 @@ impl Context {
     /// Implements the `Call` opcode.
     pub(super) fn do_call(&mut self, instr: u32) {
         let (reg, offset) = bytecode::parse_call(instr);
-        self.call_stack.push(Frame { old_pc: self.pc, old_fp: self.fp, ret_reg: Some(reg) });
+        if !self.push_frame(Frame { old_pc: self.pc, old_fp: self.fp, ret_reg: Some(reg) }) {
+            return;
+        }
         self.pc = Address::from(offset);
         let (is_global, index) = reg.to_parts();
         debug_assert!(!is_global, "Function results are always stored to a temp register");
@@ -724,7 +752,9 @@ impl Context {
     /// Implements the `Gosub` opcode.
     pub(super) fn do_gosub(&mut self, instr: u32) {
         let offset = bytecode::parse_gosub(instr);
-        self.call_stack.push(Frame { old_pc: self.pc, old_fp: self.fp, ret_reg: None });
+        if !self.push_frame(Frame { old_pc: self.pc, old_fp: self.fp, ret_reg: None }) {
+            return;
+        }
         self.pc = Address::from(offset);
     }
 
