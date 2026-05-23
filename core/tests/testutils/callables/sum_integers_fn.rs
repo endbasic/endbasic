@@ -60,13 +60,15 @@ impl Callable for SumIntegersFunction {
                     match etype {
                         ExprType::Integer => total += scope.get_integer(reg),
                         _ => {
-                            return Err(CallError::Other("Only accepts integer values".to_owned()));
+                            return Err(CallError::Argument(
+                                "Only accepts integer values".to_owned(),
+                            ));
                         }
                     }
                     sep
                 }
 
-                _ => return Err(CallError::Other("Only accepts integer values".to_owned())),
+                _ => return Err(CallError::Argument("Only accepts integer values".to_owned())),
             };
             reg += 1;
 

@@ -1070,7 +1070,9 @@ impl Context {
         let (mode, target) = bytecode::parse_set_error_handler(instr);
         self.err_handler = match mode {
             ErrorHandlerMode::None => ErrorHandler::None,
-            ErrorHandlerMode::Jump => ErrorHandler::Jump { active: false, addr: usize::from(target) },
+            ErrorHandlerMode::Jump => {
+                ErrorHandler::Jump { active: false, addr: usize::from(target) }
+            }
             ErrorHandlerMode::ResumeNext => ErrorHandler::ResumeNext,
         };
         self.pc += 1;

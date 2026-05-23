@@ -61,7 +61,7 @@ impl Callable for SumDoublesFunction {
                         ExprType::Double => total += scope.get_double(reg),
                         ExprType::Integer => total += f64::from(scope.get_integer(reg)),
                         _ => {
-                            return Err(CallError::Other(
+                            return Err(CallError::Argument(
                                 "Only accepts numerical values".to_owned(),
                             ));
                         }
@@ -69,7 +69,9 @@ impl Callable for SumDoublesFunction {
                     sep
                 }
 
-                _ => return Err(CallError::Other("Only accepts numerical values".to_owned())),
+                _ => {
+                    return Err(CallError::Argument("Only accepts numerical values".to_owned()));
+                }
             };
             reg += 1;
 
