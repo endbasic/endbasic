@@ -130,6 +130,107 @@ OUT RAISEF("internal")
 0=2%
 ```
 
+# Test: ON ERROR GOTO must be re-armed after handling an error
+
+## Source
+
+```basic
+ON ERROR GOTO @handler1
+RAISE "internal"
+OUT 1
+END
+
+@handler1
+OUT LAST_ERROR
+ON ERROR GOTO @handler2
+RAISE "syntax"
+END
+
+@handler2
+OUT LAST_ERROR
+```
+
+## Disassembly
+
+```asm
+0000:   SETEH       JUMP, 8             ; 1:1
+0001:   LOADI       R64, 0              ; 2:7
+0002:   UPCALL      0, R64              ; 2:1, RAISE
+0003:   LOADI       R65, 1              ; 3:5
+0004:   LOADI       R64, 258            ; 3:5
+0005:   UPCALL      1, R64              ; 3:1, OUT
+0006:   LOADI       R64, 0              ; 4:1
+0007:   END         R64                 ; 4:1
+0008:   UPCALL      2, R65              ; 7:5, LAST_ERROR
+0009:   LOADI       R64, 259            ; 7:5
+0010:   UPCALL      1, R64              ; 7:1, OUT
+0011:   SETEH       JUMP, 16            ; 8:1
+0012:   LOADI       R64, 1              ; 9:7
+0013:   UPCALL      0, R64              ; 9:1, RAISE
+0014:   LOADI       R64, 0              ; 10:1
+0015:   END         R64                 ; 10:1
+0016:   UPCALL      2, R65              ; 13:5, LAST_ERROR
+0017:   LOADI       R64, 259            ; 13:5
+0018:   UPCALL      1, R64              ; 13:1, OUT
+0019:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=2:1: Some internal error$
+0=9:7: Some syntax error$
+```
+
+# Test: ON ERROR GOTO is not reentrant after handling an error
+
+## Source
+
+```basic
+ON ERROR GOTO @handler
+RAISE "internal"
+OUT 1
+END
+
+@handler
+OUT LAST_ERROR
+RAISE "syntax"
+END
+```
+
+## Disassembly
+
+```asm
+0000:   SETEH       JUMP, 8             ; 1:1
+0001:   LOADI       R64, 0              ; 2:7
+0002:   UPCALL      0, R64              ; 2:1, RAISE
+0003:   LOADI       R65, 1              ; 3:5
+0004:   LOADI       R64, 258            ; 3:5
+0005:   UPCALL      1, R64              ; 3:1, OUT
+0006:   LOADI       R64, 0              ; 4:1
+0007:   END         R64                 ; 4:1
+0008:   UPCALL      2, R65              ; 7:5, LAST_ERROR
+0009:   LOADI       R64, 259            ; 7:5
+0010:   UPCALL      1, R64              ; 7:1, OUT
+0011:   LOADI       R64, 1              ; 8:7
+0012:   UPCALL      0, R64              ; 8:1, RAISE
+0013:   LOADI       R64, 0              ; 9:1
+0014:   END         R64                 ; 9:1
+0015:   EOF                             ; 0:0
+```
+
+## Runtime errors
+
+```plain
+8:7: Some syntax error
+```
+
+## Output
+
+```plain
+0=2:1: Some internal error$
+```
+
 # Test: ON ERROR RESUME NEXT function failure
 
 ## Source
@@ -197,6 +298,42 @@ OUT LAST_ERROR
 ```plain
 0=1%
 0=3:1: Some internal error$
+```
+
+# Test: ON ERROR RESUME NEXT handles multiple failures without re-arming
+
+## Source
+
+```basic
+ON ERROR RESUME NEXT
+RAISE "internal"
+OUT LAST_ERROR
+RAISE "syntax"
+OUT LAST_ERROR
+```
+
+## Disassembly
+
+```asm
+0000:   SETEH       RESUME_NEXT, 0      ; 1:1
+0001:   LOADI       R64, 0              ; 2:7
+0002:   UPCALL      0, R64              ; 2:1, RAISE
+0003:   UPCALL      1, R65              ; 3:5, LAST_ERROR
+0004:   LOADI       R64, 259            ; 3:5
+0005:   UPCALL      2, R64              ; 3:1, OUT
+0006:   LOADI       R64, 1              ; 4:7
+0007:   UPCALL      0, R64              ; 4:1, RAISE
+0008:   UPCALL      1, R65              ; 5:5, LAST_ERROR
+0009:   LOADI       R64, 259            ; 5:5
+0010:   UPCALL      2, R64              ; 5:1, OUT
+0011:   EOF                             ; 0:0
+```
+
+## Output
+
+```plain
+0=2:1: Some internal error$
+0=4:7: Some syntax error$
 ```
 
 # Test: ON ERROR RESUME NEXT function failure in statement

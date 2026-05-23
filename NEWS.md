@@ -38,6 +38,10 @@ for the time being.**
     This is a side-effect of the core changes but I think is the more
     appropriate behavior.
 
+*   Changed `ON ERROR GOTO` semantics so that a handler is single-use until
+    another `ON ERROR` statement re-arms it.  This prevents recursive error
+    handling loops after failures such as call stack overflows.
+
 *   Fixed handling of Ctrl-based keybindings in the SDL console so that
     `CTRL+<key>` work even when extra modifier flags are active.
 

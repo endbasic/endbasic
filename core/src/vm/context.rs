@@ -63,11 +63,15 @@ pub(super) enum ErrorHandler {
     /// Errors are not handled.
     None,
 
+    /// Errors jump to a handler address.
+    ///
+    /// TODO(jmmv): Revisit how `active` is cleared once we implement the `RESUME` statement.
+    /// For now, a jump handler must be explicitly re-armed with another `ON ERROR` statement
+    /// after it handles an exception.
+    Jump { active: bool, addr: Address },
+
     /// Errors resume execution at the next statement.
     ResumeNext,
-
-    /// Errors jump to a handler address.
-    Jump(Address),
 }
 
 /// Represents a call frame in the stack.
@@ -249,6 +253,14 @@ impl Context {
     /// Returns the current error handler configuration.
     pub(super) fn error_handler(&self) -> ErrorHandler {
         self.err_handler
+    }
+
+    /// Marks the current jump-based error handler as active.
+    pub(super) fn set_error_handler_active(&mut self) {
+        self.err_handler = match self.err_handler {
+            ErrorHandler::Jump { active: false, addr } => ErrorHandler::Jump { active: true, addr },
+            _ => unreachable!("Only inactive jump handlers can be activated"),
+        };
     }
 
     /// Dereferences a pointer register as a string.
@@ -1058,8 +1070,8 @@ impl Context {
         let (mode, target) = bytecode::parse_set_error_handler(instr);
         self.err_handler = match mode {
             ErrorHandlerMode::None => ErrorHandler::None,
+            ErrorHandlerMode::Jump => ErrorHandler::Jump { active: false, addr: usize::from(target) },
             ErrorHandlerMode::ResumeNext => ErrorHandler::ResumeNext,
-            ErrorHandlerMode::Jump => ErrorHandler::Jump(usize::from(target)),
         };
         self.pc += 1;
     }
