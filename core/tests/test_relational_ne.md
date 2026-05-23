@@ -34,8 +34,8 @@ OUT 2.5 <> 2.5
 ## Disassembly
 
 ```asm
-0000:   LOADC       R65, 0              ; 1:5
-0001:   LOADC       R66, 0              ; 1:12
+0000:   LOADC       R65, 0              ; 1:5, 2.5
+0001:   LOADC       R66, 0              ; 1:12, 2.5
 0002:   CMPNED      R65, R65, R66       ; 1:9
 0003:   LOADI       R64, 256            ; 1:5
 0004:   UPCALL      0, R64              ; 1:1, OUT
@@ -60,7 +60,7 @@ OUT 2 <> 2.5
 
 ```asm
 0000:   LOADI       R65, 2              ; 1:5
-0001:   LOADC       R66, 0              ; 1:10
+0001:   LOADC       R66, 0              ; 1:10, 2.5
 0002:   ITOD        R65                 ; 1:7
 0003:   CMPNED      R65, R65, R66       ; 1:7
 0004:   LOADI       R64, 256            ; 1:5

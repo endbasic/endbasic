@@ -143,6 +143,44 @@ impl ConstantDatum {
         }
     }
 
+    /// Formats this value as EndBASIC source code.
+    pub fn as_source(&self) -> String {
+        match self {
+            Self::Boolean(v) => {
+                if *v {
+                    "TRUE".to_owned()
+                } else {
+                    "FALSE".to_owned()
+                }
+            }
+            Self::Double(v) => {
+                let mut s = format!("{}", v);
+                if !s.contains('.') && !s.contains('e') && !s.contains('E') {
+                    s.push_str(".0");
+                }
+                s
+            }
+            Self::Integer(v) => format!("{}", v),
+            Self::Text(v) => format!("\"{}\"", v.replace('"', "\"\"")),
+        }
+    }
+
+    /// Formats this value for display in disassembly output.
+    pub(crate) fn as_disassembly(&self) -> String {
+        match self {
+            Self::Boolean(v) => {
+                if *v {
+                    "TRUE".to_owned()
+                } else {
+                    "FALSE".to_owned()
+                }
+            }
+            Self::Double(v) => v.to_string(),
+            Self::Integer(v) => format!("{}", v),
+            Self::Text(v) => format!("\"{}\"", v.replace('"', "\"\"")),
+        }
+    }
+
     /// Decodes a raw register `value` of `etype` into a constant datum.
     pub(crate) fn from_raw(
         value: u64,

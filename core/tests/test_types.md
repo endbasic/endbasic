@@ -42,10 +42,10 @@ OUT zero_double, small_double, large_double, tiny_double
 ## Disassembly
 
 ```asm
-0000:   LOADC       R64, 0              ; 1:15
-0001:   LOADC       R65, 1              ; 2:16
-0002:   LOADC       R66, 2              ; 3:16
-0003:   LOADC       R67, 3              ; 4:15
+0000:   LOADC       R64, 0              ; 1:15, 0
+0001:   LOADC       R65, 1              ; 2:16, 1.2
+0002:   LOADC       R66, 2              ; 3:16, 10000000000000000
+0003:   LOADC       R67, 3              ; 4:15, 0.001729874916
 0004:   MOVE        R69, R64            ; 5:5
 0005:   LOADI       R68, 289            ; 5:5
 0006:   MOVE        R71, R65            ; 5:18
@@ -101,7 +101,7 @@ OUT large_int
 ## Disassembly
 
 ```asm
-0000:   LOADC       R64, 0              ; 1:13
+0000:   LOADC       R64, 0              ; 1:13, 2147483640
 0001:   MOVE        R66, R64            ; 2:5
 0002:   LOADI       R65, 258            ; 2:5
 0003:   UPCALL      0, R65              ; 2:1, OUT

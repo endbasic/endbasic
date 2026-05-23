@@ -68,7 +68,7 @@ OUT b1, d1, i1, i2, s1
 0003:   LOADI       R3, 0               ; 4:12
 0004:   ALLOC       R4, STRING          ; 5:12
 0005:   LOADI       R0, 1               ; 7:6
-0006:   LOADC       R1, 0               ; 8:6
+0006:   LOADC       R1, 0               ; 8:6, 2.3
 0007:   LOADI       R2, 5               ; 9:6
 0008:   LOADI       R3, 7               ; 10:6
 0009:   LOADI       R4, 1               ; 11:6
@@ -255,9 +255,9 @@ OUT i1, i2
 ```asm
 0000:   LOADI       R0, 0               ; 1:12
 0001:   LOADI       R1, 0               ; 2:12
-0002:   LOADC       R0, 0               ; 3:6
+0002:   LOADC       R0, 0               ; 3:6, 3.2
 0003:   DTOI        R0                  ; 3:6
-0004:   LOADC       R1, 1               ; 4:6
+0004:   LOADC       R1, 1               ; 4:6, 3.7
 0005:   DTOI        R1                  ; 4:6
 0006:   MOVE        R65, R0             ; 5:5
 0007:   LOADI       R64, 290            ; 5:5

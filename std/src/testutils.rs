@@ -1019,27 +1019,6 @@ pub fn check_stmt_compilation_err<S: Into<String>>(exp_error: S, stmt: &str) {
     Tester::default().run(stmt).expect_compilation_err(exp_error).check();
 }
 
-fn datum_as_source(datum: &ConstantDatum) -> String {
-    match datum {
-        ConstantDatum::Boolean(v) => {
-            if *v {
-                "TRUE".to_owned()
-            } else {
-                "FALSE".to_owned()
-            }
-        }
-        ConstantDatum::Double(v) => {
-            let mut s = format!("{}", v);
-            if !s.contains('.') && !s.contains('e') && !s.contains('E') {
-                s.push_str(".0");
-            }
-            s
-        }
-        ConstantDatum::Integer(v) => format!("{}", v),
-        ConstantDatum::Text(v) => format!("\"{}\"", v.replace('"', "\"\"")),
-    }
-}
-
 /// Executes `expr` on a scripting interpreter and ensures that the result is `exp_value`.
 pub fn check_expr_ok<V: Into<ConstantDatum>>(exp_value: V, expr: &str) {
     let exp_value = exp_value.into();
@@ -1064,7 +1043,7 @@ pub fn check_expr_ok_with_vars<
     for (name, value) in vars.as_slice() {
         input.push_str(name);
         input.push_str(" = ");
-        input.push_str(&datum_as_source(value));
+        input.push_str(&value.as_source());
         input.push_str(": ");
     }
     input.push_str(&format!("result = {}", expr));

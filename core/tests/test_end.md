@@ -47,7 +47,7 @@ END 43.98
 ## Disassembly
 
 ```asm
-0000:   LOADC       R64, 0              ; 1:5
+0000:   LOADC       R64, 0              ; 1:5, 43.98
 0001:   DTOI        R64                 ; 1:5
 0002:   END         R64                 ; 1:1
 0003:   EOF                             ; 0:0

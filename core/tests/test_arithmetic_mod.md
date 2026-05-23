@@ -9,8 +9,8 @@ OUT 10.0 MOD 3.0
 ## Disassembly
 
 ```asm
-0000:   LOADC       R65, 0              ; 1:5
-0001:   LOADC       R66, 1              ; 1:14
+0000:   LOADC       R65, 0              ; 1:5, 10
+0001:   LOADC       R66, 1              ; 1:14, 3
 0002:   MODD        R65, R65, R66       ; 1:10
 0003:   LOADI       R64, 257            ; 1:5
 0004:   UPCALL      0, R64              ; 1:1, OUT
@@ -60,7 +60,7 @@ OUT 3 MOD 2.5
 
 ```asm
 0000:   LOADI       R65, 3              ; 1:5
-0001:   LOADC       R66, 0              ; 1:11
+0001:   LOADC       R66, 0              ; 1:11, 2.5
 0002:   ITOD        R65                 ; 1:7
 0003:   MODD        R65, R65, R66       ; 1:7
 0004:   LOADI       R64, 257            ; 1:5
@@ -85,7 +85,7 @@ OUT 10.5 MOD 3
 ## Disassembly
 
 ```asm
-0000:   LOADC       R65, 0              ; 1:5
+0000:   LOADC       R65, 0              ; 1:5, 10.5
 0001:   LOADI       R66, 3              ; 1:14
 0002:   ITOD        R66                 ; 1:14
 0003:   MODD        R65, R65, R66       ; 1:10
@@ -111,7 +111,7 @@ a = (-2147483647 - 1) MOD -1
 ## Disassembly
 
 ```asm
-0000:   LOADC       R64, 0              ; 1:7
+0000:   LOADC       R64, 0              ; 1:7, 2147483647
 0001:   NEGI        R64                 ; 1:6
 0002:   LOADI       R65, 1              ; 1:20
 0003:   SUBI        R64, R64, R65       ; 1:18
