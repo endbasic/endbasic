@@ -47,7 +47,7 @@ test-cli:
 .PHONY: regen-sdl
 regen-sdl:
 	@cd sdl && \
-	    REGEN_BMPS=true \
+	    REGEN=true \
 	    RUST_BACKTRACE=1 \
 	    cargo test $(TEST_ARGS) -- --include-ignored
 

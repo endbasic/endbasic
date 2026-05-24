@@ -6,7 +6,8 @@ inspected and written out by hand, but others are too cumbersome to manually
 edit (for example, because they include terminal control sequences).
 
 To easily update a given `.out` file, make sure that the behavior is correct by
-visually inspecting and manually replicating what the test does and then do:
-`./regen.sh the-file.out`.
+visually inspecting and manually replicating what the test does and then run the
+corresponding test with `REGEN=1`, such as:
+`REGEN=1 cargo test test_repl_interactive`.
 
 The test should now pass.

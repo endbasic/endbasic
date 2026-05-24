@@ -603,7 +603,7 @@ pub(super) async fn run_one_test(name: &'static str) -> io::Result<()> {
 
     let diff = diff(&golden, generated.path())?;
     if !diff.is_empty() {
-        if env::var("REGEN").as_ref().map(String::as_str) == Ok("true") {
+        if matches!(env::var("REGEN").as_deref(), Ok("1") | Ok("true") | Ok("yes")) {
             {
                 let mut output = File::create(golden)?;
                 generated.as_file_mut().seek(io::SeekFrom::Start(0))?;

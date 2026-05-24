@@ -372,7 +372,7 @@ mod testutils {
 
             self.console.call(Request::SaveBmp(actual_bmp.clone())).unwrap();
 
-            if env::var("REGEN_BMPS").as_ref().map(String::as_str) == Ok("true") {
+            if matches!(env::var("REGEN").as_deref(), Ok("1") | Ok("true") | Ok("yes")) {
                 let mut input = BufReader::new(File::open(actual_bmp).unwrap());
                 let output = File::create(golden_bmp_gz).unwrap();
                 let mut encoder = GzEncoder::new(output, Compression::default());
@@ -383,7 +383,7 @@ mod testutils {
                 // for manual validation of the new images.
 
                 drop(self); // Avoid poisoning the mutex when panicking.
-                panic!("Golden data regenerated; flip REGEN_BMPS back to false");
+                panic!("Golden data regenerated; flip REGEN back to false");
             }
 
             let actual = {
