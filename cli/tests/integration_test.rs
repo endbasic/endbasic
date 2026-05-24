@@ -137,22 +137,24 @@ fn check<P: AsRef<Path>>(
     stdout_behavior: Behavior,
     stderr_behavior: Behavior,
 ) {
+    let regen = matches!(env::var("REGEN").as_deref(), Ok("1") | Ok("true") | Ok("yes"));
+
     let golden_stdin = match stdin_behavior {
         Behavior::Null => process::Stdio::null(),
         Behavior::File(path) => File::open(path).unwrap().into(),
         Behavior::Literal(_) => panic!("Literals not supported for stdin"),
     };
 
-    let exp_stdout = match stdout_behavior {
+    let exp_stdout = match &stdout_behavior {
         Behavior::Null => "".to_owned(),
-        Behavior::File(path) => read_golden(&path),
-        Behavior::Literal(text) => text,
+        Behavior::File(path) => read_golden(path),
+        Behavior::Literal(text) => text.clone(),
     };
 
-    let exp_stderr = match stderr_behavior {
+    let exp_stderr = match &stderr_behavior {
         Behavior::Null => "".to_owned(),
-        Behavior::File(path) => read_golden(&path),
-        Behavior::Literal(text) => text,
+        Behavior::File(path) => read_golden(path),
+        Behavior::Literal(text) => text.clone(),
     };
 
     let result = process::Command::new(bin.as_ref())
@@ -168,7 +170,31 @@ fn check<P: AsRef<Path>>(
     let stderr =
         apply_mocks(String::from_utf8(result.stderr).expect("Stderr not is not valid UTF-8"));
 
-    if exp_code != code || exp_stdout != stdout || exp_stderr != stderr {
+    let stdout_mismatch = exp_stdout != stdout;
+    let stderr_mismatch = exp_stderr != stderr;
+    let mut regenerated = false;
+
+    if regen
+        && stdout_mismatch
+        && let Behavior::File(path) = &stdout_behavior
+    {
+        fs::write(path, &stdout).expect("Failed to rewrite golden stdout file");
+        regenerated = true;
+    }
+
+    if regen
+        && stderr_mismatch
+        && let Behavior::File(path) = &stderr_behavior
+    {
+        fs::write(path, &stderr).expect("Failed to rewrite golden stderr file");
+        regenerated = true;
+    }
+
+    if regenerated {
+        panic!("Golden data regenerated; flip REGEN back to false");
+    }
+
+    if exp_code != code || stdout_mismatch || stderr_mismatch {
         eprintln!("Exit code: {}", code);
         eprintln!("stdout:\n{}", stdout);
         eprintln!("stderr:\n{}", stderr);
