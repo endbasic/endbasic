@@ -525,6 +525,12 @@ impl Tester {
         self.storage.clone()
     }
 
+    /// Sends a break signal to the machine.
+    pub fn send_break(self) -> Self {
+        block_on(self.signals_tx.send(Signal::Break)).unwrap();
+        self
+    }
+
     /// Sets a global variable to an initial value.
     pub fn set_var<S: Into<String>, V: Into<ConstantDatum>>(mut self, name: S, value: V) -> Self {
         let value = value.into();

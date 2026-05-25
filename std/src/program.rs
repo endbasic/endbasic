@@ -1058,6 +1058,23 @@ mod tests {
     }
 
     #[test]
+    fn test_run_after_break_discards_old_program() {
+        let program = r#"PRINT "stale""#;
+        Tester::default()
+            .set_program(None, program)
+            .send_break()
+            .continue_from_here()
+            .run("RUN")
+            .expect_err("Break")
+            .expect_program(None as Option<String>, program)
+            .check()
+            .run(r#"SLEEP 0: PRINT "ok""#)
+            .expect_prints(["ok"])
+            .expect_program(None as Option<String>, program)
+            .check();
+    }
+
+    #[test]
     fn test_run_errors() {
         check_stmt_compilation_err("1:1: RUN expected no arguments", "RUN 10");
     }
