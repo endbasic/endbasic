@@ -1040,6 +1040,24 @@ mod tests {
     }
 
     #[test]
+    fn test_run_after_async_error_discards_old_program() {
+        let program = r#"DIR "invalid:": PRINT "stale""#;
+        Tester::default()
+            .set_program(None, program)
+            .continue_from_here()
+            .run("RUN")
+            .expect_clear()
+            .expect_err("1:1: Drive 'INVALID' is not mounted")
+            .expect_program(None as Option<String>, program)
+            .check()
+            .run(r#"PRINT "ok""#)
+            .expect_clear()
+            .expect_prints(["ok"])
+            .expect_program(None as Option<String>, program)
+            .check();
+    }
+
+    #[test]
     fn test_run_errors() {
         check_stmt_compilation_err("1:1: RUN expected no arguments", "RUN 10");
     }

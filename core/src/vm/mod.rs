@@ -90,7 +90,13 @@ impl<'a> UpcallHandler<'a> {
             .expect("This is only reachable when the VM has a pending upcall");
         let (upcall, scope) = vm.prepare_upcall(image, index, first_reg, upcall_pc);
         let result = upcall.async_exec(scope).await;
-        vm.handle_upcall_result(image, upcall_pc, result)
+        match vm.handle_upcall_result(image, upcall_pc, result) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                vm.park_at_eof(image);
+                Err(e)
+            }
+        }
     }
 }
 
@@ -625,6 +631,32 @@ mod tests {
         }
     }
 
+    struct AsyncIoErrorCommand {
+        metadata: Rc<CallableMetadata>,
+    }
+
+    impl AsyncIoErrorCommand {
+        fn new() -> Rc<Self> {
+            let md = CallableMetadataBuilder::new("ASYNC_IOFAIL")
+                .with_async(true)
+                .with_dynamic_syntax(vec![(vec![], None)])
+                .test_build();
+            Rc::from(Self { metadata: md })
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl Callable for AsyncIoErrorCommand {
+        fn metadata(&self) -> Rc<CallableMetadata> {
+            self.metadata.clone()
+        }
+
+        async fn async_exec(&self, _scope: Scope<'_>) -> CallResult<()> {
+            yield_now().await;
+            Err(CallError::from(io::Error::other("mock async I/O error")))
+        }
+    }
+
     #[async_trait(?Send)]
     impl Callable for IoErrorCommand {
         fn metadata(&self) -> Rc<CallableMetadata> {
@@ -722,6 +754,46 @@ mod tests {
         }
 
         assert_eq!(["124", "5"], *data.borrow().as_slice());
+    }
+
+    #[tokio::test]
+    async fn test_exec_async_upcall_error_can_resume_after_append() {
+        let data = Rc::from(RefCell::from(vec![]));
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("ASYNC_IOFAIL"), AsyncIoErrorCommand::new());
+        upcalls_by_name.insert(SymbolKey::from("OUT"), OutCommand::new(data.clone()));
+
+        let mut compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let mut image = Image::default();
+        compiler.compile_more(&mut image, &mut b"ASYNC_IOFAIL".as_slice()).unwrap();
+
+        let mut vm = Vm::new(upcalls_by_name);
+        match vm.exec(&image) {
+            StopReason::UpcallAsync(handler) => {
+                let error = handler.invoke().await.unwrap_err();
+                let (pos, message) = error.parts();
+                assert_eq!(LineCol { line: 1, col: 1 }, pos);
+                assert_eq!("mock async I/O error", message);
+            }
+            _ => panic!("Execution should stop at ASYNC_IOFAIL upcall"),
+        }
+
+        match vm.exec(&image) {
+            StopReason::Eof => (),
+            _ => panic!("Execution should park at EOF after an ASYNC_IOFAIL exception"),
+        }
+
+        compiler.compile_more(&mut image, &mut b"OUT 2".as_slice()).unwrap();
+        match vm.exec(&image) {
+            StopReason::Eof => (),
+            _ => panic!("Execution should resume at newly appended code"),
+        }
+        assert_eq!(["2"], *data.borrow().as_slice());
+
+        match vm.exec(&image) {
+            StopReason::Eof => (),
+            _ => panic!("Execution should stop at EOF after appended code"),
+        }
     }
 
     #[tokio::test]
