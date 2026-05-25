@@ -481,6 +481,7 @@ impl Vm {
     /// This is useful when external events interrupt execution and the caller wants
     /// to avoid resuming a partially-run image by mistake.
     pub fn interrupt(&mut self, image: &Image) {
+        self.pending_upcall = None;
         self.park_at_eof(image);
     }
 }
@@ -781,6 +782,63 @@ mod tests {
         match vm.exec(&image) {
             StopReason::Eof => (),
             _ => panic!("Execution should park at EOF after an ASYNC_IOFAIL exception"),
+        }
+
+        compiler.compile_more(&mut image, &mut b"OUT 2".as_slice()).unwrap();
+        match vm.exec(&image) {
+            StopReason::Eof => (),
+            _ => panic!("Execution should resume at newly appended code"),
+        }
+        assert_eq!(["2"], *data.borrow().as_slice());
+
+        match vm.exec(&image) {
+            StopReason::Eof => (),
+            _ => panic!("Execution should stop at EOF after appended code"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_interrupt_cancels_pending_async_upcall() {
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("ASYNC_INCREMENT"), AsyncIncrementFunction::new());
+
+        let compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let image = compiler.compile(&mut b"x = ASYNC_INCREMENT(123)".as_slice()).unwrap();
+        let mut vm = Vm::new(upcalls_by_name);
+
+        match vm.exec(&image) {
+            StopReason::UpcallAsync(_) => (),
+            _ => panic!("Execution should stop at ASYNC_INCREMENT upcall"),
+        }
+
+        vm.interrupt(&image);
+        match vm.exec(&image) {
+            StopReason::Eof => (),
+            _ => panic!("Execution should stop at EOF after interrupting a pending upcall"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_interrupt_after_pending_async_upcall_can_resume_after_append() {
+        let data = Rc::from(RefCell::from(vec![]));
+        let mut upcalls_by_name: HashMap<SymbolKey, Rc<dyn Callable>> = HashMap::new();
+        upcalls_by_name.insert(SymbolKey::from("ASYNC_INCREMENT"), AsyncIncrementFunction::new());
+        upcalls_by_name.insert(SymbolKey::from("OUT"), OutCommand::new(data.clone()));
+
+        let mut compiler = Compiler::new(&upcalls_by_name, &[]).unwrap();
+        let mut image = Image::default();
+        compiler.compile_more(&mut image, &mut b"x = ASYNC_INCREMENT(123)".as_slice()).unwrap();
+
+        let mut vm = Vm::new(upcalls_by_name);
+        match vm.exec(&image) {
+            StopReason::UpcallAsync(_) => (),
+            _ => panic!("Execution should stop at ASYNC_INCREMENT upcall"),
+        }
+
+        vm.interrupt(&image);
+        match vm.exec(&image) {
+            StopReason::Eof => (),
+            _ => panic!("Execution should stop at EOF after interrupting a pending upcall"),
         }
 
         compiler.compile_more(&mut image, &mut b"OUT 2".as_slice()).unwrap();
