@@ -4,7 +4,7 @@
     "description": "The EndBASIC programming language - web interface",
     "private": true,
     "scripts": {
-        "_wasm:build:release": "cargo build --target wasm32-unknown-unknown --release && wasm-bindgen --target bundler --out-dir pkg --out-name index ../target/wasm32-unknown-unknown/release/endbasic_web.wasm",
+        "_wasm:build:release": "cargo build --target wasm32-unknown-unknown --release && wasm-bindgen --target bundler --out-dir pkg --out-name index ../target/wasm32-unknown-unknown/release/endbasic_web.wasm && wasm-opt -O3 -o pkg/index_bg.wasm pkg/index_bg.wasm",
         "_wasm:build:debug": "cargo build --target wasm32-unknown-unknown && wasm-bindgen --target bundler --out-dir pkg --out-name index ../target/wasm32-unknown-unknown/debug/endbasic_web.wasm",
         "_build:release": "npm run _wasm:build:release && webpack --mode=production",
         "_build:debug": "npm run _wasm:build:debug && webpack --mode=development",

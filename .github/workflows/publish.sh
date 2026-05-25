@@ -34,6 +34,7 @@ wasm_bindgen_version="$(
         | cut -d '"' -f 2
 )"
 cargo binstall --no-confirm "wasm-bindgen-cli@${wasm_bindgen_version}"
+cargo binstall --no-confirm wasm-opt
 
 export NVM_DIR="${HOME}/.nvm"
 [ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
