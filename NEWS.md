@@ -13,6 +13,11 @@ for the time being.**
 ## Changes in version 0.12.99
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+*   Issue #120: Added support for having the cursor wrap around to the next line 
+    when pressing left or right at a line start or end boundary, respectively. 
+    In simpler words, pressing left at the start of a line takes you to the end 
+    of the next line, and pressing right at the end of a line takes you to the 
+    beginning of the next line. (@Protowalker)
 
 *   Replaced the core interpreter with a brand-new rewrite that has been
     designed, from the ground up, to target efficient bytecode compilation.
