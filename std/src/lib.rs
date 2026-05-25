@@ -136,6 +136,29 @@ impl Machine {
         self.compile(&mut program.as_bytes())
     }
 
+    /// Drops any deferred actions from the most recent async upcall.
+    fn clear_actions(&mut self) {
+        self.actions.borrow_mut().clear();
+    }
+
+    /// Applies and consumes all deferred actions from the most recent async upcall.
+    ///
+    /// Returns whether subsequent execution should be treated as nested due to a `RUN` command.
+    fn drain_actions(&mut self) -> Result<bool> {
+        let actions: Vec<MachineAction> = self.actions.borrow_mut().drain(..).collect();
+        let mut nested = false;
+        for action in actions {
+            match action {
+                MachineAction::Clear => self.clear(),
+                MachineAction::Run(program) => {
+                    self.run(program)?;
+                    nested = true;
+                }
+            }
+        }
+        Ok(nested)
+    }
+
     /// Consumes any pending signals so they don't affect future executions.
     pub fn drain_signals(&mut self) {
         while self.signals_chan.1.try_recv().is_ok() {
@@ -198,24 +221,19 @@ impl Machine {
                     // arise from the upcall so that, e.g. Ctrl+C cannot be caught as a keyboard event
                     // and instead we abort execution.
                     if self.should_stop() {
+                        self.clear_actions();
                         self.vm.interrupt(&self.image);
                         return Err(Error::Break);
                     }
 
                     if let Err(e) = upcall_result {
+                        self.clear_actions();
                         let (pos, message) = e.parts();
                         return Err(Error::RuntimeError(pos, message));
                     }
 
-                    let actions: Vec<MachineAction> = self.actions.borrow_mut().drain(..).collect();
-                    for action in actions {
-                        match action {
-                            MachineAction::Clear => self.clear(),
-                            MachineAction::Run(program) => {
-                                self.run(program)?;
-                                nested = true;
-                            }
-                        }
+                    if self.drain_actions()? {
+                        nested = true;
                     }
                 }
                 StopReason::Yield => {
