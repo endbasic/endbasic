@@ -202,11 +202,9 @@ pub fn add_interactive(machine: &mut MachineBuilder) {
 mod tests {
     use super::*;
     use crate::testutils::*;
-    use crate::{Error, MachineBuilder, Signal};
+    use crate::{Error, MachineBuilder, Signal, Yielder};
     use futures_lite::future::block_on;
     use std::cell::RefCell;
-    use std::future::Future;
-    use std::pin::Pin;
     use std::rc::Rc;
     use std::time::Instant;
 
@@ -337,20 +335,24 @@ mod tests {
     }
 
     #[test]
-    fn test_yield_now_fn_called_on_stop_reason_yield() {
+    fn test_yielder_called_on_stop_reason_yield() {
+        struct CountingYielder {
+            count: Rc<RefCell<usize>>,
+        }
+
+        #[async_trait(?Send)]
+        impl Yielder for CountingYielder {
+            async fn yield_now(&mut self) {
+                *self.count.borrow_mut() += 1;
+            }
+        }
+
         let (tx, rx) = async_channel::unbounded();
         let yield_count = Rc::from(RefCell::from(0));
-        let yield_count2 = yield_count.clone();
-        let yield_now = move || -> Pin<Box<dyn Future<Output = ()>>> {
-            let yield_count = yield_count2.clone();
-            Box::pin(async move {
-                *yield_count.borrow_mut() += 1;
-            })
-        };
 
         let mut machine = MachineBuilder::default()
             .with_signals_chan((tx.clone(), rx))
-            .with_yield_now_fn(Box::from(yield_now))
+            .with_yielder(Box::new(CountingYielder { count: yield_count.clone() }))
             .build();
 
         block_on(tx.send(Signal::Break)).unwrap();
