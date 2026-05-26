@@ -232,7 +232,7 @@ impl RasterOps for CanvasRasterOps {
     }
 
     fn present_canvas(&mut self) -> io::Result<()> {
-        self.yielder.schedule();
+        self.yielder.request_paint();
         Ok(())
     }
 

@@ -156,7 +156,7 @@ impl WebInput {
     pub(crate) async fn try_recv(&mut self) -> io::Result<Option<Key>> {
         match self.on_key_rx.try_recv() {
             Ok(k) => {
-                self.yielder.reset();
+                self.yielder.on_host_yield();
                 Ok(Some(k))
             }
             Err(TryRecvError::Empty) => Ok(None),
@@ -167,7 +167,7 @@ impl WebInput {
     /// Gets the next key event, waiting until one is available.
     pub(crate) async fn recv(&mut self) -> io::Result<Key> {
         let key = self.on_key_rx.recv().await.unwrap();
-        self.yielder.reset();
+        self.yielder.on_host_yield();
         Ok(key)
     }
 }

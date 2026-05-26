@@ -61,6 +61,7 @@ features = [
     "InputEvent",
     "KeyboardEvent",
     "Location",
+    "Performance",
     "Storage",
     "TextMetrics",
     "Window",
