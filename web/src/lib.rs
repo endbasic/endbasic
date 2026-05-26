@@ -26,7 +26,6 @@ use std::io;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
-use time::OffsetDateTime;
 use url::Url;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -93,6 +92,29 @@ fn do_sleep<T: 'static>(ms: i32, ret: T) -> Pin<Box<dyn Future<Output = T>>> {
     })
 }
 
+/// Yields execution until the browser is ready to render the next frame.
+fn do_request_animation_frame() -> Pin<Box<dyn Future<Output = ()>>> {
+    let (frame_tx, frame_rx) = async_channel::unbounded();
+    let callback = Closure::wrap(Box::new(move |_timestamp: f64| {
+        frame_tx.try_send(()).expect("Send must succeed")
+    }) as Box<dyn FnMut(f64)>);
+
+    let window = match web_sys::window() {
+        Some(window) => window,
+        None => log_and_panic!("Failed to get window"),
+    };
+    if let Err(e) = window.request_animation_frame(callback.as_ref().unchecked_ref()) {
+        log_and_panic!("Failed to request animation frame on window: {:?}", e);
+    }
+
+    Box::pin(async move {
+        let _callback = callback; // Must grab ownership so that the closure remains alive until it is used.
+        if let Err(e) = frame_rx.recv().await {
+            log_and_panic!("Failed to wait for animation frame: {}", e);
+        }
+    })
+}
+
 /// Implementation of a `SleepFn` using `do_sleep`.
 fn js_sleep(d: Duration, yielder: WebYielder) -> Pin<Box<dyn Future<Output = Result<(), String>>>> {
     let ms = d.as_millis();
@@ -104,88 +126,97 @@ fn js_sleep(d: Duration, yielder: WebYielder) -> Pin<Box<dyn Future<Output = Res
     }
     let ms = ms as i32;
 
-    yielder.reset();
+    yielder.on_host_yield();
     do_sleep(ms, Ok(()))
 }
 
-/// Supplier of a `Yielder` that relies on a zero timeout to yield execution back to the
-/// JavaScript interpreter.
-///
-/// Yielding via a timeout in the way we do it is very expensive, so we need to avoid doing it too
-/// frequently.  For this reason, this implementation tries to only yield once every
-/// `MAX_INTERVAL_MILLIS`, only tries to compute this every `GRACE_ITERATIONS` instructions, and
-/// only yields if nothing else (like an explicit sleep) has done it.
-//
-// TODO(jmmv): This is a big hack that we need to support interrupting running programs via CTRL+C
-// and it doesn't work very well.   We should fix this by extracting the instruction execution loop
-// from the `Machine` and issuing instructions here via a JavaScript interval.  It is unclear if
-// this will fix the performance issues that we have though.
-struct WebYielderState {
-    counter: usize,
-    last: OffsetDateTime,
+/// Returns the current monotonic time in milliseconds.
+fn current_time_millis() -> f64 {
+    let window = match web_sys::window() {
+        Some(window) => window,
+        None => log_and_panic!("Failed to get window"),
+    };
+    match window.performance() {
+        Some(performance) => performance.now(),
+        None => js_sys::Date::now(),
+    }
 }
 
+/// Type of yielding decision taken by the `WebYielder`.
+#[derive(Debug, Eq, PartialEq)]
+enum YieldDecision {
+    Continue,
+    Fairness,
+    Paint,
+}
+
+/// State tracked by the `WebYielder`.
+struct WebYielderState {
+    last_host_yield_ms: f64,
+    paint_requested: bool,
+}
+
+/// Browser-native yielder for the web frontend.
 #[derive(Clone)]
 pub(crate) struct WebYielder(Rc<RefCell<WebYielderState>>);
 
 impl WebYielder {
-    /// Number of iterations during which the yielder does nothing but increment a counter.  We need
-    /// this to be very cheap because this is called on every executed instruction.
-    const GRACE_ITERATIONS: usize = 1000000;
-
-    /// Maximum interval between forced yields.
-    const MAX_INTERVAL_MILLIS: u64 = 1000;
+    /// Maximum interval between forced fairness yields.
+    const MAX_INTERVAL_MILLIS: f64 = 1000.0;
 
     /// Creates a new yielder.
     fn new() -> Self {
         Self(Rc::from(RefCell::from(WebYielderState {
-            counter: Self::GRACE_ITERATIONS,
-            last: OffsetDateTime::now_utc(),
+            last_host_yield_ms: current_time_millis(),
+            paint_requested: false,
         })))
     }
 
-    /// Yields execution via a zero timeout if enough instructions have been executed and if enough
-    /// time has passed.
-    fn yield_to_host(&self) -> Pin<Box<dyn Future<Output = ()>>> {
+    /// Records that the host just had a chance to run at the given `now_ms`.
+    fn record_host_yield(&self, now_ms: f64) {
         let mut state = self.0.borrow_mut();
-        if state.counter > 0 {
-            state.counter -= 1;
+        state.paint_requested = false;
+        state.last_host_yield_ms = now_ms;
+    }
 
-            Box::pin(async move {})
+    /// Records that the host just had a chance to run at the current time.
+    fn on_host_yield(&self) {
+        self.record_host_yield(current_time_millis());
+    }
+
+    /// Requests that the next machine yield line up with a browser paint.
+    fn request_paint(&self) {
+        self.0.borrow_mut().paint_requested = true;
+    }
+
+    /// Consumes the current scheduling hints and returns the next browser yield decision.
+    fn take_yield_decision(&self, now_ms: f64) -> YieldDecision {
+        let mut state = self.0.borrow_mut();
+        if state.paint_requested {
+            state.paint_requested = false;
+            YieldDecision::Paint
+        } else if (now_ms - state.last_host_yield_ms) >= Self::MAX_INTERVAL_MILLIS {
+            YieldDecision::Fairness
         } else {
-            let new_last = OffsetDateTime::now_utc();
-            if (new_last - state.last) >= Duration::from_millis(Self::MAX_INTERVAL_MILLIS) {
-                debug_assert!(state.counter == 0);
-                state.last = new_last;
-
-                do_sleep(0, ())
-            } else {
-                Box::pin(async move {})
-            }
+            YieldDecision::Continue
         }
-    }
-
-    /// Records that a yield just happened for some other reason and needn't happen again until the
-    /// next interval.
-    fn reset(&self) {
-        let mut state = self.0.borrow_mut();
-        state.counter = Self::GRACE_ITERATIONS;
-        state.last = OffsetDateTime::now_utc();
-    }
-
-    /// Schedules a forced yield on the next round.
-    pub(crate) fn schedule(&self) {
-        let mut state = self.0.borrow_mut();
-        state.counter = 0;
-        state.last -= Duration::from_millis(Self::MAX_INTERVAL_MILLIS);
     }
 }
 
 #[async_trait(?Send)]
 impl Yielder for WebYielder {
     async fn yield_now(&mut self) {
-        let future = self.yield_to_host();
-        future.await;
+        match self.take_yield_decision(current_time_millis()) {
+            YieldDecision::Continue => (),
+            YieldDecision::Fairness => {
+                do_sleep(0, ()).await;
+                self.on_host_yield();
+            }
+            YieldDecision::Paint => {
+                do_request_animation_frame().await;
+                self.on_host_yield();
+            }
+        }
     }
 }
 
@@ -362,6 +393,52 @@ mod tests {
     use super::*;
     use js_sys::Date;
     use wasm_bindgen_test::*;
+
+    fn new_test_yielder(last_host_yield_ms: f64) -> WebYielder {
+        WebYielder(Rc::from(RefCell::from(WebYielderState {
+            last_host_yield_ms,
+            paint_requested: false,
+        })))
+    }
+
+    #[test]
+    fn test_yielder_defaults_to_continue() {
+        let yielder = new_test_yielder(100.0);
+        assert_eq!(YieldDecision::Continue, yielder.take_yield_decision(1099.0));
+    }
+
+    #[test]
+    fn test_yielder_prefers_paint_over_fairness() {
+        let yielder = new_test_yielder(100.0);
+        yielder.request_paint();
+
+        assert_eq!(YieldDecision::Paint, yielder.take_yield_decision(1100.0));
+    }
+
+    #[test]
+    fn test_yielder_triggers_fairness_after_deadline() {
+        let yielder = new_test_yielder(100.0);
+
+        assert_eq!(YieldDecision::Fairness, yielder.take_yield_decision(1100.0));
+    }
+
+    #[test]
+    fn test_host_yield_resets_fairness_deadline() {
+        let yielder = new_test_yielder(100.0);
+        yielder.record_host_yield(500.0);
+
+        assert_eq!(YieldDecision::Continue, yielder.take_yield_decision(1499.0));
+        assert_eq!(YieldDecision::Fairness, yielder.take_yield_decision(1500.0));
+    }
+
+    #[test]
+    fn test_host_yield_clears_pending_paint_request() {
+        let yielder = new_test_yielder(100.0);
+        yielder.request_paint();
+        yielder.record_host_yield(500.0);
+
+        assert_eq!(YieldDecision::Continue, yielder.take_yield_decision(1499.0));
+    }
 
     #[wasm_bindgen_test]
     async fn test_js_sleep_ok() {
