@@ -255,6 +255,11 @@ impl Context {
         self.err_handler
     }
 
+    /// Clears the current error handler configuration.
+    pub(super) fn clear_error_handler(&mut self) {
+        self.err_handler = ErrorHandler::None;
+    }
+
     /// Marks the current jump-based error handler as active.
     pub(super) fn set_error_handler_active(&mut self) {
         self.err_handler = match self.err_handler {
