@@ -272,6 +272,11 @@ impl Vm {
         self.pending_upcall = None;
     }
 
+    /// Clears the current error handler without affecting execution state or captured errors.
+    pub fn clear_error_handler(&mut self) {
+        self.context.clear_error_handler();
+    }
+
     /// Synchronizes cached upcall handlers with the externally-owned `image`.
     fn sync_upcalls(&mut self, image: &Image) {
         debug_assert!(

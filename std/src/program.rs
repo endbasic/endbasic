@@ -1058,6 +1058,47 @@ mod tests {
     }
 
     #[test]
+    fn test_run_does_not_leave_error_handler_active() {
+        let program = r#"
+            ON ERROR GOTO @handler
+            END
+            
+            @handler
+            PRINT "captured: "; ERRMSG
+            END 1
+        "#;
+        Tester::default()
+            .set_program(None, program)
+            .continue_from_here()
+            .run("RUN")
+            .expect_clear()
+            .expect_program(None as Option<String>, program)
+            .check()
+            .run(r#"LOAD "missing-file""#)
+            .expect_clear()
+            .expect_err("1:1: Entry not found")
+            .expect_program(None as Option<String>, program)
+            .check();
+    }
+
+    #[test]
+    fn test_run_preserves_errmsg_across_commands() {
+        let program = r#"ON ERROR RESUME NEXT: COLOR -1: END"#;
+        Tester::default()
+            .set_program(None, program)
+            .continue_from_here()
+            .run("RUN")
+            .expect_clear()
+            .expect_program(None as Option<String>, program)
+            .check()
+            .run("result = ERRMSG")
+            .expect_clear()
+            .expect_var("result", "1:29: Color out of range")
+            .expect_program(None as Option<String>, program)
+            .check();
+    }
+
+    #[test]
     fn test_run_after_break_discards_old_program() {
         let program = r#"PRINT "stale""#;
         Tester::default()

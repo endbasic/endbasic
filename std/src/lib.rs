@@ -195,24 +195,30 @@ impl Machine {
         // with the new core.  It doesn't work great yet but it allows us to make tests pass.
         // This must be revised because there are some odd behavioral issues stemming from it.
         let mut nested = false;
-        loop {
+        let result = loop {
             match self.vm.exec(&self.image) {
-                StopReason::Eof => break Ok(None),
+                StopReason::Eof => {
+                    break Ok(None);
+                }
+
                 StopReason::End(code) => {
                     if !nested {
                         break Ok(Some(code.to_i32()));
                     }
-                    nested = false;
 
                     if !code.is_success() {
                         self.console
                             .borrow_mut()
                             .print(&format!("Program exited with code {}", code.to_i32()))?;
                     }
+
+                    break Ok(None);
                 }
+
                 StopReason::Exception(pos, msg) => {
-                    return Err(Error::RuntimeError(pos, msg));
+                    break Err(Error::RuntimeError(pos, msg));
                 }
+
                 StopReason::UpcallAsync(handler) => {
                     let upcall_result = handler.invoke().await;
 
@@ -223,27 +229,32 @@ impl Machine {
                     if self.should_stop() {
                         self.clear_actions();
                         self.vm.interrupt(&self.image);
-                        return Err(Error::Break);
+                        break Err(Error::Break);
                     }
 
                     if let Err(e) = upcall_result {
                         self.clear_actions();
                         let (pos, message) = e.parts();
-                        return Err(Error::RuntimeError(pos, message));
+                        break Err(Error::RuntimeError(pos, message));
                     }
 
                     if self.drain_actions()? {
                         nested = true;
                     }
                 }
+
                 StopReason::Yield => {
                     if self.should_stop_after_yield().await {
                         self.vm.interrupt(&self.image);
-                        return Err(Error::Break);
+                        break Err(Error::Break);
                     }
                 }
             }
+        };
+        if nested {
+            self.vm.clear_error_handler();
         }
+        result
     }
 }
 
