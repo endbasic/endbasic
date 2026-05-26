@@ -17,8 +17,9 @@
 //! Web interface for the EndBASIC language.
 
 use async_channel::{Receiver, Sender};
+use async_trait::async_trait;
 use endbasic_std::console::{Console, GraphicsConsole};
-use endbasic_std::{Signal, YieldNowFn};
+use endbasic_std::{Signal, Yielder};
 use std::cell::RefCell;
 use std::future::Future;
 use std::io;
@@ -93,10 +94,7 @@ fn do_sleep<T: 'static>(ms: i32, ret: T) -> Pin<Box<dyn Future<Output = T>>> {
 }
 
 /// Implementation of a `SleepFn` using `do_sleep`.
-fn js_sleep(
-    d: Duration,
-    yielder: Rc<RefCell<Yielder>>,
-) -> Pin<Box<dyn Future<Output = Result<(), String>>>> {
+fn js_sleep(d: Duration, yielder: WebYielder) -> Pin<Box<dyn Future<Output = Result<(), String>>>> {
     let ms = d.as_millis();
     if ms > i32::MAX as u128 {
         // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it
@@ -106,11 +104,11 @@ fn js_sleep(
     }
     let ms = ms as i32;
 
-    yielder.borrow_mut().reset();
+    yielder.reset();
     do_sleep(ms, Ok(()))
 }
 
-/// Supplier of a `YieldNowFn` that relies on a zero timeout to yield execution back to the
+/// Supplier of a `Yielder` that relies on a zero timeout to yield execution back to the
 /// JavaScript interpreter.
 ///
 /// Yielding via a timeout in the way we do it is very expensive, so we need to avoid doing it too
@@ -122,12 +120,15 @@ fn js_sleep(
 // and it doesn't work very well.   We should fix this by extracting the instruction execution loop
 // from the `Machine` and issuing instructions here via a JavaScript interval.  It is unclear if
 // this will fix the performance issues that we have though.
-pub(crate) struct Yielder {
+struct WebYielderState {
     counter: usize,
     last: OffsetDateTime,
 }
 
-impl Yielder {
+#[derive(Clone)]
+pub(crate) struct WebYielder(Rc<RefCell<WebYielderState>>);
+
+impl WebYielder {
     /// Number of iterations during which the yielder does nothing but increment a counter.  We need
     /// this to be very cheap because this is called on every executed instruction.
     const GRACE_ITERATIONS: usize = 1000000;
@@ -137,21 +138,25 @@ impl Yielder {
 
     /// Creates a new yielder.
     fn new() -> Self {
-        Self { counter: Self::GRACE_ITERATIONS, last: OffsetDateTime::now_utc() }
+        Self(Rc::from(RefCell::from(WebYielderState {
+            counter: Self::GRACE_ITERATIONS,
+            last: OffsetDateTime::now_utc(),
+        })))
     }
 
     /// Yields execution via a zero timeout if enough instructions have been executed and if enough
     /// time has passed.
-    fn yield_now(&mut self) -> Pin<Box<dyn Future<Output = ()>>> {
-        if self.counter > 0 {
-            self.counter -= 1;
+    fn yield_to_host(&self) -> Pin<Box<dyn Future<Output = ()>>> {
+        let mut state = self.0.borrow_mut();
+        if state.counter > 0 {
+            state.counter -= 1;
 
             Box::pin(async move {})
         } else {
             let new_last = OffsetDateTime::now_utc();
-            if (new_last - self.last) >= Duration::from_millis(Self::MAX_INTERVAL_MILLIS) {
-                debug_assert!(self.counter == 0);
-                self.last = new_last;
+            if (new_last - state.last) >= Duration::from_millis(Self::MAX_INTERVAL_MILLIS) {
+                debug_assert!(state.counter == 0);
+                state.last = new_last;
 
                 do_sleep(0, ())
             } else {
@@ -162,24 +167,25 @@ impl Yielder {
 
     /// Records that a yield just happened for some other reason and needn't happen again until the
     /// next interval.
-    fn reset(&mut self) {
-        self.counter = Self::GRACE_ITERATIONS;
-        self.last = OffsetDateTime::now_utc();
+    fn reset(&self) {
+        let mut state = self.0.borrow_mut();
+        state.counter = Self::GRACE_ITERATIONS;
+        state.last = OffsetDateTime::now_utc();
     }
 
     /// Schedules a forced yield on the next round.
-    pub(crate) fn schedule(&mut self) {
-        self.counter = 0;
-        self.last -= Duration::from_millis(Self::MAX_INTERVAL_MILLIS);
+    pub(crate) fn schedule(&self) {
+        let mut state = self.0.borrow_mut();
+        state.counter = 0;
+        state.last -= Duration::from_millis(Self::MAX_INTERVAL_MILLIS);
     }
+}
 
-    /// Creates a new `YieldNowFn` for this yielder.
-    fn new_yield_now_fn(yielder: Rc<RefCell<Yielder>>) -> YieldNowFn {
-        Box::from(move || {
-            let yielder = yielder.clone();
-            let mut yielder = yielder.borrow_mut();
-            yielder.yield_now()
-        })
+#[async_trait(?Send)]
+impl Yielder for WebYielder {
+    async fn yield_now(&mut self) {
+        let future = self.yield_to_host();
+        future.await;
     }
 }
 
@@ -195,7 +201,7 @@ fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
 /// Connects the EndBASIC interpreter to a web page.
 #[wasm_bindgen]
 pub struct WebTerminal {
-    yielder: Rc<RefCell<Yielder>>,
+    yielder: WebYielder,
     console: GraphicsConsole<WebInputOps, CanvasRasterOps>,
     on_screen_keyboard: OnScreenKeyboard,
     service_url: String,
@@ -207,7 +213,7 @@ impl WebTerminal {
     /// Creates a new instance of the `WebTerminal`.
     #[wasm_bindgen(constructor)]
     pub fn new(terminal: HtmlCanvasElement, service_url: String) -> Self {
-        let yielder = Rc::from(RefCell::from(Yielder::new()));
+        let yielder = WebYielder::new();
         let signals_chan = async_channel::unbounded();
         let input = WebInput::new(signals_chan.0.clone(), yielder.clone());
         let on_screen_keyboard = input.on_screen_keyboard();
@@ -257,7 +263,7 @@ impl WebTerminal {
         let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
-            .with_yield_now_fn(Yielder::new_yield_now_fn(self.yielder.clone()))
+            .with_yielder(Box::new(self.yielder.clone()))
             .with_signals_chan(self.signals_chan)
             .with_sleep_fn(Box::from(move |d| js_sleep(d, yielder.clone())));
         let program = Rc::from(RefCell::from(endbasic_repl::editor::Editor::default()));
@@ -359,7 +365,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn test_js_sleep_ok() {
-        let yielder = Rc::from(RefCell::from(Yielder::new()));
+        let yielder = WebYielder::new();
         let before = Date::now();
         js_sleep(Duration::from_millis(10), yielder).await.unwrap();
         let elapsed = Date::now() - before;
@@ -368,7 +374,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn test_js_sleep_too_big() {
-        let yielder = Rc::from(RefCell::from(Yielder::new()));
+        let yielder = WebYielder::new();
         assert_eq!(
             "Cannot sleep for that long",
             js_sleep(Duration::from_millis(i32::MAX as u64 + 1), yielder).await.unwrap_err()

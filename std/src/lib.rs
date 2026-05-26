@@ -18,12 +18,11 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::future::Future;
 use std::io;
-use std::pin::Pin;
 use std::rc::Rc;
 
 use async_channel::{Receiver, Sender, TryRecvError};
+use async_trait::async_trait;
 use endbasic_core::{
     CallError, Callable, CallableMetadata, Compiler, CompilerError, GlobalDef, Image, LineCol,
     StopReason, SymbolKey, Vm,
@@ -98,8 +97,12 @@ pub enum Signal {
     Break,
 }
 
-/// Type of the function used by the execution loop to yield execution.
-pub type YieldNowFn = Box<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + 'static>>>;
+/// Trait to decide when the machine should cooperatively yield to the host.
+#[async_trait(?Send)]
+pub trait Yielder {
+    /// Yields execution to the host.
+    async fn yield_now(&mut self);
+}
 
 /// Executes an EndBASIC program and tracks its state.
 pub struct Machine {
@@ -111,7 +114,7 @@ pub struct Machine {
     actions: Rc<RefCell<Vec<MachineAction>>>,
     global_defs: Vec<GlobalDef>,
     console: Rc<RefCell<dyn console::Console>>,
-    yield_now_fn: Option<YieldNowFn>,
+    yielder: Option<Box<dyn Yielder>>,
     signals_chan: (Sender<Signal>, Receiver<Signal>),
 }
 
@@ -177,8 +180,8 @@ impl Machine {
 
     /// Returns true if execution should stop after yielding to the host once.
     async fn should_stop_after_yield(&mut self) -> bool {
-        if let Some(yield_now) = self.yield_now_fn.as_ref() {
-            (yield_now)().await;
+        if let Some(yielder) = self.yielder.as_mut() {
+            yielder.yield_now().await;
         }
         self.should_stop()
     }
@@ -267,7 +270,7 @@ pub struct MachineBuilder {
     gpio_pins: Option<Rc<RefCell<dyn gpio::Pins>>>,
     sleep_fn: Option<exec::SleepFn>,
     actions: Rc<RefCell<Vec<MachineAction>>>,
-    yield_now_fn: Option<YieldNowFn>,
+    yielder: Option<Box<dyn Yielder>>,
     signals_chan: Option<(Sender<Signal>, Receiver<Signal>)>,
     global_defs: Vec<GlobalDef>,
 }
@@ -331,9 +334,9 @@ impl MachineBuilder {
         self
     }
 
-    /// Overrides the default yielding function with the given one.
-    pub fn with_yield_now_fn(mut self, yield_now_fn: YieldNowFn) -> Self {
-        self.yield_now_fn = Some(yield_now_fn);
+    /// Overrides the default yielder with the given one.
+    pub fn with_yielder(mut self, yielder: Box<dyn Yielder>) -> Self {
+        self.yielder = Some(yielder);
         self
     }
 
@@ -389,7 +392,7 @@ impl MachineBuilder {
             actions: self.actions.clone(),
             global_defs: self.global_defs.clone(),
             console,
-            yield_now_fn: self.yield_now_fn.take(),
+            yielder: self.yielder.take(),
             signals_chan,
         }
     }

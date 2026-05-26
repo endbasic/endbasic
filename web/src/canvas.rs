@@ -15,15 +15,13 @@
 
 //! HTML canvas-based console implementation.
 
-use crate::{Yielder, log_and_panic};
+use crate::{WebYielder, log_and_panic};
 use async_trait::async_trait;
 use endbasic_std::console::graphics::{RasterInfo, RasterOps};
 use endbasic_std::console::{CharsXY, PixelsXY, RGB, SizeInPixels};
-use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::f64::consts::PI;
 use std::io;
-use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
@@ -89,7 +87,8 @@ pub(crate) struct CanvasRasterOps {
     /// The HTML canvas context on which to render the console.
     context: CanvasRenderingContext2d,
 
-    yielder: Rc<RefCell<Yielder>>,
+    /// The yielder with which to return control to the JavaScript runtime.
+    yielder: WebYielder,
 
     /// Size of the console in pixels.
     size_pixels: SizeInPixels,
@@ -110,10 +109,7 @@ pub(crate) struct CanvasRasterOps {
 impl CanvasRasterOps {
     /// Creates a new canvas console backed by the `canvas` HTML element and that receives input
     /// events from `input`.
-    pub(crate) fn new(
-        canvas: HtmlCanvasElement,
-        yielder: Rc<RefCell<Yielder>>,
-    ) -> io::Result<Self> {
+    pub(crate) fn new(canvas: HtmlCanvasElement, yielder: WebYielder) -> io::Result<Self> {
         let size_pixels = {
             let width = match u16::try_from(canvas.width()) {
                 Ok(v) => v,
@@ -236,7 +232,7 @@ impl RasterOps for CanvasRasterOps {
     }
 
     fn present_canvas(&mut self) -> io::Result<()> {
-        self.yielder.borrow_mut().schedule();
+        self.yielder.schedule();
         Ok(())
     }
 
