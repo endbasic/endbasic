@@ -143,20 +143,20 @@ impl Machine {
 
     /// Applies and consumes all deferred actions from the most recent async upcall.
     ///
-    /// Returns whether subsequent execution should be treated as nested due to a `RUN` command.
+    /// Returns whether subsequent execution switched to the stored program due to `RUN`.
     fn drain_actions(&mut self) -> Result<bool> {
         let actions: Vec<MachineAction> = self.actions.borrow_mut().drain(..).collect();
-        let mut nested = false;
+        let mut running_stored_program = false;
         for action in actions {
             match action {
                 MachineAction::Clear => self.clear(),
                 MachineAction::Run(program) => {
                     self.run(program)?;
-                    nested = true;
+                    running_stored_program = true;
                 }
             }
         }
-        Ok(nested)
+        Ok(running_stored_program)
     }
 
     /// Consumes any pending signals so they don't affect future executions.
@@ -191,10 +191,7 @@ impl Machine {
 
     /// Resumes (or starts) execution from the last compiled code.
     pub async fn exec(&mut self) -> Result<Option<i32>> {
-        // TODO(jmmv): This "nested" flag is a huge hack to get EDIT/RUN to more-or-less work
-        // with the new core.  It doesn't work great yet but it allows us to make tests pass.
-        // This must be revised because there are some odd behavioral issues stemming from it.
-        let mut nested = false;
+        let mut running_stored_program = false;
         let result = loop {
             match self.vm.exec(&self.image) {
                 StopReason::Eof => {
@@ -202,7 +199,7 @@ impl Machine {
                 }
 
                 StopReason::End(code) => {
-                    if !nested {
+                    if !running_stored_program {
                         break Ok(Some(code.to_i32()));
                     }
 
@@ -239,7 +236,7 @@ impl Machine {
                     }
 
                     if self.drain_actions()? {
-                        nested = true;
+                        running_stored_program = true;
                     }
                 }
 
@@ -251,7 +248,7 @@ impl Machine {
                 }
             }
         };
-        if nested {
+        if running_stored_program {
             self.vm.clear_error_handler();
         }
         result
