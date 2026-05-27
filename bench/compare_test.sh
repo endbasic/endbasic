@@ -20,9 +20,41 @@ set -eu
 readonly PROGDIR="$(cd "$(dirname "${0}")" && pwd -P)"
 readonly PROGNAME="${0##*/}"
 
+info() {
+    echo "${PROGNAME}: I: ${*}" 1>&2
+}
+
 err() {
     echo "${PROGNAME}: E: ${*}" 1>&2
     exit 1
+}
+
+test_all_scenarios() {
+    local tmpdir="${1}"; shift
+
+    mkdir -p "${tmpdir}/scenarios"
+    cp "${PROGDIR}/scenarios/smoke.bas" "${tmpdir}/scenarios/one.bas"
+    cp "${PROGDIR}/scenarios/smoke.bas" "${tmpdir}/scenarios/two.bas"
+    cp "${PROGDIR}/scenarios/smoke.bas" "${tmpdir}/scenarios/smoke.bas"
+
+    "${PROGDIR}/compare.sh" \
+        -b "${tmpdir}/endbasic" \
+        -a "${tmpdir}/endbasic" \
+        -o "${tmpdir}/results.csv"
+    grep ^arithmetic.bas "${tmpdir}/results.csv" || err "Results validation failed"
+    grep ^branches.bas "${tmpdir}/results.csv" || err "Results validation failed"
+    ! grep ^smoke.bas "${tmpdir}/results.csv" || err "Results validation failed"
+}
+
+test_one_scenario() {
+    local tmpdir="${1}"; shift
+
+    "${PROGDIR}/compare.sh" \
+        -b "${tmpdir}/endbasic" \
+        -a "${tmpdir}/endbasic" \
+        -o "${tmpdir}/results.csv" \
+        -s smoke
+    grep ^smoke.bas "${tmpdir}/results.csv" || err "Results validation failed"
 }
 
 main() {
@@ -31,15 +63,19 @@ main() {
     local tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/endbasic-bench.XXXXXX")"
     trap "rm -rf '${tmpdir}'" EXIT HUP INT TERM
 
-    cd "${PROGDIR}/.." && cargo build --release
+    echo >"${tmpdir}/endbasic" <<EOF
+#! /bin/sh
+true
+EOF
+    chmod +x "${tmpdir}/endbasic"
 
-    "${PROGDIR}/compare.sh" \
-        -b "${PROGDIR}/../target/release/endbasic" \
-        -a "${PROGDIR}/../target/release/endbasic" \
-        -o "${tmpdir}/results.csv" \
-        -s smoke
-
-    grep ^smoke.bas "${tmpdir}/results.csv" || err "Results validation failed"
+    for t in \
+        test_all_scenarios \
+        test_one_scenario
+    do
+        info "Running ${t}"
+        "${t}" "${tmpdir}"
+    done
 }
 
 main "${@}"

@@ -116,7 +116,7 @@ main() {
 
     if [ -z "${scenarios}" ]; then
         for scenario in "${scenarios_dir}"/*.bas; do
-            case "${name}" in
+            case "${scenario}" in
                 */smoke.bas) continue ;;
             esac
             scenarios="${scenarios} ${scenario}"
