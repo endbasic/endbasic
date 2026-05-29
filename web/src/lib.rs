@@ -115,6 +115,34 @@ fn do_request_animation_frame() -> Pin<Box<dyn Future<Output = ()>>> {
     })
 }
 
+/// Yields execution until the browser processes one message-channel event.
+fn do_message_channel_yield() -> Pin<Box<dyn Future<Output = ()>>> {
+    let (message_tx, message_rx) = async_channel::unbounded();
+    let channel = match web_sys::MessageChannel::new() {
+        Ok(channel) => channel,
+        Err(e) => log_and_panic!("Failed to create message channel: {:?}", e),
+    };
+    let port1 = channel.port1();
+    let port2 = channel.port2();
+    let callback = Closure::wrap(Box::new(move |_event: web_sys::MessageEvent| {
+        message_tx.try_send(()).expect("Send must succeed")
+    }) as Box<dyn FnMut(web_sys::MessageEvent)>);
+    port1.set_onmessage(Some(callback.as_ref().unchecked_ref()));
+    if let Err(e) = port2.post_message(&JsValue::NULL) {
+        log_and_panic!("Failed to post message to port: {:?}", e);
+    }
+
+    Box::pin(async move {
+        let _callback = callback; // Must grab ownership so that the closure remains alive until it is used.
+        if let Err(e) = message_rx.recv().await {
+            log_and_panic!("Failed to wait for message channel event: {}", e);
+        }
+        port1.set_onmessage(None);
+        port1.close();
+        port2.close();
+    })
+}
+
 /// Implementation of a `SleepFn` using `do_sleep`.
 fn js_sleep(d: Duration, yielder: WebYielder) -> Pin<Box<dyn Future<Output = Result<(), String>>>> {
     let ms = d.as_millis();
@@ -209,7 +237,7 @@ impl Yielder for WebYielder {
         match self.take_yield_decision(current_time_millis()) {
             YieldDecision::Continue => (),
             YieldDecision::Fairness => {
-                do_sleep(0, ()).await;
+                do_message_channel_yield().await;
                 self.on_host_yield();
             }
             YieldDecision::Paint => {
@@ -447,6 +475,11 @@ mod tests {
         js_sleep(Duration::from_millis(10), yielder).await.unwrap();
         let elapsed = Date::now() - before;
         assert!(10.0 <= elapsed);
+    }
+
+    #[wasm_bindgen_test]
+    async fn test_message_channel_yield() {
+        do_message_channel_yield().await;
     }
 
     #[wasm_bindgen_test]
