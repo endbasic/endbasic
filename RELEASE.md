@@ -27,6 +27,8 @@
     *   `web/package*.json`: Update version number.
     *   `.github/workflows/deploy-release.yml`: Update tag number.
 
+1.  Run a `cargo build` to refresh the `Cargo.lock`.
+
 1.  Once all tests pass, merge the PR.
 
 1.  Tag the resulting merged commit as `endbasic-X.Y.Z` and push the tag. This
