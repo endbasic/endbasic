@@ -60,10 +60,10 @@ hardware.  To use the graphics console, you will need to launch the binary
 using one of these forms:
 
 ```shell
-endbasic --console=graphics            # Default console size, windowed.
-endbasic --console=graphics:800x600    # Custom resolution.
-endbasic --console=graphics:800x600fs  # Custom resolution, full screen.
-endbasic --console=graphics:fs         # Desktop resolution, full screen.
+endbasic --console=sdl            # Default console size, windowed.
+endbasic --console=sdl:800x600    # Custom resolution.
+endbasic --console=sdl:800x600fs  # Custom resolution, full screen.
+endbasic --console=sdl:fs         # Desktop resolution, full screen.
 ```
 
 ## Building from source
