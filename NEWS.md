@@ -49,6 +49,10 @@ for the time being.**
     during `INPUT` aborts the running command but does not immediately exit
     the REPL.
 
+*   Improved responsiveness and scheduling in the web interface by aligning
+    paint-related yields with browser frame rendering and by using
+    a `MessageChannel` for fairness-only host yields.
+
 *   Because the new core has been AGPLv3+ licensed, the rest of the project
     has switched to this license as well.
 
