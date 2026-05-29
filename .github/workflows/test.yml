@@ -28,7 +28,6 @@ jobs:
             - uses: mozilla-actions/sccache-action@v0.0.10
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
-            - run: rustup component add clippy rustfmt
             - run: ./.github/workflows/lint.sh
 
     linux-test:
