@@ -10,9 +10,9 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
-## Changes in version 0.12.99
+## Changes in version 0.13.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2026-05-29.**
 
 *   Replaced the core interpreter with a brand-new rewrite that has been
     designed, from the ground up, to target efficient bytecode compilation.

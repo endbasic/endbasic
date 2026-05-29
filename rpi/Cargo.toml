@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-rpi"
-version = "0.12.99" # ENDBASIC-VERSION
+version = "0.13.0" # ENDBASIC-VERSION
 license = "AGPL-3.0-or-later"
 authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
@@ -18,5 +18,5 @@ workspace = true
 rppal = "0.17"
 
 [dependencies.endbasic-std]
-version = "0.12.99" # ENDBASIC-VERSION
+version = "0.13.0" # ENDBASIC-VERSION
 path = "../std"
