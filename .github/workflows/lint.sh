@@ -16,9 +16,6 @@
 
 set -eux
 
-rustup component add clippy
-rustup component add rustfmt
-
 check_do_not_submit() {
     for f in .* *; do
         [ "${f}" != . ] || continue
