@@ -291,6 +291,72 @@ where
     Ok(())
 }
 
+/// Draws a triangle via `rasops`.
+pub fn draw_tri<R>(rasops: &mut R, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> io::Result<()>
+where
+    R: RasterOps,
+{
+    rasops.draw_line(x1y1, x2y2)?;
+    rasops.draw_line(x2y2, x3y3)?;
+    rasops.draw_line(x3y3, x1y1)?;
+    Ok(())
+}
+
+/// Draws a filled triangle via `rasops`.
+pub fn draw_tri_filled<R>(
+    rasops: &mut R,
+    x1y1: PixelsXY,
+    x2y2: PixelsXY,
+    x3y3: PixelsXY,
+) -> io::Result<()>
+where
+    R: RasterOps,
+{
+    fn edge_intersection(y: i32, p1: PixelsXY, p2: PixelsXY) -> Option<i32> {
+        let y1 = i32::from(p1.y);
+        let y2 = i32::from(p2.y);
+        if y1 == y2 {
+            return None;
+        }
+
+        let ymin = y1.min(y2);
+        let ymax = y1.max(y2);
+        if y < ymin || y >= ymax {
+            return None;
+        }
+
+        let x1 = i32::from(p1.x);
+        let x2 = i32::from(p2.x);
+        Some(x1 + (y - y1) * (x2 - x1) / (y2 - y1))
+    }
+
+    let ys = [i32::from(x1y1.y), i32::from(x2y2.y), i32::from(x3y3.y)];
+    let min_y = *ys.iter().min().expect("Three vertices are always present");
+    let max_y = *ys.iter().max().expect("Three vertices are always present");
+    for y in min_y..=max_y {
+        let mut xs = vec![];
+        for (a, b) in [(x1y1, x2y2), (x2y2, x3y3), (x3y3, x1y1)] {
+            if let Some(x) = edge_intersection(y, a, b) {
+                xs.push(x);
+            }
+        }
+
+        if xs.len() < 2 {
+            continue;
+        }
+
+        xs.sort_unstable();
+        let start = xs[0];
+        let end = *xs.last().expect("Sorted collection is not empty");
+        rasops.draw_line(
+            PixelsXY::new(start.clamped_into(), y.clamped_into()),
+            PixelsXY::new(end.clamped_into(), y.clamped_into()),
+        )?;
+    }
+
+    draw_tri(rasops, x1y1, x2y2, x3y3)
+}
+
 #[cfg(test)]
 mod testutils {
     use super::*;
@@ -377,6 +443,24 @@ mod testutils {
         }
 
         fn draw_rect_filled(&mut self, _xy: PixelsXY, _size: SizeInPixels) -> io::Result<()> {
+            unimplemented!();
+        }
+
+        fn draw_tri(
+            &mut self,
+            _x1y1: PixelsXY,
+            _x2y2: PixelsXY,
+            _x3y3: PixelsXY,
+        ) -> io::Result<()> {
+            unimplemented!();
+        }
+
+        fn draw_tri_filled(
+            &mut self,
+            _x1y1: PixelsXY,
+            _x2y2: PixelsXY,
+            _x3y3: PixelsXY,
+        ) -> io::Result<()> {
             unimplemented!();
         }
     }
@@ -796,6 +880,45 @@ mod tests {
                 CapturedRasop::DrawPixel(17, 22),
                 CapturedRasop::DrawPixel(17, 23),
                 CapturedRasop::DrawPixel(17, 25),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_tri() {
+        let mut rasops = RecordingRasops::default();
+        draw_tri(&mut rasops, PixelsXY::new(10, 20), PixelsXY::new(20, 20), PixelsXY::new(15, 30))
+            .unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(10, 20, 20, 20),
+                CapturedRasop::DrawLine(20, 20, 15, 30),
+                CapturedRasop::DrawLine(15, 30, 10, 20),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_tri_filled() {
+        let mut rasops = RecordingRasops::default();
+        draw_tri_filled(
+            &mut rasops,
+            PixelsXY::new(10, 20),
+            PixelsXY::new(20, 20),
+            PixelsXY::new(15, 24),
+        )
+        .unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(10, 20, 20, 20),
+                CapturedRasop::DrawLine(12, 21, 19, 21),
+                CapturedRasop::DrawLine(13, 22, 18, 22),
+                CapturedRasop::DrawLine(14, 23, 17, 23),
+                CapturedRasop::DrawLine(10, 20, 20, 20),
+                CapturedRasop::DrawLine(20, 20, 15, 24),
+                CapturedRasop::DrawLine(15, 24, 10, 20),
             ],
             rasops.ops.as_slice()
         );

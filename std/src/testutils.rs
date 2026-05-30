@@ -89,6 +89,12 @@ pub enum CapturedOut {
     /// Represents a call to `Console::draw_rect_filled`.
     DrawRectFilled(PixelsXY, PixelsXY),
 
+    /// Represents a call to `Console::draw_tri`.
+    DrawTri(PixelsXY, PixelsXY, PixelsXY),
+
+    /// Represents a call to `Console::draw_tri_filled`.
+    DrawTriFilled(PixelsXY, PixelsXY, PixelsXY),
+
     /// Represents a call to `Console::sync_now`.
     SyncNow,
 
@@ -331,6 +337,21 @@ impl Console for MockConsole {
 
     fn draw_rect_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         self.captured_out.push(CapturedOut::DrawRectFilled(x1y1, x2y2));
+        Ok(())
+    }
+
+    fn draw_tri(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::DrawTri(x1y1, x2y2, x3y3));
+        Ok(())
+    }
+
+    fn draw_tri_filled(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        x3y3: PixelsXY,
+    ) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::DrawTriFilled(x1y1, x2y2, x3y3));
         Ok(())
     }
 

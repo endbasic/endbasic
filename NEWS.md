@@ -20,6 +20,8 @@ for the time being.**
 *   Added the `vga8x16` font and used it as default for the sdl and web
     graphics backend.
 
+*   Added `GFX_TRI` and `GFX_TRIF` to draw outlined and filled triangles.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**

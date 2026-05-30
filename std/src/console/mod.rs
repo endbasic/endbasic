@@ -285,6 +285,21 @@ pub trait Console {
         Err(io::Error::other("No graphics support in this console"))
     }
 
+    /// Draws the outline of a triangle using the current drawing color.
+    fn draw_tri(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY, _x3y3: PixelsXY) -> io::Result<()> {
+        Err(io::Error::other("No graphics support in this console"))
+    }
+
+    /// Draws a filled triangle using the current drawing color.
+    fn draw_tri_filled(
+        &mut self,
+        _x1y1: PixelsXY,
+        _x2y2: PixelsXY,
+        _x3y3: PixelsXY,
+    ) -> io::Result<()> {
+        Err(io::Error::other("No graphics support in this console"))
+    }
+
     /// Causes any buffered output to be synced.
     ///
     /// This is a no-op when video syncing is enabled because output is never buffered in that case.

@@ -461,4 +461,17 @@ where
             _ => Ok(()),
         }
     }
+
+    fn draw_tri(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> io::Result<()> {
+        self.without_sync(|self2| drawing::draw_tri(self2, x1y1, x2y2, x3y3))
+    }
+
+    fn draw_tri_filled(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        x3y3: PixelsXY,
+    ) -> io::Result<()> {
+        self.without_sync(|self2| drawing::draw_tri_filled(self2, x1y1, x2y2, x3y3))
+    }
 }
