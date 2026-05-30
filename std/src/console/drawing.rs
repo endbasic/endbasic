@@ -235,6 +235,97 @@ where
     Ok(())
 }
 
+/// Draws a polygon via `rasops`.
+pub fn draw_poly<R>(rasops: &mut R, points: &[PixelsXY]) -> io::Result<()>
+where
+    R: RasterOps + ?Sized,
+{
+    if points.len() < 2 {
+        return Ok(());
+    }
+
+    for i in 1..points.len() {
+        rasops.draw_line(points[i - 1], points[i])?;
+    }
+    rasops.draw_line(*points.last().expect("At least 2 points are present"), points[0])?;
+    Ok(())
+}
+
+/// Calculates the x-coordinate intersection of a horizontal scanline with a line segment.
+///
+/// This function uses the linear interpolation formula to find the point where the
+/// scanline at height `y` crosses the edge defined by points `p1` and `p2`.
+///
+/// Returns the x-coordinate of the intersection if the scanline passes through the edge
+/// (specifically within the half-open interval `[ymin, ymax)`, or `None` if the edge is
+/// horizontal (to avoid division by zero) or if the scanline does not intersect the
+/// vertical span of the edge.
+fn edge_intersection(y: i32, p1: PixelsXY, p2: PixelsXY) -> Option<i32> {
+    let y1 = i32::from(p1.y);
+    let y2 = i32::from(p2.y);
+    if y1 == y2 {
+        return None;
+    }
+
+    let ymin = y1.min(y2);
+    let ymax = y1.max(y2);
+    // The check `y >= ymax` is to return `None` to prevent double-counting vertices
+    // in polygon filling algorithms (the "top-left" rule).
+    if y < ymin || y >= ymax {
+        return None;
+    }
+
+    let x1 = i32::from(p1.x);
+    let x2 = i32::from(p2.x);
+    Some(x1 + (y - y1) * (x2 - x1) / (y2 - y1))
+}
+
+/// Fills the poligon defined by `points` using a scanline intersection algorithm.
+fn fill_polygon<R>(rasops: &mut R, points: &[PixelsXY]) -> io::Result<()>
+where
+    R: RasterOps + ?Sized,
+{
+    if points.is_empty() {
+        return Ok(());
+    }
+
+    let min_y = points.iter().map(|p| i32::from(p.y)).min().expect("Points are not empty");
+    let max_y = points.iter().map(|p| i32::from(p.y)).max().expect("Points are not empty");
+
+    for y in min_y..=max_y {
+        let mut xs = vec![];
+        for i in 0..points.len() {
+            let next = (i + 1) % points.len();
+            if let Some(x) = edge_intersection(y, points[i], points[next]) {
+                xs.push(x);
+            }
+        }
+
+        if xs.len() < 2 {
+            continue;
+        }
+
+        xs.sort_unstable();
+        for pair in xs.chunks_exact(2) {
+            rasops.draw_line(
+                PixelsXY::new(pair[0].clamped_into(), y.clamped_into()),
+                PixelsXY::new(pair[1].clamped_into(), y.clamped_into()),
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Draws a filled polygon via `rasops`.
+pub fn draw_poly_filled<R>(rasops: &mut R, points: &[PixelsXY]) -> io::Result<()>
+where
+    R: RasterOps + ?Sized,
+{
+    fill_polygon(rasops, points)?;
+    draw_poly(rasops, points)
+}
+
 /// Draws a rectangle via `rasops` starting at `x1y1` with `size`.
 pub fn draw_rect<R>(rasops: &mut R, x1y1: PixelsXY, size: SizeInPixels) -> io::Result<()>
 where
@@ -312,48 +403,7 @@ pub fn draw_tri_filled<R>(
 where
     R: RasterOps,
 {
-    fn edge_intersection(y: i32, p1: PixelsXY, p2: PixelsXY) -> Option<i32> {
-        let y1 = i32::from(p1.y);
-        let y2 = i32::from(p2.y);
-        if y1 == y2 {
-            return None;
-        }
-
-        let ymin = y1.min(y2);
-        let ymax = y1.max(y2);
-        if y < ymin || y >= ymax {
-            return None;
-        }
-
-        let x1 = i32::from(p1.x);
-        let x2 = i32::from(p2.x);
-        Some(x1 + (y - y1) * (x2 - x1) / (y2 - y1))
-    }
-
-    let ys = [i32::from(x1y1.y), i32::from(x2y2.y), i32::from(x3y3.y)];
-    let min_y = *ys.iter().min().expect("Three vertices are always present");
-    let max_y = *ys.iter().max().expect("Three vertices are always present");
-    for y in min_y..=max_y {
-        let mut xs = vec![];
-        for (a, b) in [(x1y1, x2y2), (x2y2, x3y3), (x3y3, x1y1)] {
-            if let Some(x) = edge_intersection(y, a, b) {
-                xs.push(x);
-            }
-        }
-
-        if xs.len() < 2 {
-            continue;
-        }
-
-        xs.sort_unstable();
-        let start = xs[0];
-        let end = *xs.last().expect("Sorted collection is not empty");
-        rasops.draw_line(
-            PixelsXY::new(start.clamped_into(), y.clamped_into()),
-            PixelsXY::new(end.clamped_into(), y.clamped_into()),
-        )?;
-    }
-
+    fill_polygon(rasops, &[x1y1, x2y2, x3y3])?;
     draw_tri(rasops, x1y1, x2y2, x3y3)
 }
 
@@ -436,6 +486,14 @@ mod testutils {
         fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
             self.ops.push(CapturedRasop::DrawPixel(xy.x, xy.y));
             Ok(())
+        }
+
+        fn draw_poly(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+            draw_poly(self, points)
+        }
+
+        fn draw_poly_filled(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+            draw_poly_filled(self, points)
         }
 
         fn draw_rect(&mut self, _xy: PixelsXY, _size: SizeInPixels) -> io::Result<()> {
@@ -761,6 +819,90 @@ mod tests {
             draw_line(&mut rasops, corners.0, corners.1).unwrap();
             assert_eq!(usize::from(u16::MAX) + 1, rasops.ops.len());
         }
+    }
+
+    #[test]
+    fn test_draw_poly() {
+        let mut rasops = RecordingRasops::default();
+        draw_poly(
+            &mut rasops,
+            &[
+                PixelsXY::new(10, 20),
+                PixelsXY::new(20, 20),
+                PixelsXY::new(15, 30),
+                PixelsXY::new(8, 24),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(10, 20, 20, 20),
+                CapturedRasop::DrawLine(20, 20, 15, 30),
+                CapturedRasop::DrawLine(15, 30, 8, 24),
+                CapturedRasop::DrawLine(8, 24, 10, 20),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_poly_filled() {
+        let mut rasops = RecordingRasops::default();
+        draw_poly_filled(
+            &mut rasops,
+            &[
+                PixelsXY::new(10, 20),
+                PixelsXY::new(20, 20),
+                PixelsXY::new(18, 24),
+                PixelsXY::new(12, 24),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(10, 20, 20, 20),
+                CapturedRasop::DrawLine(11, 21, 20, 21),
+                CapturedRasop::DrawLine(11, 22, 19, 22),
+                CapturedRasop::DrawLine(12, 23, 19, 23),
+                CapturedRasop::DrawLine(10, 20, 20, 20),
+                CapturedRasop::DrawLine(20, 20, 18, 24),
+                CapturedRasop::DrawLine(18, 24, 12, 24),
+                CapturedRasop::DrawLine(12, 24, 10, 20),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_poly_filled_concave() {
+        let mut rasops = RecordingRasops::default();
+        draw_poly_filled(
+            &mut rasops,
+            &[
+                PixelsXY::new(10, 20),
+                PixelsXY::new(20, 20),
+                PixelsXY::new(20, 24),
+                PixelsXY::new(15, 22),
+                PixelsXY::new(10, 24),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawLine(10, 20, 20, 20),
+                CapturedRasop::DrawLine(10, 21, 20, 21),
+                CapturedRasop::DrawLine(10, 22, 15, 22),
+                CapturedRasop::DrawLine(15, 22, 20, 22),
+                CapturedRasop::DrawLine(10, 23, 13, 23),
+                CapturedRasop::DrawLine(18, 23, 20, 23),
+                CapturedRasop::DrawLine(10, 20, 20, 20),
+                CapturedRasop::DrawLine(20, 20, 20, 24),
+                CapturedRasop::DrawLine(20, 24, 15, 22),
+                CapturedRasop::DrawLine(15, 22, 10, 24),
+                CapturedRasop::DrawLine(10, 24, 10, 20),
+            ],
+            rasops.ops.as_slice()
+        );
     }
 
     #[test]

@@ -235,6 +235,14 @@ impl Console for SdlConsole {
         self.call(Request::DrawPixel(xy))
     }
 
+    fn draw_poly(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        self.call(Request::DrawPoly(points.to_vec()))
+    }
+
+    fn draw_poly_filled(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        self.call(Request::DrawPolyFilled(points.to_vec()))
+    }
+
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         self.call(Request::DrawRect(x1y1, x2y2))
     }
@@ -779,6 +787,15 @@ mod tests {
         console.set_color(Some(13), None).unwrap();
         console.draw_tri(xy(500, 80), xy(580, 220), xy(420, 220)).unwrap();
 
+        console.set_color(Some(10), None).unwrap();
+        console
+            .draw_poly_filled(&[xy(80, 140), xy(140, 110), xy(180, 150), xy(150, 210), xy(90, 200)])
+            .unwrap();
+        console.set_color(Some(15), None).unwrap();
+        console
+            .draw_poly(&[xy(70, 130), xy(145, 90), xy(195, 145), xy(155, 225), xy(80, 210)])
+            .unwrap();
+
         console.set_color(Some(14), None).unwrap();
         console.draw_circle_filled(xy(650, 400), 50).unwrap();
         console.set_color(Some(9), None).unwrap();
@@ -815,6 +832,10 @@ mod tests {
         console.draw_circle(xy(400, 300), 1000).unwrap();
         console.draw_circle_filled(xy(-100, -100), 10).unwrap();
         console.draw_circle_filled(xy(1000, 1000), 10).unwrap();
+        console.draw_poly(&[xy(-100, -100), xy(-80, -130), xy(-40, -110), xy(-60, -80)]).unwrap();
+        console
+            .draw_poly_filled(&[xy(850, 650), xy(900, 620), xy(940, 700), xy(860, 740)])
+            .unwrap();
 
         // ----
         // Draw some stuff that is partially visible.
@@ -827,6 +848,18 @@ mod tests {
         console.draw_rect_filled(xy(500, -10), xy(510, 610)).unwrap();
         console.draw_circle(xy(800, 300), 50).unwrap();
         console.draw_circle_filled(xy(800, 300), 40).unwrap();
+        console
+            .draw_poly(&[xy(-20, 540), xy(20, 500), xy(60, 530), xy(30, 590), xy(-10, 580)])
+            .unwrap();
+        console
+            .draw_poly_filled(&[
+                xy(760, 500),
+                xy(820, 470),
+                xy(830, 540),
+                xy(780, 590),
+                xy(740, 550),
+            ])
+            .unwrap();
 
         console.set_color(None, None).unwrap();
         console.locate(CharsXY { x: 4, y: 22 }).unwrap();
@@ -853,6 +886,8 @@ mod tests {
         console.draw_tri_filled(xy(70, 10), xy(75, 15), xy(80, 20)).unwrap();
         console.draw_circle(xy(40, 40), 0).unwrap();
         console.draw_circle_filled(xy(50, 50), 0).unwrap();
+        console.draw_poly(&[xy(90, 10), xy(90, 10), xy(90, 10), xy(90, 10)]).unwrap();
+        console.draw_poly_filled(&[xy(100, 10), xy(100, 10), xy(100, 10), xy(100, 10)]).unwrap();
 
         test.verify("sdl-empty");
     }

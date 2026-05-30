@@ -450,6 +450,14 @@ impl<P: Pins + Send, B: SpiBus, K: InputOps> Console for ST7735SConsole<P, B, K>
         self.inner.draw_pixel(xy)
     }
 
+    fn draw_poly(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        self.inner.draw_poly(points)
+    }
+
+    fn draw_poly_filled(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        self.inner.draw_poly_filled(points)
+    }
+
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         self.inner.draw_rect(x1y1, x2y2)
     }

@@ -170,6 +170,8 @@ Output from HELP "GRAPHICS":
     >> [38;5;14mGFX_HEIGHT%[39m    Returns the height in pixels of the graphical console.
     >> [38;5;14mGFX_LINE   [39m    Draws a line from (x1,y1) to (x2,y2).
     >> [38;5;14mGFX_PIXEL  [39m    Draws a pixel at (x,y).
+    >> [38;5;14mGFX_POLY   [39m    Draws a polygon with vertices at (x1,y1), (x2,y2), ..., and (xN,yN).
+    >> [38;5;14mGFX_POLYF  [39m    Draws a filled polygon with vertices at (x1,y1), (x2,y2), ..., and (xN,yN).
     >> [38;5;14mGFX_RECT   [39m    Draws a rectangle from (x1,y1) to (x2,y2).
     >> [38;5;14mGFX_RECTF  [39m    Draws a filled rectangle from (x1,y1) to (x2,y2).
     >> [38;5;14mGFX_SYNC   [39m    Controls the video syncing flag and/or forces a sync.
@@ -751,6 +753,25 @@ Output from HELP "GFX_PIXEL":
     Draws a pixel at (x,y).
 
     The pixel is drawn using the foreground color as selected by COLOR.
+
+Output from HELP "GFX_POLY":
+
+[38;5;11m    GFX_POLY [coord1%, .., coordN%]
+[39m
+    Draws a polygon with vertices at (x1,y1), (x2,y2), ..., and (xN,yN).
+
+    The outline of the polygon is drawn using the foreground color as
+    selected by COLOR and the area of the polygon is left untouched.
+
+Output from HELP "GFX_POLYF":
+
+[38;5;11m    GFX_POLYF [coord1%, .., coordN%]
+[39m
+    Draws a filled polygon with vertices at (x1,y1), (x2,y2), ..., and
+    (xN,yN).
+
+    The outline and area of the polygon are drawn using the foreground
+    color as selected by COLOR.
 
 Output from HELP "GFX_RECT":
 

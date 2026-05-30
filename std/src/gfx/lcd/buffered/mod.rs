@@ -449,6 +449,14 @@ where
         }
     }
 
+    fn draw_poly(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        self.without_sync(|self2| drawing::draw_poly(self2, points))
+    }
+
+    fn draw_poly_filled(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        self.without_sync(|self2| drawing::draw_poly_filled(self2, points))
+    }
+
     fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         self.without_sync(|self2| drawing::draw_rect(self2, xy, size))
     }

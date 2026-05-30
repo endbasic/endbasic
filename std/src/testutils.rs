@@ -83,6 +83,12 @@ pub enum CapturedOut {
     /// Represents a call to `Console::draw_pixel`.
     DrawPixel(PixelsXY),
 
+    /// Represents a call to `Console::draw_poly`.
+    DrawPoly(Vec<PixelsXY>),
+
+    /// Represents a call to `Console::draw_poly_filled`.
+    DrawPolyFilled(Vec<PixelsXY>),
+
     /// Represents a call to `Console::draw_rect`.
     DrawRect(PixelsXY, PixelsXY),
 
@@ -328,6 +334,32 @@ impl Console for MockConsole {
     fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
         self.captured_out.push(CapturedOut::DrawPixel(xy));
         Ok(())
+    }
+
+    fn draw_poly(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        match points.len() {
+            0 => Ok(()),
+            1 => self.draw_pixel(points[0]),
+            2 => self.draw_line(points[0], points[1]),
+            3 => self.draw_tri(points[0], points[1], points[2]),
+            _ => {
+                self.captured_out.push(CapturedOut::DrawPoly(points.to_vec()));
+                Ok(())
+            }
+        }
+    }
+
+    fn draw_poly_filled(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        match points.len() {
+            0 => Ok(()),
+            1 => self.draw_pixel(points[0]),
+            2 => self.draw_line(points[0], points[1]),
+            3 => self.draw_tri_filled(points[0], points[1], points[2]),
+            _ => {
+                self.captured_out.push(CapturedOut::DrawPolyFilled(points.to_vec()));
+                Ok(())
+            }
+        }
     }
 
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
