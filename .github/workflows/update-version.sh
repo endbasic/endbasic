@@ -29,6 +29,47 @@ replace() {
     mv "${path}.new" "${path}"
 }
 
+add_devel_news_section() {
+    local path="${1}"; shift
+    local version="${1}"; shift
+
+    POSIXLY_CORRECT=1 awk "
+BEGIN { done = 0 }
+/## Changes in / {
+    if (!done) {
+        print \"## Changes in version ${version}\"
+        print \"\"
+        print \"**STILL UNDER DEVELOPMENT; NOT RELEASED YET**\"
+        print \"\"
+        print \"*   No changes recorded.\"
+        print \"\"
+        done = 1
+    }
+}
+{ print }
+" "${path}" >"${path}.new"
+    mv "${path}.new" "${path}"
+}
+
+fix_cargo_lock() {
+    local path="${1}"; shift
+    local version="${1}"; shift
+
+    POSIXLY_CORRECT=1 awk "
+BEGIN { found = 0 }
+/^\[/ { found = 0 }
+/name = \"endbasic.*\"/ { found = 1 }
+/version = / {
+    if (found) {
+        sub(/[0-9]+\\.[0-9]+\\.[0-9]+/, \"${version}\")
+        found = 0
+    }
+}
+{ print }
+" "${path}" >"${path}.new"
+    mv "${path}.new" "${path}"
+}
+
 fix_package_lock() {
     local path="${1}"; shift
     local version="${1}"; shift
@@ -68,6 +109,8 @@ main() {
 
         replace .github/workflows/deploy-release.yml \
             -E "s/endbasic-[0-9]+\\.[0-9]+\\.[0-9]+/endbasic-${version}/g"
+    else
+        add_devel_news_section NEWS.md "${version}"
     fi
 
     for f in */Cargo.toml; do
@@ -75,6 +118,7 @@ main() {
     done
 
     replace web/package.json -E "/\"version\"/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
+    fix_cargo_lock Cargo.lock "${version}"
     fix_package_lock web/package-lock.json "${version}"
 }
 

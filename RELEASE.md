@@ -22,12 +22,9 @@
     *   `NEWS.md`: Set next version number, add date, and clean up notes.
     *   `README.md`: Update latest version number and release date.
     *   `*/Cargo.toml`: Update version number and `endbasic-*` dependencies.
-    *   `Cargo.lock`: Reflects the new version number.  Do a `cargo build` to
-        refresh it after running the script above.
+    *   `Cargo.lock`: Reflects the new version number.
     *   `web/package*.json`: Update version number.
     *   `.github/workflows/deploy-release.yml`: Update tag number.
-
-1.  Run a `cargo build` to refresh the `Cargo.lock`.
 
 1.  Once all tests pass, merge the PR.
 

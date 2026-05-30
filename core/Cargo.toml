@@ -1,6 +1,6 @@
 [package]
 name = "endbasic-core"
-version = "0.13.0" # ENDBASIC-VERSION
+version = "0.13.99" # ENDBASIC-VERSION
 license = "AGPL-3.0-or-later"
 authors = ["Julio Merino <jmmv@endbasic.dev>"]
 categories = ["development-tools", "parser-implementations"]
