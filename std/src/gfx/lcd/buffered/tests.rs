@@ -928,3 +928,44 @@ fn test_draw_rect_filled_clip() {
         .expect_op("set_data: from=(0, 28), to=(0, 29), data=[50, 51, 52, 50, 51, 52]")
         .check();
 }
+
+#[test]
+fn test_draw_tri_no_sync() {
+    Tester::new(size(20, 30))
+        .op(|l| {
+            l.set_sync(false);
+            l.set_draw_color((50, 51, 52));
+            l.draw_tri(PixelsXY::new(4, 5), PixelsXY::new(8, 5), PixelsXY::new(6, 9)).unwrap()
+        })
+        .expect_damage(xy(4, 5), xy(8, 9))
+        .ignore_pixels()
+        .check();
+}
+
+#[test]
+fn test_draw_tri_filled_no_sync() {
+    Tester::new(size(20, 30))
+        .op(|l| {
+            l.set_sync(false);
+            l.set_draw_color((50, 51, 52));
+            l.draw_tri_filled(PixelsXY::new(4, 5), PixelsXY::new(8, 5), PixelsXY::new(6, 9))
+                .unwrap()
+        })
+        .expect_damage(xy(4, 5), xy(8, 9))
+        .ignore_pixels()
+        .check();
+}
+
+#[test]
+fn test_draw_tri_filled_clip() {
+    Tester::new(size(20, 30))
+        .op(|l| {
+            l.set_sync(false);
+            l.set_draw_color((50, 51, 52));
+            l.draw_tri_filled(PixelsXY::new(-4, 5), PixelsXY::new(8, 5), PixelsXY::new(6, 9))
+                .unwrap()
+        })
+        .expect_damage(xy(0, 5), xy(8, 9))
+        .ignore_pixels()
+        .check();
+}

@@ -458,6 +458,19 @@ impl<P: Pins + Send, B: SpiBus, K: InputOps> Console for ST7735SConsole<P, B, K>
         self.inner.draw_rect_filled(x1y1, x2y2)
     }
 
+    fn draw_tri(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> io::Result<()> {
+        self.inner.draw_tri(x1y1, x2y2, x3y3)
+    }
+
+    fn draw_tri_filled(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        x3y3: PixelsXY,
+    ) -> io::Result<()> {
+        self.inner.draw_tri_filled(x1y1, x2y2, x3y3)
+    }
+
     fn sync_now(&mut self) -> io::Result<()> {
         self.inner.sync_now()
     }

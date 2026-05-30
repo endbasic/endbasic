@@ -53,6 +53,23 @@ fn parse_coordinates(scope: &Scope<'_>, xarg: u8, yarg: u8) -> CallResult<Pixels
     Ok(PixelsXY { x: parse_coordinate(scope, xarg)?, y: parse_coordinate(scope, yarg)? })
 }
 
+/// Parses three pairs of expressions that represent triangle vertex coordinates.
+fn parse_triangle_coordinates(
+    scope: &Scope<'_>,
+    x1arg: u8,
+    y1arg: u8,
+    x2arg: u8,
+    y2arg: u8,
+    x3arg: u8,
+    y3arg: u8,
+) -> CallResult<(PixelsXY, PixelsXY, PixelsXY)> {
+    Ok((
+        parse_coordinates(scope, x1arg, y1arg)?,
+        parse_coordinates(scope, x2arg, y2arg)?,
+        parse_coordinates(scope, x3arg, y3arg)?,
+    ))
+}
+
 /// Parses an expression that represents a radius.
 fn parse_radius(scope: &Scope<'_>, narg: u8) -> CallResult<u16> {
     let i = scope.get_integer(narg);
@@ -500,6 +517,173 @@ pub struct GfxSyncCommand {
     console: Rc<RefCell<dyn Console>>,
 }
 
+/// The `GFX_TRI` command.
+pub struct GfxTriCommand {
+    metadata: Rc<CallableMetadata>,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxTriCommand {
+    /// Creates a new `GFX_TRI` command that draws an empty triangle on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_TRI")
+                .with_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x1"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y1"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x2"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y2"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x3"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y3"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Draws a triangle with vertices at (x1,y1), (x2,y2), and (x3,y3).
+The outline of the triangle is drawn using the foreground color as selected by COLOR and the \
+area of the triangle is left untouched.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+impl Callable for GfxTriCommand {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(6, scope.nargs());
+        let (x1y1, x2y2, x3y3) = parse_triangle_coordinates(&scope, 0, 1, 2, 3, 4, 5)?;
+
+        self.console.borrow_mut().draw_tri(x1y1, x2y2, x3y3)?;
+        Ok(())
+    }
+}
+
+/// The `GFX_TRIF` command.
+pub struct GfxTrifCommand {
+    metadata: Rc<CallableMetadata>,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxTrifCommand {
+    /// Creates a new `GFX_TRIF` command that draws a filled triangle on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_TRIF")
+                .with_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x1"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y1"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x2"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y2"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x3"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y3"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Draws a filled triangle with vertices at (x1,y1), (x2,y2), and (x3,y3).
+The outline and area of the triangle are drawn using the foreground color as selected by COLOR.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+impl Callable for GfxTrifCommand {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(6, scope.nargs());
+        let (x1y1, x2y2, x3y3) = parse_triangle_coordinates(&scope, 0, 1, 2, 3, 4, 5)?;
+
+        self.console.borrow_mut().draw_tri_filled(x1y1, x2y2, x3y3)?;
+        Ok(())
+    }
+}
+
 impl GfxSyncCommand {
     /// Creates a new `GFX_SYNC` command that controls video syncing on `console`.
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
@@ -612,6 +796,8 @@ pub fn add_all(machine: &mut MachineBuilder, console: Rc<RefCell<dyn Console>>) 
     machine.add_callable(GfxRectCommand::new(console.clone()));
     machine.add_callable(GfxRectfCommand::new(console.clone()));
     machine.add_callable(GfxSyncCommand::new(console.clone()));
+    machine.add_callable(GfxTriCommand::new(console.clone()));
+    machine.add_callable(GfxTrifCommand::new(console.clone()));
     machine.add_callable(GfxWidthFunction::new(console));
 }
 
@@ -621,7 +807,7 @@ mod tests {
     use crate::console::SizeInPixels;
     use crate::testutils::*;
 
-    /// Verifies error conditions for a command named `name` that takes to X/Y pairs.
+    /// Verifies error conditions for a command named `name` that takes two X/Y pairs.
     fn check_errors_two_xy(name: &'static str) {
         for args in &["1, 2, , 4", "1, 2, 3", "1, 2, 3, 4, 5", "2; 3, 4"] {
             check_stmt_compilation_err(
@@ -647,6 +833,64 @@ mod tests {
         }
 
         for args in &["\"a\", 1, 1, 1", "1, \"a\", 1, 1", "1, 1, \"a\", 1", "1, 1, 1, \"a\""] {
+            let stmt = &format!("{} {}", name, args);
+            let pos = stmt.find('"').unwrap() + 1;
+            check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), stmt);
+        }
+    }
+
+    /// Verifies error conditions for a command named `name` that takes three X/Y pairs.
+    fn check_errors_three_xy(name: &'static str) {
+        for args in &["1, 2, 3, 4, 5", "1, 2, 3, 4, 5, 6, 7", "1, 2, 3, 4, , 6"] {
+            check_stmt_compilation_err(
+                format!("1:1: {} expected x1%, y1%, x2%, y2%, x3%, y3%", name),
+                &format!("{} {}", name, args),
+            );
+        }
+
+        check_stmt_compilation_err(
+            format!("1:{}: {} expected x1%, y1%, x2%, y2%, x3%, y3%", name.len() + 3, name),
+            &format!("{} 2; 3, 4, 5, 6, 7", name),
+        );
+
+        for args in &[
+            "-40000, 1, 1, 1, 1, 1",
+            "1, -40000, 1, 1, 1, 1",
+            "1, 1, -40000, 1, 1, 1",
+            "1, 1, 1, -40000, 1, 1",
+            "1, 1, 1, 1, -40000, 1",
+            "1, 1, 1, 1, 1, -40000",
+        ] {
+            let pos = name.len() + 1 + args.find('-').unwrap() + 1;
+            check_stmt_err(
+                format!("1:{}: Coordinate -40000 out of range", pos),
+                &format!("{} {}", name, args),
+            );
+        }
+
+        for args in &[
+            "40000, 1, 1, 1, 1, 1",
+            "1, 40000, 1, 1, 1, 1",
+            "1, 1, 40000, 1, 1, 1",
+            "1, 1, 1, 40000, 1, 1",
+            "1, 1, 1, 1, 40000, 1",
+            "1, 1, 1, 1, 1, 40000",
+        ] {
+            let pos = name.len() + 1 + args.find('4').unwrap() + 1;
+            check_stmt_err(
+                format!("1:{}: Coordinate 40000 out of range", pos),
+                &format!("{} {}", name, args),
+            );
+        }
+
+        for args in &[
+            "\"a\", 1, 1, 1, 1, 1",
+            "1, \"a\", 1, 1, 1, 1",
+            "1, 1, \"a\", 1, 1, 1",
+            "1, 1, 1, \"a\", 1, 1",
+            "1, 1, 1, 1, \"a\", 1",
+            "1, 1, 1, 1, 1, \"a\"",
+        ] {
             let stmt = &format!("{} {}", name, args);
             let pos = stmt.find('"').unwrap() + 1;
             check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), stmt);
@@ -890,6 +1134,58 @@ mod tests {
     fn test_gfx_sync_errors() {
         check_stmt_compilation_err("1:1: GFX_SYNC expected <> | <enabled?>", "GFX_SYNC 2, 3");
         check_stmt_compilation_err("1:10: Expected BOOLEAN but found INTEGER", "GFX_SYNC 2");
+    }
+
+    #[test]
+    fn test_gfx_tri_ok() {
+        Tester::default()
+            .run("GFX_TRI 1.1, 2.3, 2.5, 3.9, 4.4, 5.6")
+            .expect_output([CapturedOut::DrawTri(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+                PixelsXY { x: 4, y: 6 },
+            )])
+            .check();
+
+        Tester::default()
+            .run("GFX_TRI -31000, -32000, 31000, -32000, 0, 32000")
+            .expect_output([CapturedOut::DrawTri(
+                PixelsXY { x: -31000, y: -32000 },
+                PixelsXY { x: 31000, y: -32000 },
+                PixelsXY { x: 0, y: 32000 },
+            )])
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_tri_errors() {
+        check_errors_three_xy("GFX_TRI");
+    }
+
+    #[test]
+    fn test_gfx_trif_ok() {
+        Tester::default()
+            .run("GFX_TRIF 1.1, 2.3, 2.5, 3.9, 4.4, 5.6")
+            .expect_output([CapturedOut::DrawTriFilled(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+                PixelsXY { x: 4, y: 6 },
+            )])
+            .check();
+
+        Tester::default()
+            .run("GFX_TRIF -31000, -32000, 31000, -32000, 0, 32000")
+            .expect_output([CapturedOut::DrawTriFilled(
+                PixelsXY { x: -31000, y: -32000 },
+                PixelsXY { x: 31000, y: -32000 },
+                PixelsXY { x: 0, y: 32000 },
+            )])
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_trif_errors() {
+        check_errors_three_xy("GFX_TRIF");
     }
 
     #[test]

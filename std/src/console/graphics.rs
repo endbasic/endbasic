@@ -157,6 +157,15 @@ fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> Option<(PixelsXY, SizeInPixels
     }
 }
 
+/// Returns true if the three points define a non-degenerate triangle.
+fn tri_points(x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> bool {
+    let dx21 = i32::from(x2y2.x) - i32::from(x1y1.x);
+    let dy21 = i32::from(x2y2.y) - i32::from(x1y1.y);
+    let dx31 = i32::from(x3y3.x) - i32::from(x1y1.x);
+    let dy31 = i32::from(x3y3.y) - i32::from(x1y1.y);
+    i64::from(dx21) * i64::from(dy31) != i64::from(dy21) * i64::from(dx31)
+}
+
 /// Container for configuration information of the backing surface.
 pub struct RasterInfo {
     /// Size of the console in pixels.
@@ -227,6 +236,13 @@ pub trait RasterOps {
 
     /// Draws a filled rectangle from `x1y1` to `x2y2` using the current drawing color.
     fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()>;
+
+    /// Draws the outline of a triangle using the current drawing color.
+    fn draw_tri(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> io::Result<()>;
+
+    /// Draws a filled triangle using the current drawing color.
+    fn draw_tri_filled(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY)
+    -> io::Result<()>;
 }
 
 /// Primitive graphical console input operations.
@@ -682,6 +698,31 @@ where
         self.present_canvas()
     }
 
+    fn draw_tri(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> io::Result<()> {
+        if !tri_points(x1y1, x2y2, x3y3) {
+            return Ok(());
+        }
+
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_tri(x1y1, x2y2, x3y3)?;
+        self.present_canvas()
+    }
+
+    fn draw_tri_filled(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        x3y3: PixelsXY,
+    ) -> io::Result<()> {
+        if !tri_points(x1y1, x2y2, x3y3) {
+            return Ok(());
+        }
+
+        self.raster_ops.set_draw_color(self.fg_color);
+        self.raster_ops.draw_tri_filled(x1y1, x2y2, x3y3)?;
+        self.present_canvas()
+    }
+
     fn sync_now(&mut self) -> io::Result<()> {
         if self.sync_enabled { Ok(()) } else { self.raster_ops.present_canvas() }
     }
@@ -843,5 +884,38 @@ mod tests {
         assert_eq!(None, rect_points(PixelsXY { x: 10, y: 10 }, PixelsXY { x: 10, y: 10 }));
         assert_eq!(None, rect_points(PixelsXY { x: 10, y: 10 }, PixelsXY { x: 10, y: 20 }));
         assert_eq!(None, rect_points(PixelsXY { x: 10, y: 10 }, PixelsXY { x: 20, y: 10 }));
+    }
+
+    #[test]
+    fn test_tri_points_ok() {
+        assert!(tri_points(
+            PixelsXY { x: 10, y: 10 },
+            PixelsXY { x: 20, y: 10 },
+            PixelsXY { x: 15, y: 20 }
+        ));
+        assert!(tri_points(
+            PixelsXY { x: -31000, y: -32000 },
+            PixelsXY { x: 31000, y: -32000 },
+            PixelsXY { x: 0, y: 32000 }
+        ));
+    }
+
+    #[test]
+    fn test_tri_points_zeroes() {
+        assert!(!tri_points(
+            PixelsXY { x: 10, y: 10 },
+            PixelsXY { x: 10, y: 10 },
+            PixelsXY { x: 10, y: 10 }
+        ));
+        assert!(!tri_points(
+            PixelsXY { x: 10, y: 10 },
+            PixelsXY { x: 20, y: 20 },
+            PixelsXY { x: 30, y: 30 }
+        ));
+        assert!(!tri_points(
+            PixelsXY { x: 10, y: 10 },
+            PixelsXY { x: 10, y: 10 },
+            PixelsXY { x: 20, y: 20 }
+        ));
     }
 }

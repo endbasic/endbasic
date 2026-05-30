@@ -298,4 +298,29 @@ impl RasterOps for CanvasRasterOps {
         );
         Ok(())
     }
+
+    fn draw_tri(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> io::Result<()> {
+        self.context.begin_path();
+        self.context.move_to(f64::from(x1y1.x), f64::from(x1y1.y));
+        self.context.line_to(f64::from(x2y2.x), f64::from(x2y2.y));
+        self.context.line_to(f64::from(x3y3.x), f64::from(x3y3.y));
+        self.context.close_path();
+        self.context.stroke();
+        Ok(())
+    }
+
+    fn draw_tri_filled(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        x3y3: PixelsXY,
+    ) -> io::Result<()> {
+        self.context.begin_path();
+        self.context.move_to(f64::from(x1y1.x), f64::from(x1y1.y));
+        self.context.line_to(f64::from(x2y2.x), f64::from(x2y2.y));
+        self.context.line_to(f64::from(x3y3.x), f64::from(x3y3.y));
+        self.context.close_path();
+        self.context.fill();
+        Ok(())
+    }
 }

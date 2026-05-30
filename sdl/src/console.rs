@@ -243,6 +243,19 @@ impl Console for SdlConsole {
         self.call(Request::DrawRectFilled(x1y1, x2y2))
     }
 
+    fn draw_tri(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> io::Result<()> {
+        self.call(Request::DrawTri(x1y1, x2y2, x3y3))
+    }
+
+    fn draw_tri_filled(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        x3y3: PixelsXY,
+    ) -> io::Result<()> {
+        self.call(Request::DrawTriFilled(x1y1, x2y2, x3y3))
+    }
+
     fn sync_now(&mut self) -> io::Result<()> {
         self.call(Request::SyncNow)
     }
@@ -761,6 +774,10 @@ mod tests {
         console.draw_rect_filled(xy(380, 180), xy(220, 120)).unwrap();
         console.set_color(Some(10), None).unwrap();
         console.draw_rect(xy(200, 100), xy(400, 200)).unwrap();
+        console.set_color(Some(11), None).unwrap();
+        console.draw_tri_filled(xy(500, 100), xy(560, 200), xy(440, 200)).unwrap();
+        console.set_color(Some(13), None).unwrap();
+        console.draw_tri(xy(500, 80), xy(580, 220), xy(420, 220)).unwrap();
 
         console.set_color(Some(14), None).unwrap();
         console.draw_circle_filled(xy(650, 400), 50).unwrap();
@@ -832,6 +849,8 @@ mod tests {
         console.draw_line(xy(10, 10), xy(10, 10)).unwrap();
         console.draw_rect(xy(20, 10), xy(20, 10)).unwrap();
         console.draw_rect_filled(xy(30, 10), xy(30, 10)).unwrap();
+        console.draw_tri(xy(60, 10), xy(60, 10), xy(60, 10)).unwrap();
+        console.draw_tri_filled(xy(70, 10), xy(75, 15), xy(80, 20)).unwrap();
         console.draw_circle(xy(40, 40), 0).unwrap();
         console.draw_circle_filled(xy(50, 50), 0).unwrap();
 

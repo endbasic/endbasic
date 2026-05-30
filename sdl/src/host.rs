@@ -22,7 +22,9 @@
 use crate::string_error_to_io_error;
 use async_trait::async_trait;
 use endbasic_std::Signal;
-use endbasic_std::console::drawing::{draw_circle, draw_circle_filled, draw_text};
+use endbasic_std::console::drawing::{
+    draw_circle, draw_circle_filled, draw_text, draw_tri, draw_tri_filled,
+};
 use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, RGB, Resolution, SizeInPixels,
@@ -418,6 +420,19 @@ impl RasterOps for Context {
         let rect = rect_origin_size(xy, size);
         self.canvas.fill_rect(rect).map_err(string_error_to_io_error)
     }
+
+    fn draw_tri(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> io::Result<()> {
+        draw_tri(self, x1y1, x2y2, x3y3)
+    }
+
+    fn draw_tri_filled(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        x3y3: PixelsXY,
+    ) -> io::Result<()> {
+        draw_tri_filled(self, x1y1, x2y2, x3y3)
+    }
 }
 
 #[derive(Clone)]
@@ -505,6 +520,19 @@ impl RasterOps for SharedContext {
     fn draw_rect_filled(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         (*self.0).borrow_mut().draw_rect_filled(xy, size)
     }
+
+    fn draw_tri(&mut self, x1y1: PixelsXY, x2y2: PixelsXY, x3y3: PixelsXY) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_tri(x1y1, x2y2, x3y3)
+    }
+
+    fn draw_tri_filled(
+        &mut self,
+        x1y1: PixelsXY,
+        x2y2: PixelsXY,
+        x3y3: PixelsXY,
+    ) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_tri_filled(x1y1, x2y2, x3y3)
+    }
 }
 
 /// Representation of requests that the console host can handle.
@@ -529,6 +557,8 @@ pub(crate) enum Request {
     DrawPixel(PixelsXY),
     DrawRect(PixelsXY, PixelsXY),
     DrawRectFilled(PixelsXY, PixelsXY),
+    DrawTri(PixelsXY, PixelsXY, PixelsXY),
+    DrawTriFilled(PixelsXY, PixelsXY, PixelsXY),
     SyncNow,
     SetSync(bool),
 
@@ -625,6 +655,12 @@ pub(crate) fn run(
                     Request::DrawRect(x1y1, x2y2) => Response::Empty(console.draw_rect(x1y1, x2y2)),
                     Request::DrawRectFilled(x1y1, x2y2) => {
                         Response::Empty(console.draw_rect_filled(x1y1, x2y2))
+                    }
+                    Request::DrawTri(x1y1, x2y2, x3y3) => {
+                        Response::Empty(console.draw_tri(x1y1, x2y2, x3y3))
+                    }
+                    Request::DrawTriFilled(x1y1, x2y2, x3y3) => {
+                        Response::Empty(console.draw_tri_filled(x1y1, x2y2, x3y3))
                     }
                     Request::SyncNow => Response::Empty(console.sync_now()),
                     Request::SetSync(enabled) => Response::SetSync(console.set_sync(enabled)),
