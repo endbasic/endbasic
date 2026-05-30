@@ -756,19 +756,27 @@ Output from HELP "GFX_PIXEL":
 
 Output from HELP "GFX_POLY":
 
-[38;5;11m    GFX_POLY [coord1%, .., coordN%]
+[38;5;11m    GFX_POLY <> | <points> | <x1%, y1%[, coord1%, .., coordN%]>
 [39m
     Draws a polygon with vertices at (x1,y1), (x2,y2), ..., and (xN,yN).
+
+    The points can be specified either as individual coordinates or via an
+    INTEGER array containing a flat list of coordinates or an Nx2 matrix of
+    points.
 
     The outline of the polygon is drawn using the foreground color as
     selected by COLOR and the area of the polygon is left untouched.
 
 Output from HELP "GFX_POLYF":
 
-[38;5;11m    GFX_POLYF [coord1%, .., coordN%]
+[38;5;11m    GFX_POLYF <> | <points> | <x1%, y1%[, coord1%, .., coordN%]>
 [39m
     Draws a filled polygon with vertices at (x1,y1), (x2,y2), ..., and
     (xN,yN).
+
+    The points can be specified either as individual coordinates or via an
+    INTEGER array containing a flat list of coordinates or an Nx2 matrix of
+    points.
 
     The outline and area of the polygon are drawn using the foreground
     color as selected by COLOR.

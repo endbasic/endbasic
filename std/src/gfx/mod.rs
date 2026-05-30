@@ -19,8 +19,8 @@
 use crate::console::{Console, PixelsXY};
 use endbasic_core::{
     ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
-    CallableMetadataBuilder, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax,
-    Scope, SingularArgSyntax,
+    CallableMetadataBuilder, ExprType, LineCol, RepeatedSyntax, RepeatedTypeSyntax,
+    RequiredRefSyntax, RequiredValueSyntax, Scope, SingularArgSyntax,
 };
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -40,12 +40,14 @@ described in this section.";
 
 /// Parses an expression that represents a single coordinate.
 fn parse_coordinate(scope: &Scope<'_>, narg: u8) -> CallResult<i16> {
-    let i = scope.get_integer(narg);
+    parse_coordinate_value(scope.get_pos(narg), scope.get_integer(narg))
+}
+
+/// Parses an integer that represents a single coordinate.
+fn parse_coordinate_value(pos: LineCol, i: i32) -> CallResult<i16> {
     match i16::try_from(i) {
         Ok(i) => Ok(i),
-        Err(_) => {
-            Err(CallError::Syntax(scope.get_pos(narg), format!("Coordinate {} out of range", i)))
-        }
+        Err(_) => Err(CallError::Syntax(pos, format!("Coordinate {} out of range", i))),
     }
 }
 
@@ -73,6 +75,12 @@ fn parse_triangle_coordinates(
 
 /// Parses a variable-length sequence of X/Y coordinate pairs.
 fn parse_polygon_coordinates(scope: &Scope<'_>) -> CallResult<Vec<PixelsXY>> {
+    match scope.nargs() {
+        0 => return Ok(vec![]),
+        1 => return parse_polygon_coordinates_from_array(scope),
+        _ => (),
+    }
+
     if !scope.nargs().is_multiple_of(2) {
         let narg = u8::try_from(scope.nargs() - 1).expect("Argument index must fit in u8");
         return Err(CallError::Syntax(
@@ -88,6 +96,66 @@ fn parse_polygon_coordinates(scope: &Scope<'_>) -> CallResult<Vec<PixelsXY>> {
         points.push(parse_coordinates(scope, xarg, yarg)?);
     }
     Ok(points)
+}
+
+/// Parses an array reference that contains a variable-length sequence of X/Y coordinate pairs.
+fn parse_polygon_coordinates_from_array(scope: &Scope<'_>) -> CallResult<Vec<PixelsXY>> {
+    debug_assert_eq!(1, scope.nargs());
+
+    let array = scope.get_ref(0);
+    let pos = scope.get_pos(0);
+    if array.vtype != ExprType::Integer {
+        return Err(CallError::Syntax(pos, "Expected an INTEGER array".to_owned()));
+    }
+
+    let dimensions = array.array_dimensions();
+    match dimensions {
+        [ncoords] => {
+            if !ncoords.is_multiple_of(2) {
+                return Err(CallError::Syntax(
+                    pos,
+                    "Expected an even number of coordinates".to_owned(),
+                ));
+            }
+
+            let mut points = Vec::with_capacity(*ncoords / 2);
+            for i in (0..*ncoords).step_by(2) {
+                let x = array
+                    .deref_array_integer(&[i as i32])
+                    .map_err(|e| CallError::Syntax(pos, e))?;
+                let y = array
+                    .deref_array_integer(&[(i + 1) as i32])
+                    .map_err(|e| CallError::Syntax(pos, e))?;
+                points.push(PixelsXY {
+                    x: parse_coordinate_value(pos, x)?,
+                    y: parse_coordinate_value(pos, y)?,
+                });
+            }
+            Ok(points)
+        }
+
+        [npoints, 2] => {
+            let mut points = Vec::with_capacity(*npoints);
+            for i in 0..*npoints {
+                let x = array
+                    .deref_array_integer(&[i as i32, 0])
+                    .map_err(|e| CallError::Syntax(pos, e))?;
+                let y = array
+                    .deref_array_integer(&[i as i32, 1])
+                    .map_err(|e| CallError::Syntax(pos, e))?;
+                points.push(PixelsXY {
+                    x: parse_coordinate_value(pos, x)?,
+                    y: parse_coordinate_value(pos, y)?,
+                });
+            }
+            Ok(points)
+        }
+
+        _ => Err(CallError::Syntax(
+            pos,
+            "Expected a flat array of coordinates or an Nx2 array of points".to_owned(),
+        )),
+    }
 }
 
 /// Parses an expression that represents a radius.
@@ -401,19 +469,50 @@ impl GfxPolyCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_POLY")
-                .with_syntax(&[(
-                    &[],
-                    Some(&RepeatedSyntax {
-                        name: Cow::Borrowed("coord"),
-                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                        require_one: false,
-                        allow_missing: false,
-                    }),
-                )])
+                .with_syntax(&[
+                    (&[], None),
+                    (
+                        &[SingularArgSyntax::RequiredRef(
+                            RequiredRefSyntax {
+                                name: Cow::Borrowed("points"),
+                                require_array: true,
+                                define_undefined: false,
+                            },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("x1"),
+                                    vtype: ExprType::Integer,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("y1"),
+                                    vtype: ExprType::Integer,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                        ],
+                        Some(&RepeatedSyntax {
+                            name: Cow::Borrowed("coord"),
+                            type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
+                            sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                            require_one: false,
+                            allow_missing: false,
+                        }),
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a polygon with vertices at (x1,y1), (x2,y2), ..., and (xN,yN).
+The points can be specified either as individual coordinates or via an INTEGER array containing a \
+flat list of coordinates or an Nx2 matrix of points.
 The outline of the polygon is drawn using the foreground color as selected by COLOR and the area \
 of the polygon is left untouched.",
                 )
@@ -447,19 +546,50 @@ impl GfxPolyfCommand {
     pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("GFX_POLYF")
-                .with_syntax(&[(
-                    &[],
-                    Some(&RepeatedSyntax {
-                        name: Cow::Borrowed("coord"),
-                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
-                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
-                        require_one: false,
-                        allow_missing: false,
-                    }),
-                )])
+                .with_syntax(&[
+                    (&[], None),
+                    (
+                        &[SingularArgSyntax::RequiredRef(
+                            RequiredRefSyntax {
+                                name: Cow::Borrowed("points"),
+                                require_array: true,
+                                define_undefined: false,
+                            },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("x1"),
+                                    vtype: ExprType::Integer,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("y1"),
+                                    vtype: ExprType::Integer,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                        ],
+                        Some(&RepeatedSyntax {
+                            name: Cow::Borrowed("coord"),
+                            type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
+                            sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                            require_one: false,
+                            allow_missing: false,
+                        }),
+                    ),
+                ])
                 .with_category(CATEGORY)
                 .with_description(
                     "Draws a filled polygon with vertices at (x1,y1), (x2,y2), ..., and (xN,yN).
+The points can be specified either as individual coordinates or via an INTEGER array containing a \
+flat list of coordinates or an Nx2 matrix of points.
 The outline and area of the polygon are drawn using the foreground color as selected by COLOR.",
                 )
                 .build(),
@@ -1012,21 +1142,31 @@ mod tests {
 
     /// Verifies error conditions for a command named `name` that takes zero or more X/Y pairs.
     fn check_errors_poly(name: &'static str) {
-        check_stmt_err(
-            format!("1:{}: Expected an even number of coordinates", name.len() + 2),
-            &format!("{} 1", name),
+        let syntax = format!(
+            "1:{}: {} expected <> | <points> | <x1%, y1%[, coord1%, .., coordN%]>",
+            name.len() + 2,
+            name,
         );
+        check_stmt_compilation_err(syntax, &format!("{} 1", name));
         check_stmt_err(
             format!("1:{}: Expected an even number of coordinates", name.len() + 14),
             &format!("{} 1, 2, 3, 4, 5", name),
         );
 
         check_stmt_compilation_err(
-            format!("1:{}: {} expected [coord1%, .., coordN%]", name.len() + 3, name),
+            format!(
+                "1:{}: {} expected <> | <points> | <x1%, y1%[, coord1%, .., coordN%]>",
+                name.len() + 3,
+                name,
+            ),
             &format!("{} 2; 3, 4", name),
         );
         check_stmt_compilation_err(
-            format!("1:{}: {} expected [coord1%, .., coordN%]", name.len() + 8, name),
+            format!(
+                "1:{}: {} expected <> | <points> | <x1%, y1%[, coord1%, .., coordN%]>",
+                name.len() + 8,
+                name,
+            ),
             &format!("{} 1, 2, , 4", name),
         );
 
@@ -1051,6 +1191,26 @@ mod tests {
             let pos = stmt.find('"').unwrap() + 1;
             check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), stmt);
         }
+
+        check_stmt_err(
+            format!("1:{}: Expected an even number of coordinates", name.len() + 28),
+            &format!("DIM points(5) AS INTEGER: {} points", name),
+        );
+        check_stmt_err(
+            format!(
+                "1:{}: Expected a flat array of coordinates or an Nx2 array of points",
+                name.len() + 31
+            ),
+            &format!("DIM points(3, 3) AS INTEGER: {} points", name),
+        );
+        check_stmt_err(
+            format!("1:{}: Expected an INTEGER array", name.len() + 28),
+            &format!("DIM points(6) AS BOOLEAN: {} points", name),
+        );
+        check_stmt_err(
+            format!("1:{}: Coordinate 40000 out of range", name.len() + 47),
+            &format!("DIM points(2) AS INTEGER: points(0) = 40000: {} points", name),
+        );
     }
 
     /// Verifies error conditions for a command named `name` that takes an X/Y pair and a radius.
@@ -1260,6 +1420,42 @@ mod tests {
                 PixelsXY { x: -1, y: 0 },
             ])])
             .check();
+
+        Tester::default()
+            .run(
+                "DIM points(6) AS INTEGER\
+                : points(0) = 1\
+                : points(1) = 2\
+                : points(2) = 3\
+                : points(3) = 4\
+                : points(4) = 5\
+                : points(5) = 6\
+                : GFX_POLY points",
+            )
+            .expect_output([CapturedOut::DrawTri(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+                PixelsXY { x: 5, y: 6 },
+            )])
+            .check();
+
+        Tester::default()
+            .run(
+                "DIM points(3, 2) AS INTEGER\
+                : points(0, 0) = 1\
+                : points(0, 1) = 2\
+                : points(1, 0) = 3\
+                : points(1, 1) = 4\
+                : points(2, 0) = 5\
+                : points(2, 1) = 6\
+                : GFX_POLY points",
+            )
+            .expect_output([CapturedOut::DrawTri(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+                PixelsXY { x: 5, y: 6 },
+            )])
+            .check();
     }
 
     #[test]
@@ -1301,6 +1497,42 @@ mod tests {
                 PixelsXY { x: 0, y: 32000 },
                 PixelsXY { x: -1, y: 0 },
             ])])
+            .check();
+
+        Tester::default()
+            .run(
+                "DIM points(6) AS INTEGER\
+                : points(0) = 1\
+                : points(1) = 2\
+                : points(2) = 3\
+                : points(3) = 4\
+                : points(4) = 5\
+                : points(5) = 6\
+                : GFX_POLYF points",
+            )
+            .expect_output([CapturedOut::DrawTriFilled(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+                PixelsXY { x: 5, y: 6 },
+            )])
+            .check();
+
+        Tester::default()
+            .run(
+                "DIM points(3, 2) AS INTEGER\
+                : points(0, 0) = 1\
+                : points(0, 1) = 2\
+                : points(1, 0) = 3\
+                : points(1, 1) = 4\
+                : points(2, 0) = 5\
+                : points(2, 1) = 6\
+                : GFX_POLYF points",
+            )
+            .expect_output([CapturedOut::DrawTriFilled(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+                PixelsXY { x: 5, y: 6 },
+            )])
             .check();
     }
 
