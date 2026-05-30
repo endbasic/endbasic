@@ -19,7 +19,8 @@
 use crate::console::{Console, PixelsXY};
 use endbasic_core::{
     ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
-    CallableMetadataBuilder, ExprType, RequiredValueSyntax, Scope, SingularArgSyntax,
+    CallableMetadataBuilder, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax,
+    Scope, SingularArgSyntax,
 };
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -68,6 +69,25 @@ fn parse_triangle_coordinates(
         parse_coordinates(scope, x2arg, y2arg)?,
         parse_coordinates(scope, x3arg, y3arg)?,
     ))
+}
+
+/// Parses a variable-length sequence of X/Y coordinate pairs.
+fn parse_polygon_coordinates(scope: &Scope<'_>) -> CallResult<Vec<PixelsXY>> {
+    if !scope.nargs().is_multiple_of(2) {
+        let narg = u8::try_from(scope.nargs() - 1).expect("Argument index must fit in u8");
+        return Err(CallError::Syntax(
+            scope.get_pos(narg),
+            "Expected an even number of coordinates".to_owned(),
+        ));
+    }
+
+    let mut points = Vec::with_capacity(scope.nargs() / 2);
+    for i in (0..scope.nargs()).step_by(2) {
+        let xarg = u8::try_from(i).expect("Argument index must fit in u8");
+        let yarg = u8::try_from(i + 1).expect("Argument index must fit in u8");
+        points.push(parse_coordinates(scope, xarg, yarg)?);
+    }
+    Ok(points)
 }
 
 /// Parses an expression that represents a radius.
@@ -366,6 +386,97 @@ impl Callable for GfxPixelCommand {
         let xy = parse_coordinates(&scope, 0, 1)?;
 
         self.console.borrow_mut().draw_pixel(xy)?;
+        Ok(())
+    }
+}
+
+/// The `GFX_POLY` command.
+pub struct GfxPolyCommand {
+    metadata: Rc<CallableMetadata>,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxPolyCommand {
+    /// Creates a new `GFX_POLY` command that draws an outlined polygon on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_POLY")
+                .with_syntax(&[(
+                    &[],
+                    Some(&RepeatedSyntax {
+                        name: Cow::Borrowed("coord"),
+                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
+                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                        require_one: false,
+                        allow_missing: false,
+                    }),
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Draws a polygon with vertices at (x1,y1), (x2,y2), ..., and (xN,yN).
+The outline of the polygon is drawn using the foreground color as selected by COLOR and the area \
+of the polygon is left untouched.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+impl Callable for GfxPolyCommand {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        let points = parse_polygon_coordinates(&scope)?;
+
+        self.console.borrow_mut().draw_poly(&points)?;
+        Ok(())
+    }
+}
+
+/// The `GFX_POLYF` command.
+pub struct GfxPolyfCommand {
+    metadata: Rc<CallableMetadata>,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxPolyfCommand {
+    /// Creates a new `GFX_POLYF` command that draws a filled polygon on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_POLYF")
+                .with_syntax(&[(
+                    &[],
+                    Some(&RepeatedSyntax {
+                        name: Cow::Borrowed("coord"),
+                        type_syn: RepeatedTypeSyntax::TypedValue(ExprType::Integer),
+                        sep: ArgSepSyntax::Exactly(ArgSep::Long),
+                        require_one: false,
+                        allow_missing: false,
+                    }),
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Draws a filled polygon with vertices at (x1,y1), (x2,y2), ..., and (xN,yN).
+The outline and area of the polygon are drawn using the foreground color as selected by COLOR.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+impl Callable for GfxPolyfCommand {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        let points = parse_polygon_coordinates(&scope)?;
+
+        self.console.borrow_mut().draw_poly_filled(&points)?;
         Ok(())
     }
 }
@@ -793,6 +904,8 @@ pub fn add_all(machine: &mut MachineBuilder, console: Rc<RefCell<dyn Console>>) 
     machine.add_callable(GfxHeightFunction::new(console.clone()));
     machine.add_callable(GfxLineCommand::new(console.clone()));
     machine.add_callable(GfxPixelCommand::new(console.clone()));
+    machine.add_callable(GfxPolyCommand::new(console.clone()));
+    machine.add_callable(GfxPolyfCommand::new(console.clone()));
     machine.add_callable(GfxRectCommand::new(console.clone()));
     machine.add_callable(GfxRectfCommand::new(console.clone()));
     machine.add_callable(GfxSyncCommand::new(console.clone()));
@@ -891,6 +1004,49 @@ mod tests {
             "1, 1, 1, 1, \"a\", 1",
             "1, 1, 1, 1, 1, \"a\"",
         ] {
+            let stmt = &format!("{} {}", name, args);
+            let pos = stmt.find('"').unwrap() + 1;
+            check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), stmt);
+        }
+    }
+
+    /// Verifies error conditions for a command named `name` that takes zero or more X/Y pairs.
+    fn check_errors_poly(name: &'static str) {
+        check_stmt_err(
+            format!("1:{}: Expected an even number of coordinates", name.len() + 2),
+            &format!("{} 1", name),
+        );
+        check_stmt_err(
+            format!("1:{}: Expected an even number of coordinates", name.len() + 14),
+            &format!("{} 1, 2, 3, 4, 5", name),
+        );
+
+        check_stmt_compilation_err(
+            format!("1:{}: {} expected [coord1%, .., coordN%]", name.len() + 3, name),
+            &format!("{} 2; 3, 4", name),
+        );
+        check_stmt_compilation_err(
+            format!("1:{}: {} expected [coord1%, .., coordN%]", name.len() + 8, name),
+            &format!("{} 1, 2, , 4", name),
+        );
+
+        for args in &["-40000, 1", "1, -40000", "1, 1, -40000, 2", "1, 1, 2, -40000"] {
+            let pos = name.len() + 1 + args.find('-').unwrap() + 1;
+            check_stmt_err(
+                format!("1:{}: Coordinate -40000 out of range", pos),
+                &format!("{} {}", name, args),
+            );
+        }
+
+        for args in &["40000, 1", "1, 40000", "1, 1, 40000, 2", "1, 1, 2, 40000"] {
+            let pos = name.len() + 1 + args.find('4').unwrap() + 1;
+            check_stmt_err(
+                format!("1:{}: Coordinate 40000 out of range", pos),
+                &format!("{} {}", name, args),
+            );
+        }
+
+        for args in &["\"a\", 1", "1, \"a\"", "1, 1, \"a\", 2", "1, 1, 2, \"a\""] {
             let stmt = &format!("{} {}", name, args);
             let pos = stmt.find('"').unwrap() + 1;
             check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), stmt);
@@ -1067,6 +1223,90 @@ mod tests {
             let pos = cmd.find('"').unwrap() + 1;
             check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), cmd);
         }
+    }
+
+    #[test]
+    fn test_gfx_poly_ok() {
+        Tester::default().run("GFX_POLY").expect_output([]).check();
+
+        Tester::default()
+            .run("GFX_POLY 1.1, 2.3")
+            .expect_output([CapturedOut::DrawPixel(PixelsXY { x: 1, y: 2 })])
+            .check();
+
+        Tester::default()
+            .run("GFX_POLY 1.1, 2.3, 2.5, 3.9")
+            .expect_output([CapturedOut::DrawLine(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+            )])
+            .check();
+
+        Tester::default()
+            .run("GFX_POLY 1.1, 2.3, 2.5, 3.9, 4.4, 5.6")
+            .expect_output([CapturedOut::DrawTri(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+                PixelsXY { x: 4, y: 6 },
+            )])
+            .check();
+
+        Tester::default()
+            .run("GFX_POLY -31000, -32000, 31000, -32000, 0, 32000, -1, 0")
+            .expect_output([CapturedOut::DrawPoly(vec![
+                PixelsXY { x: -31000, y: -32000 },
+                PixelsXY { x: 31000, y: -32000 },
+                PixelsXY { x: 0, y: 32000 },
+                PixelsXY { x: -1, y: 0 },
+            ])])
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_poly_errors() {
+        check_errors_poly("GFX_POLY");
+    }
+
+    #[test]
+    fn test_gfx_polyf_ok() {
+        Tester::default().run("GFX_POLYF").expect_output([]).check();
+
+        Tester::default()
+            .run("GFX_POLYF 1.1, 2.3")
+            .expect_output([CapturedOut::DrawPixel(PixelsXY { x: 1, y: 2 })])
+            .check();
+
+        Tester::default()
+            .run("GFX_POLYF 1.1, 2.3, 2.5, 3.9")
+            .expect_output([CapturedOut::DrawLine(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+            )])
+            .check();
+
+        Tester::default()
+            .run("GFX_POLYF 1.1, 2.3, 2.5, 3.9, 4.4, 5.6")
+            .expect_output([CapturedOut::DrawTriFilled(
+                PixelsXY { x: 1, y: 2 },
+                PixelsXY { x: 3, y: 4 },
+                PixelsXY { x: 4, y: 6 },
+            )])
+            .check();
+
+        Tester::default()
+            .run("GFX_POLYF -31000, -32000, 31000, -32000, 0, 32000, -1, 0")
+            .expect_output([CapturedOut::DrawPolyFilled(vec![
+                PixelsXY { x: -31000, y: -32000 },
+                PixelsXY { x: 31000, y: -32000 },
+                PixelsXY { x: 0, y: 32000 },
+                PixelsXY { x: -1, y: 0 },
+            ])])
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_polyf_errors() {
+        check_errors_poly("GFX_POLYF");
     }
 
     #[test]

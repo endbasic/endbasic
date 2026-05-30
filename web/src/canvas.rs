@@ -159,6 +159,17 @@ impl CanvasRasterOps {
             self.stroke_color = rgb;
         }
     }
+
+    /// Defines a canvas path for a polygon.
+    fn poly_path(&self, points: &[PixelsXY]) {
+        debug_assert!(points.len() > 2);
+        self.context.begin_path();
+        self.context.move_to(f64::from(points[0].x), f64::from(points[0].y));
+        for point in &points[1..] {
+            self.context.line_to(f64::from(point.x), f64::from(point.y));
+        }
+        self.context.close_path();
+    }
 }
 
 #[async_trait(?Send)]
@@ -276,6 +287,19 @@ impl RasterOps for CanvasRasterOps {
 
     fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
         self.context.fill_rect(f64::from(xy.x), f64::from(xy.y), 1.0, 1.0);
+        Ok(())
+    }
+
+    fn draw_poly(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        self.poly_path(points);
+        self.context.stroke();
+        Ok(())
+    }
+
+    fn draw_poly_filled(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        self.poly_path(points);
+        self.context.fill();
+        self.context.stroke();
         Ok(())
     }
 

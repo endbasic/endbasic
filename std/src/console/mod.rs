@@ -275,6 +275,16 @@ pub trait Console {
         Err(io::Error::other("No graphics support in this console"))
     }
 
+    /// Draws the outline of a polygon using the current drawing color.
+    fn draw_poly(&mut self, _points: &[PixelsXY]) -> io::Result<()> {
+        Err(io::Error::other("No graphics support in this console"))
+    }
+
+    /// Draws a filled polygon using the current drawing color.
+    fn draw_poly_filled(&mut self, _points: &[PixelsXY]) -> io::Result<()> {
+        Err(io::Error::other("No graphics support in this console"))
+    }
+
     /// Draws the outline of a rectangle from `_x1y1` to `_x2y2` using the current drawing color.
     fn draw_rect(&mut self, _x1y1: PixelsXY, _x2y2: PixelsXY) -> io::Result<()> {
         Err(io::Error::other("No graphics support in this console"))

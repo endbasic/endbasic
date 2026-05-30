@@ -126,6 +126,12 @@ impl ClampedMul<SizeInPixels, PixelsXY> for CharsXY {
     }
 }
 
+/// Returns true if the polygon has at least one non-degenerate edge.
+fn poly_points(points: &[PixelsXY]) -> bool {
+    points.windows(2).any(|ps| ps[0] != ps[1])
+        || (points.len() > 2 && points.first() != points.last())
+}
+
 /// Given two points, calculates the origin and size of the rectangle they define.
 fn rect_points(x1y1: PixelsXY, x2y2: PixelsXY) -> Option<(PixelsXY, SizeInPixels)> {
     let (x1, x2) = if x1y1.x < x2y2.x { (x1y1.x, x2y2.x) } else { (x2y2.x, x1y1.x) };
@@ -230,6 +236,12 @@ pub trait RasterOps {
 
     /// Draws a single pixel at `xy` using the current drawing color.
     fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()>;
+
+    /// Draws the outline of a polygon using the current drawing color.
+    fn draw_poly(&mut self, points: &[PixelsXY]) -> io::Result<()>;
+
+    /// Draws a filled polygon using the current drawing color.
+    fn draw_poly_filled(&mut self, points: &[PixelsXY]) -> io::Result<()>;
 
     /// Draws the outline of a rectangle from `x1y1` to `x2y2` using the current drawing color.
     fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()>;
@@ -680,6 +692,42 @@ where
         self.present_canvas()
     }
 
+    fn draw_poly(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        match points.len() {
+            0 => Ok(()),
+            1 => self.draw_pixel(points[0]),
+            2 => self.draw_line(points[0], points[1]),
+            3 => self.draw_tri(points[0], points[1], points[2]),
+            _ => {
+                if !poly_points(points) {
+                    return Ok(());
+                }
+
+                self.raster_ops.set_draw_color(self.fg_color);
+                self.raster_ops.draw_poly(points)?;
+                self.present_canvas()
+            }
+        }
+    }
+
+    fn draw_poly_filled(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        match points.len() {
+            0 => Ok(()),
+            1 => self.draw_pixel(points[0]),
+            2 => self.draw_line(points[0], points[1]),
+            3 => self.draw_tri_filled(points[0], points[1], points[2]),
+            _ => {
+                if !poly_points(points) {
+                    return Ok(());
+                }
+
+                self.raster_ops.set_draw_color(self.fg_color);
+                self.raster_ops.draw_poly_filled(points)?;
+                self.present_canvas()
+            }
+        }
+    }
+
     fn draw_rect(&mut self, x1y1: PixelsXY, x2y2: PixelsXY) -> io::Result<()> {
         self.raster_ops.set_draw_color(self.fg_color);
         match rect_points(x1y1, x2y2) {
@@ -839,6 +887,27 @@ mod tests {
             PixelsXY { x: i16::MAX, y: i16::MAX },
             CharsXY { x: 10, y: 20 }.clamped_mul(SizeInPixels::new(50000, 60000))
         );
+    }
+
+    #[test]
+    fn test_poly_points_ok() {
+        assert!(poly_points(&[
+            PixelsXY { x: 10, y: 10 },
+            PixelsXY { x: 20, y: 10 },
+            PixelsXY { x: 15, y: 20 },
+            PixelsXY { x: 10, y: 10 },
+        ]));
+    }
+
+    #[test]
+    fn test_poly_points_zeroes() {
+        assert!(!poly_points(&[]));
+        assert!(!poly_points(&[
+            PixelsXY { x: 10, y: 10 },
+            PixelsXY { x: 10, y: 10 },
+            PixelsXY { x: 10, y: 10 },
+            PixelsXY { x: 10, y: 10 },
+        ]));
     }
 
     #[test]

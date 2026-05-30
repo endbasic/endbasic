@@ -22,6 +22,8 @@ for the time being.**
 
 *   Added `GFX_TRI` and `GFX_TRIF` to draw outlined and filled triangles.
 
+*   Added `GFX_POLY` and `GFX_POLYF` to draw outlined and filled polygons.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**

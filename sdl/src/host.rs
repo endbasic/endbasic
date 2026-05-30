@@ -23,7 +23,8 @@ use crate::string_error_to_io_error;
 use async_trait::async_trait;
 use endbasic_std::Signal;
 use endbasic_std::console::drawing::{
-    draw_circle, draw_circle_filled, draw_text, draw_tri, draw_tri_filled,
+    draw_circle, draw_circle_filled, draw_poly, draw_poly_filled, draw_text, draw_tri,
+    draw_tri_filled,
 };
 use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
@@ -411,6 +412,14 @@ impl RasterOps for Context {
         self.canvas.draw_point(point_xy(xy)).map_err(string_error_to_io_error)
     }
 
+    fn draw_poly(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        draw_poly(self, points)
+    }
+
+    fn draw_poly_filled(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        draw_poly_filled(self, points)
+    }
+
     fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         let rect = rect_origin_size(xy, size);
         self.canvas.draw_rect(rect).map_err(string_error_to_io_error)
@@ -513,6 +522,14 @@ impl RasterOps for SharedContext {
         (*self.0).borrow_mut().draw_pixel(xy)
     }
 
+    fn draw_poly(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_poly(points)
+    }
+
+    fn draw_poly_filled(&mut self, points: &[PixelsXY]) -> io::Result<()> {
+        (*self.0).borrow_mut().draw_poly_filled(points)
+    }
+
     fn draw_rect(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<()> {
         (*self.0).borrow_mut().draw_rect(xy, size)
     }
@@ -555,6 +572,8 @@ pub(crate) enum Request {
     DrawCircleFilled(PixelsXY, u16),
     DrawLine(PixelsXY, PixelsXY),
     DrawPixel(PixelsXY),
+    DrawPoly(Vec<PixelsXY>),
+    DrawPolyFilled(Vec<PixelsXY>),
     DrawRect(PixelsXY, PixelsXY),
     DrawRectFilled(PixelsXY, PixelsXY),
     DrawTri(PixelsXY, PixelsXY, PixelsXY),
@@ -652,6 +671,10 @@ pub(crate) fn run(
                     }
                     Request::DrawLine(x1y1, x2y2) => Response::Empty(console.draw_line(x1y1, x2y2)),
                     Request::DrawPixel(xy) => Response::Empty(console.draw_pixel(xy)),
+                    Request::DrawPoly(points) => Response::Empty(console.draw_poly(&points)),
+                    Request::DrawPolyFilled(points) => {
+                        Response::Empty(console.draw_poly_filled(&points))
+                    }
                     Request::DrawRect(x1y1, x2y2) => Response::Empty(console.draw_rect(x1y1, x2y2)),
                     Request::DrawRectFilled(x1y1, x2y2) => {
                         Response::Empty(console.draw_rect_filled(x1y1, x2y2))
