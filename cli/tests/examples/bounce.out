@@ -1,0 +1,9 @@
+
+    EndBASIC X.Y.Z
+    Copyright YYYY-YYYY Julio Merino
+
+    Type HELP for interactive usage information.
+
+[?25l[2J[1;1HERROR: 92:13: No graphics support in this console
+Program exited with code 1
+End of input by CTRL-D

@@ -24,6 +24,8 @@ for the time being.**
 
 *   Added `GFX_POLY` and `GFX_POLYF` to draw outlined and filled polygons.
 
+*   Added the `DEMOS:/BOUNCE.BAS` graphics demo to showcase animated shapes.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**
