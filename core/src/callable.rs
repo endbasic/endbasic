@@ -21,7 +21,7 @@ use crate::ast::ExprType;
 use crate::bytecode::TaggedRegisterRef;
 use crate::bytecode::VarArgTag;
 use crate::mem::HeapOverflowError;
-use crate::mem::{ConstantDatum, DatumPtr, Heap, HeapDatum};
+use crate::mem::{ArrayData, ConstantDatum, DatumPtr, Heap, HeapDatum};
 use crate::reader::LineCol;
 use async_trait::async_trait;
 use std::borrow::Cow;
@@ -748,14 +748,34 @@ fn deref_string<'a>(
     ptr.resolve_string(constants, heap)
 }
 
-/// Dereferences this register reference as an array and returns its dimensions.
-fn array_dimensions<'a>(regs: &'a [u64], index: usize, heap: &'a Heap) -> &'a [usize] {
+/// Dereferences this register reference as an array and returns its contents.
+fn array_data<'a>(regs: &'a [u64], index: usize, heap: &'a Heap) -> &'a ArrayData {
     let ptr = DatumPtr::from(regs[index]);
     let heap_idx = ptr.heap_index();
     let HeapDatum::Array(a) = heap.get(heap_idx) else {
         panic!("Scalar variable does not point to an array on the heap");
     };
+    a
+}
+
+/// Dereferences this register reference as an array and returns its dimensions.
+fn array_dimensions<'a>(regs: &'a [u64], index: usize, heap: &'a Heap) -> &'a [usize] {
+    let a = array_data(regs, index, heap);
     &a.dimensions
+}
+
+/// Dereferences an integer from an array element in this register reference.
+fn deref_array_integer(
+    regs: &[u64],
+    index: usize,
+    vtype: ExprType,
+    heap: &Heap,
+    subscripts: &[i32],
+) -> Result<i32, String> {
+    assert_eq!(ExprType::Integer, vtype);
+    let a = array_data(regs, index, heap);
+    let flat_idx = a.flat_index(subscripts)?;
+    Ok(a.values[flat_idx] as i32)
 }
 
 /// An immutable reference to a variable (register) in the register file, carrying
@@ -795,6 +815,11 @@ impl<'a, 'vm> RegisterRef<'a, 'vm> {
     /// Dereferences this register reference as an array and returns its dimensions.
     pub fn array_dimensions(&self) -> &[usize] {
         array_dimensions(self.scope.regs, self.index, self.scope.heap)
+    }
+
+    /// Dereferences this register reference as an integer array and returns an element.
+    pub fn deref_array_integer(&self, subscripts: &[i32]) -> Result<i32, String> {
+        deref_array_integer(self.scope.regs, self.index, self.vtype, self.scope.heap, subscripts)
     }
 }
 
@@ -841,6 +866,11 @@ impl<'a, 'vm> RegisterRefMut<'a, 'vm> {
     /// Dereferences this register reference as an array and returns its dimensions.
     pub fn array_dimensions(&self) -> &[usize] {
         array_dimensions(self.scope.regs, self.index, self.scope.heap)
+    }
+
+    /// Dereferences this register reference as an integer array and returns an element.
+    pub fn deref_array_integer(&self, subscripts: &[i32]) -> Result<i32, String> {
+        deref_array_integer(self.scope.regs, self.index, self.vtype, self.scope.heap, subscripts)
     }
 
     /// Sets a boolean via this register reference.
