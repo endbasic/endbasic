@@ -371,6 +371,18 @@ fn test_cli_version() {
 }
 
 #[test]
+fn test_example_bounce() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=memory://", "--interactive"],
+        0,
+        Behavior::File(src_path("cli/tests/examples/bounce.in")),
+        Behavior::File(src_path("cli/tests/examples/bounce.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_example_fibonacci() {
     check(
         bin_path("endbasic"),
