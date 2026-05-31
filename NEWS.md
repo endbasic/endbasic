@@ -14,7 +14,7 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET**
 
-*   No changes recorded.
+*   Added the `vga8x16` font.
 
 ## Changes in version 0.13.0
 
