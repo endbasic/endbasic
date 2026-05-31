@@ -16,7 +16,10 @@
 //! A simple paginator for commands that produce long outputs
 
 use super::{CharsXY, Console, Key, is_narrow};
+use crate::Yielder;
+use std::cell::RefCell;
 use std::io;
+use std::rc::Rc;
 
 /// Message to print on a narrow console when the screen is full.
 const MORE_MESSAGE_NARROW: &str = " << More >> ";
@@ -28,6 +31,9 @@ const MORE_MESSAGE_WIDE: &str = " << Press any key for more; ESC or Ctrl+C to st
 pub(crate) struct Pager<'a> {
     /// The wrapped console.
     console: &'a mut dyn Console,
+
+    /// Optional hook to yield output production back to the host.
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
 
     /// Cached size of the console.
     size: CharsXY,
@@ -44,10 +50,13 @@ pub(crate) struct Pager<'a> {
 
 impl<'a> Pager<'a> {
     /// Wraps `console` to offer pagination features.
-    pub(crate) fn new(console: &'a mut dyn Console) -> io::Result<Self> {
+    pub(crate) fn new(
+        console: &'a mut dyn Console,
+        yielder: Option<Rc<RefCell<dyn Yielder>>>,
+    ) -> io::Result<Self> {
         let size = console.size_chars()?;
         let more_message = if is_narrow(console) { MORE_MESSAGE_NARROW } else { MORE_MESSAGE_WIDE };
-        Ok(Self { console, size, more_message, cur_columns: 0, cur_lines: 0 })
+        Ok(Self { console, yielder, size, more_message, cur_columns: 0, cur_lines: 0 })
     }
 
     /// Returns the maximum number of columns of the console.
@@ -74,6 +83,11 @@ impl<'a> Pager<'a> {
     pub(crate) async fn print(&mut self, text: &str) -> io::Result<()> {
         self.console.print(text)?;
         if self.console.is_interactive() {
+            if let Some(yielder) = self.yielder.as_ref() {
+                let mut yielder = yielder.borrow_mut();
+                yielder.yield_now().await;
+            }
+
             self.cur_columns += text.len();
             self.cur_lines += (self.cur_columns / usize::from(self.size.x)) + 1;
 
@@ -113,6 +127,20 @@ impl<'a> Pager<'a> {
 mod tests {
     use super::*;
     use crate::testutils::*;
+    use async_trait::async_trait;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    struct CountingYielder {
+        count: Rc<RefCell<usize>>,
+    }
+
+    #[async_trait(?Send)]
+    impl Yielder for CountingYielder {
+        async fn yield_now(&mut self) {
+            *self.count.borrow_mut() += 1;
+        }
+    }
 
     #[tokio::test]
     async fn test_no_paging_if_not_interactive() {
@@ -120,7 +148,7 @@ mod tests {
         cb.set_size_chars(CharsXY { x: 10, y: 3 });
         cb.set_interactive(false);
 
-        let mut pager = Pager::new(&mut cb).unwrap();
+        let mut pager = Pager::new(&mut cb, None).unwrap();
         pager.print("line 1").await.unwrap();
         pager.print("line 2").await.unwrap();
         pager.print("line 3").await.unwrap();
@@ -140,13 +168,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_yields_after_interactive_prints() {
+        let mut cb = MockConsole::default();
+        cb.set_size_chars(CharsXY { x: 10, y: 5 });
+        cb.set_interactive(true);
+        let count = Rc::from(RefCell::from(0));
+
+        let mut pager = Pager::new(
+            &mut cb,
+            Some(Rc::from(RefCell::from(CountingYielder { count: count.clone() }))),
+        )
+        .unwrap();
+        pager.print("line 1").await.unwrap();
+        pager.print("line 2").await.unwrap();
+
+        assert_eq!(2, *count.borrow());
+    }
+
+    #[tokio::test]
     async fn test_paging_short_columns() {
         let mut cb = MockConsole::default();
         cb.set_size_chars(CharsXY { x: 10, y: 3 });
         cb.set_interactive(true);
         cb.add_input_keys(&[Key::NewLine, Key::Char('a')]);
 
-        let mut pager = Pager::new(&mut cb).unwrap();
+        let mut pager = Pager::new(&mut cb, None).unwrap();
         pager.print("line 1").await.unwrap();
         pager.print("line 2").await.unwrap();
         pager.print("line 3").await.unwrap();
@@ -174,7 +220,7 @@ mod tests {
         cb.set_interactive(true);
         cb.add_input_keys(&[Key::NewLine]);
 
-        let mut pager = Pager::new(&mut cb).unwrap();
+        let mut pager = Pager::new(&mut cb, None).unwrap();
         pager.print("this line is long").await.unwrap();
         pager.print("line 2").await.unwrap();
 
@@ -195,7 +241,7 @@ mod tests {
         cb.set_interactive(true);
         cb.add_input_keys(&[Key::NewLine]);
 
-        let mut pager = Pager::new(&mut cb).unwrap();
+        let mut pager = Pager::new(&mut cb, None).unwrap();
         pager.print("line 1").await.unwrap();
         pager.print("line 2").await.unwrap();
         pager.print("line 3").await.unwrap();
@@ -218,7 +264,7 @@ mod tests {
         cb.set_interactive(true);
         cb.add_input_keys(&[Key::NewLine, Key::NewLine]);
 
-        let mut pager = Pager::new(&mut cb).unwrap();
+        let mut pager = Pager::new(&mut cb, None).unwrap();
         pager.print("line 1").await.unwrap();
         pager.print("line 2").await.unwrap();
         pager.print("line 3").await.unwrap();
@@ -247,7 +293,7 @@ mod tests {
         cb.set_interactive(true);
         cb.add_input_keys(&[Key::NewLine]);
 
-        let mut pager = Pager::new(&mut cb).unwrap();
+        let mut pager = Pager::new(&mut cb, None).unwrap();
         pager.write("this line").unwrap();
         pager.print("is long").await.unwrap();
         pager.print("line 2").await.unwrap();
@@ -270,7 +316,7 @@ mod tests {
         cb.set_interactive(true);
         cb.add_input_keys(&[Key::NewLine]);
 
-        let mut pager = Pager::new(&mut cb).unwrap();
+        let mut pager = Pager::new(&mut cb, None).unwrap();
         pager.set_color(Some(3), Some(5)).unwrap();
         pager.print("line 1").await.unwrap();
         pager.print("line 2").await.unwrap();
@@ -297,7 +343,7 @@ mod tests {
         cb.set_interactive(true);
         cb.add_input_keys(&[Key::Escape]);
 
-        let mut pager = Pager::new(&mut cb).unwrap();
+        let mut pager = Pager::new(&mut cb, None).unwrap();
         pager.print("line 1").await.unwrap();
         match pager.print("line 2").await {
             Ok(()) => panic!("Should have been interrupted"),

@@ -17,6 +17,7 @@
 //! Interactive help support.
 
 use crate::MachineBuilder;
+use crate::Yielder;
 use crate::console::{AnsiColor, Console, Pager, refill_and_page};
 use crate::exec::CATEGORY;
 use async_trait::async_trait;
@@ -403,6 +404,7 @@ pub struct HelpCommand {
     metadata: Rc<CallableMetadata>,
     callables: Rc<RefCell<HashMap<SymbolKey, Rc<CallableMetadata>>>>,
     console: Rc<RefCell<dyn Console>>,
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
 }
 
 impl HelpCommand {
@@ -410,6 +412,7 @@ impl HelpCommand {
     pub fn new(
         callables: Rc<RefCell<HashMap<SymbolKey, Rc<CallableMetadata>>>>,
         console: Rc<RefCell<dyn Console>>,
+        yielder: Option<Rc<RefCell<dyn Yielder>>>,
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("HELP")
@@ -440,6 +443,7 @@ equivalent: HELP \"CON\", HELP \"console\", HELP \"Console manipulation\".",
                 .build(),
             callables,
             console,
+            yielder,
         })
     }
 
@@ -496,7 +500,8 @@ impl Callable for HelpCommand {
         if scope.nargs() == 0 {
             let mut console = self.console.borrow_mut();
             let result = {
-                let mut pager = Pager::new(&mut *console).map_err(CallError::from)?;
+                let mut pager =
+                    Pager::new(&mut *console, self.yielder.clone()).map_err(CallError::from)?;
                 self.summary(&topics, &mut pager).await
             };
             result.map_err(CallError::from)?;
@@ -507,7 +512,8 @@ impl Callable for HelpCommand {
             let topic = topics.find(&t, &scope, 0)?;
             let mut console = self.console.borrow_mut();
             let result = {
-                let mut pager = Pager::new(&mut *console).map_err(CallError::from)?;
+                let mut pager =
+                    Pager::new(&mut *console, self.yielder.clone()).map_err(CallError::from)?;
                 topic.describe(&mut pager).await
             };
             result.map_err(CallError::from)?;
@@ -518,8 +524,12 @@ impl Callable for HelpCommand {
 }
 
 /// Adds all help-related commands to the `machine` and makes them write to `console`.
-pub fn add_all(machine: &mut MachineBuilder, console: Rc<RefCell<dyn Console>>) {
-    machine.add_callable(HelpCommand::new(machine.callables_metadata(), console));
+pub fn add_all(
+    machine: &mut MachineBuilder,
+    console: Rc<RefCell<dyn Console>>,
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
+) {
+    machine.add_callable(HelpCommand::new(machine.callables_metadata(), console, yielder));
 }
 
 #[cfg(test)]
@@ -723,11 +733,11 @@ This is the first and only topic with just one line.
 
         let console = tester.get_console();
         let help_probe =
-            HelpCommand::new(Rc::new(RefCell::new(HashMap::default())), console.clone());
+            HelpCommand::new(Rc::new(RefCell::new(HashMap::default())), console.clone(), None);
         metadata
             .borrow_mut()
             .insert(SymbolKey::from(help_probe.metadata().name()), help_probe.metadata());
-        tester.add_callable(HelpCommand::new(metadata, console))
+        tester.add_callable(HelpCommand::new(metadata, console, None))
     }
 
     fn tester() -> Tester {

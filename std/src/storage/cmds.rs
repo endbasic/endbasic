@@ -18,6 +18,7 @@
 
 use super::time_format_error_to_io_error;
 use crate::MachineBuilder;
+use crate::Yielder;
 use crate::console::{Console, Pager, is_narrow};
 use crate::storage::Storage;
 use async_trait::async_trait;
@@ -54,7 +55,12 @@ this is likely to confuse you.
 See the \"Stored program\" help topic for information on how to load, modify, and save programs.";
 
 /// Shows the contents of the given storage location.
-async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> io::Result<()> {
+async fn show_dir(
+    storage: &Storage,
+    console: &mut dyn Console,
+    path: &str,
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
+) -> io::Result<()> {
     let canonical_path = storage.make_canonical(path)?;
     let files = storage.enumerate(path).await?;
 
@@ -62,7 +68,7 @@ async fn show_dir(storage: &Storage, console: &mut dyn Console, path: &str) -> i
         .expect("Hardcoded format must be valid");
     let show_narrow = is_narrow(&*console);
 
-    let mut pager = Pager::new(console)?;
+    let mut pager = Pager::new(console, yielder)?;
     pager.print("").await?;
     pager.print(&format!("    Directory of {}", canonical_path)).await?;
     pager.print("").await?;
@@ -234,11 +240,16 @@ pub struct DirCommand {
     metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
 }
 
 impl DirCommand {
     /// Creates a new `DIR` command that lists `storage` contents on the `console`.
-    pub fn new(console: Rc<RefCell<dyn Console>>, storage: Rc<RefCell<Storage>>) -> Rc<Self> {
+    pub fn new(
+        console: Rc<RefCell<dyn Console>>,
+        storage: Rc<RefCell<Storage>>,
+        yielder: Option<Rc<RefCell<dyn Yielder>>>,
+    ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DIR")
                 .with_async(true)
@@ -260,6 +271,7 @@ impl DirCommand {
                 .build(),
             console,
             storage,
+            yielder,
         })
     }
 }
@@ -278,7 +290,13 @@ impl Callable for DirCommand {
             scope.get_string(0)
         };
 
-        show_dir(&self.storage.borrow(), &mut *self.console.borrow_mut(), path).await?;
+        show_dir(
+            &self.storage.borrow(),
+            &mut *self.console.borrow_mut(),
+            path,
+            self.yielder.clone(),
+        )
+        .await?;
 
         Ok(())
     }
@@ -509,10 +527,11 @@ pub fn add_all(
     machine: &mut MachineBuilder,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
 ) {
     machine.add_callable(CdCommand::new(storage.clone()));
     machine.add_callable(CopyCommand::new(storage.clone()));
-    machine.add_callable(DirCommand::new(console.clone(), storage.clone()));
+    machine.add_callable(DirCommand::new(console.clone(), storage.clone(), yielder));
     machine.add_callable(KillCommand::new(storage.clone()));
     machine.add_callable(MountCommand::new(console.clone(), storage.clone()));
     machine.add_callable(PwdCommand::new(console.clone(), storage.clone()));

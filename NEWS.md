@@ -26,6 +26,10 @@ for the time being.**
 
 *   Added the `DEMOS:/BOUNCE.BAS` graphics demo to showcase animated shapes.
 
+*   Fixed the web frontend so that commands that print long outputs (like
+    `HELP` or `DIR`) don't block and print everything at once: the contents
+    now appear line by line.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**
