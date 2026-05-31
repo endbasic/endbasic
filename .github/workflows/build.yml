@@ -48,7 +48,7 @@ jobs:
             - uses: actions/checkout@v6
             - uses: mozilla-actions/sccache-action@v0.0.10
             - run: sudo apt update
-            - run: sudo apt install libsdl2-dev libsdl2-ttf-dev
+            - run: sudo apt install libsdl2-dev
             - run: ./.github/workflows/release.sh linux-x86_64-sdl
             - uses: actions/upload-artifact@v7
               with:

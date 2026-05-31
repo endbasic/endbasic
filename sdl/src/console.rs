@@ -23,8 +23,8 @@ use endbasic_std::Signal;
 use endbasic_std::console::{
     CharsXY, ClearType, Console, Key, PixelsXY, Resolution, SizeInPixels, remove_control_chars,
 };
+use endbasic_std::gfx::lcd::fonts::Font;
 use std::io;
-use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
 use std::thread::{self, JoinHandle};
 
@@ -55,8 +55,7 @@ impl SdlConsole {
         resolution: Resolution,
         default_fg_color: Option<u8>,
         default_bg_color: Option<u8>,
-        font_path: PathBuf,
-        font_size: u16,
+        font: &'static Font,
         signals_tx: Sender<Signal>,
     ) -> io::Result<Self> {
         let (request_tx, request_rx) = mpsc::sync_channel(1);
@@ -67,8 +66,7 @@ impl SdlConsole {
                 resolution,
                 default_fg_color,
                 default_bg_color,
-                font_path,
-                font_size,
+                font,
                 request_rx,
                 response_tx,
                 on_key_tx,
@@ -262,6 +260,7 @@ impl Console for SdlConsole {
 mod testutils {
     use super::*;
     use async_channel::{Receiver, TryRecvError};
+    use endbasic_std::gfx::lcd::fonts::FONT_VGA8X16;
     use flate2::Compression;
     use flate2::read::GzDecoder;
     use flate2::write::GzEncoder;
@@ -332,8 +331,7 @@ mod testutils {
                 )),
                 None,
                 None,
-                src_path("sdl/src/IBMPlexMono-Regular-6.0.0.ttf"),
-                16,
+                &FONT_VGA8X16,
                 signals_chan.0,
             )
             .unwrap();
@@ -900,26 +898,5 @@ mod tests {
         }
 
         test.verify("sdl-write-positions");
-    }
-
-    #[test]
-    #[ignore = "Requires a graphical environment"]
-    fn test_sdl_console_write_too_long() {
-        let mut test = SdlTest::new();
-
-        let len = usize::from(u16::MAX) + 1;
-        let very_long_string = "x".repeat(len);
-        // We have to reach into raw_write here because the public write() wraps text and would
-        // never trigger this problem (until we expose unwrapped writes at a later stage and forget
-        // about this corner case).
-        assert_eq!(
-            io::ErrorKind::InvalidInput,
-            test.console()
-                .call(Request::RawWrite(very_long_string, PixelsXY { x: 0, y: 0 },))
-                .unwrap_err()
-                .kind()
-        );
-
-        test.verify("sdl-empty");
     }
 }

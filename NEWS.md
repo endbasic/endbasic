@@ -14,7 +14,11 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET**
 
-*   Added the `vga8x16` font.
+*   Changed the sdl graphics backend to use our own font rendering engine
+    (the one implemented for the ST7735s LCD).
+
+*   Added the `vga8x16` font and used it as default for the sdl graphics
+    backend.
 
 ## Changes in version 0.13.0
 
