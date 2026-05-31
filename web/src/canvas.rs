@@ -15,10 +15,12 @@
 
 //! HTML canvas-based console implementation.
 
-use crate::{WebYielder, log_and_panic};
+use crate::WebYielder;
 use async_trait::async_trait;
+use endbasic_std::console::drawing::draw_text;
 use endbasic_std::console::graphics::{RasterInfo, RasterOps};
-use endbasic_std::console::{CharsXY, PixelsXY, RGB, SizeInPixels};
+use endbasic_std::console::{PixelsXY, RGB, SizeInPixels};
+use endbasic_std::gfx::lcd::fonts::Font;
 use std::convert::TryFrom;
 use std::f64::consts::PI;
 use std::io;
@@ -27,14 +29,6 @@ use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 use web_sys::ImageData;
 use web_sys::{CanvasRenderingContext2d, ContextAttributes2d};
-
-/// Default fonts to use.  The first font in the list should match whichever font is loaded in
-/// `style.css`.  The rest are only provided as fallbacks.
-const DEFAULT_FONT_FACE: &str = "\"IBM Plex Mono\", SFMono-Regular, Menlo, Monaco, Consolas, \
-\"Liberation Mono\", \"Courier New\", monospace";
-
-/// Size of the default font to use in pixels.
-const DEFAULT_FONT_SIZE: u16 = 16;
 
 /// Converts a `JsValue` error to an `io::Error`.
 pub(crate) fn js_value_to_io_error(e: JsValue) -> io::Error {
@@ -87,17 +81,14 @@ pub(crate) struct CanvasRasterOps {
     /// The HTML canvas context on which to render the console.
     context: CanvasRenderingContext2d,
 
+    /// The font to use.
+    font: &'static Font,
+
     /// The yielder with which to return control to the JavaScript runtime.
     yielder: WebYielder,
 
     /// Size of the console in pixels.
     size_pixels: SizeInPixels,
-
-    /// Size of each character.
-    glyph_size: SizeInPixels,
-
-    /// Size of the console in characters.  This is derived from `size_pixels` and `glyph_size`.
-    size_chars: CharsXY,
 
     /// Current fill color.  Used only to track if we need to update the canvas.
     fill_color: RGB,
@@ -109,7 +100,11 @@ pub(crate) struct CanvasRasterOps {
 impl CanvasRasterOps {
     /// Creates a new canvas console backed by the `canvas` HTML element and that receives input
     /// events from `input`.
-    pub(crate) fn new(canvas: HtmlCanvasElement, yielder: WebYielder) -> io::Result<Self> {
+    pub(crate) fn new(
+        canvas: HtmlCanvasElement,
+        font: &'static Font,
+        yielder: WebYielder,
+    ) -> io::Result<Self> {
         let size_pixels = {
             let width = match u16::try_from(canvas.width()) {
                 Ok(v) => v,
@@ -133,53 +128,15 @@ impl CanvasRasterOps {
         };
 
         let context = html_canvas_to_2d_context(canvas)?;
-        context.set_font(&format!("{}px {}", DEFAULT_FONT_SIZE, DEFAULT_FONT_FACE));
         context.set_image_smoothing_enabled(false);
         context.set_text_baseline("middle");
-
-        let glyph_size = {
-            let text_metrics = context.measure_text("X").map_err(js_value_to_io_error)?;
-            let width = text_metrics.width().ceil() as u16;
-            let height = DEFAULT_FONT_SIZE + 2; // Pad lines a little bit.
-            SizeInPixels::new(width, height)
-        };
-
-        let size_chars = {
-            let width = match size_pixels.width.checked_div(glyph_size.width) {
-                Some(v) => v,
-                None => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("Invalid glyph width {}", glyph_size.width),
-                    ));
-                }
-            };
-            let height = match size_pixels.height.checked_div(glyph_size.height) {
-                Some(v) => v,
-                None => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("Invalid glyph height {}", glyph_size.height),
-                    ));
-                }
-            };
-            CharsXY::new(width, height)
-        };
 
         // The actual values are irrelevant but need to be different than the initial values we use
         // below.
         let fill_color = (10, 10, 10);
         let stroke_color = (100, 100, 100);
 
-        let mut raster_ops = Self {
-            context,
-            yielder,
-            size_pixels,
-            glyph_size,
-            size_chars,
-            fill_color,
-            stroke_color,
-        };
+        let mut raster_ops = Self { context, font, yielder, size_pixels, fill_color, stroke_color };
 
         raster_ops.set_fill_style_rgb((0, 0, 0));
         raster_ops.set_stroke_style_rgb((255, 255, 255));
@@ -211,8 +168,8 @@ impl RasterOps for CanvasRasterOps {
     fn get_info(&self) -> RasterInfo {
         RasterInfo {
             size_pixels: self.size_pixels,
-            glyph_size: self.glyph_size,
-            size_chars: self.size_chars,
+            size_chars: self.font.chars_in_area(self.size_pixels),
+            glyph_size: self.font.glyph_size.into(),
         }
     }
 
@@ -268,7 +225,7 @@ impl RasterOps for CanvasRasterOps {
         debug_assert_eq!(
             SizeInPixels::new(
                 self.size_pixels.width,
-                self.size_pixels.height - self.glyph_size.height,
+                self.size_pixels.height - u16::try_from(self.font.glyph_size.height).unwrap(),
             ),
             size
         );
@@ -288,31 +245,7 @@ impl RasterOps for CanvasRasterOps {
     }
 
     fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
-        debug_assert!(!text.is_empty(), "It doesn't make sense to render an empty string");
-
-        // We must render one character at a time because the glyph width of the original font is
-        // not guaranteed to be an integer pixel size.
-        let mut x = xy.x;
-        let advance = match i16::try_from(self.glyph_size.width) {
-            Ok(width) => width,
-            Err(e) => log_and_panic!("Glyph size is too big: {}", e),
-        };
-        let y_offset = match i16::try_from(self.glyph_size.height) {
-            Ok(height) => height / 2,
-            Err(e) => log_and_panic!("Glyph height is too big: {}", e),
-        };
-        for ch in text.chars() {
-            let mut buf = [0u8; 4];
-            let sb = ch.encode_utf8(&mut buf);
-
-            self.context
-                .fill_text(sb, f64::from(x), f64::from(xy.y + y_offset))
-                .map_err(js_value_to_io_error)?;
-
-            x += advance;
-        }
-
-        Ok(())
+        draw_text(self, self.font, xy, text)
     }
 
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
