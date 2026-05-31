@@ -19,6 +19,7 @@
 use async_channel::{Receiver, Sender};
 use async_trait::async_trait;
 use endbasic_std::console::{Console, GraphicsConsole};
+use endbasic_std::gfx::lcd::fonts::FONT_VGA8X16;
 use endbasic_std::{Signal, Yielder};
 use std::cell::RefCell;
 use std::future::Future;
@@ -276,7 +277,7 @@ impl WebTerminal {
         let signals_chan = async_channel::unbounded();
         let input = WebInput::new(signals_chan.0.clone(), yielder.clone());
         let on_screen_keyboard = input.on_screen_keyboard();
-        let raster_ops = match CanvasRasterOps::new(terminal, yielder.clone()) {
+        let raster_ops = match CanvasRasterOps::new(terminal, &FONT_VGA8X16, yielder.clone()) {
             Ok(raster_ops) => raster_ops,
             Err(e) => log_and_panic!("Console initialization failed: {}", e),
         };
