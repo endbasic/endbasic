@@ -63,10 +63,7 @@ where
             vec![0; pixels * stride]
         };
 
-        let size_chars = CharsXY::new(
-            u16::try_from(size.width / font.glyph_size.width).expect("Must fit"),
-            u16::try_from(size.height / font.glyph_size.height).expect("Must fit"),
-        );
+        let size_chars = font.chars_in_area(size.into());
 
         let draw_color = lcd.encode((255, 255, 255));
         let row_buffer = Vec::with_capacity(size.width * stride);
@@ -314,37 +311,6 @@ where
 
         Ok(())
     }
-
-    /// Writes a single character `ch` at `pos`.
-    fn write_char(&mut self, pos: LcdXY, ch: char) -> io::Result<()> {
-        let glyph = self.font.glyph(ch);
-        for j in 0..self.font.glyph_size.height {
-            for k in 0..self.font.stride {
-                let row = glyph[j * self.font.stride + k];
-                let mut mask = 0x80;
-                for i in 0..self.font.glyph_size.width {
-                    let bit = row & mask;
-                    if bit != 0 {
-                        let x = pos.x + i + k * 8;
-                        if x >= self.size_pixels.width {
-                            continue;
-                        }
-
-                        let y = pos.y + j;
-                        if y >= self.size_pixels.height {
-                            continue;
-                        }
-
-                        let xy = LcdXY { x, y };
-                        // TODO(jmmv): This is very inefficent on a pixel basis.
-                        self.fill(xy, xy)?;
-                    }
-                    mask >>= 1;
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
 impl<L> Drop for BufferedLcd<L>
@@ -460,18 +426,7 @@ where
     }
 
     fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
-        self.assert_xy_in_range(xy);
-
-        let x1y1 = self.clip_xy(xy).expect("Internal ops must receive valid coordinates");
-
-        self.without_sync(|self2| {
-            let mut pos = x1y1;
-            for ch in text.chars() {
-                self2.write_char(pos, ch)?;
-                pos.x += self2.font.glyph_size.width;
-            }
-            Ok(())
-        })
+        self.without_sync(|self2| drawing::draw_text(self2, self2.font, xy, text))
     }
 
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {

@@ -17,6 +17,7 @@
 
 use crate::console::graphics::{ClampedInto, RasterOps};
 use crate::console::{PixelsXY, SizeInPixels};
+use crate::gfx::lcd::fonts::Font;
 use std::convert::TryFrom;
 use std::io;
 
@@ -247,6 +248,46 @@ where
     rasops.draw_line(PixelsXY { x: x2y2.x, y: x1y1.y }, PixelsXY { x: x2y2.x, y: x2y2.y })?;
     rasops.draw_line(PixelsXY { x: x2y2.x, y: x2y2.y }, PixelsXY { x: x1y1.x, y: x2y2.y })?;
     rasops.draw_line(PixelsXY { x: x1y1.x, y: x2y2.y }, PixelsXY { x: x1y1.x, y: x1y1.y })?;
+    Ok(())
+}
+
+/// Writes a single character `ch` at `pos`.
+fn draw_char<R>(rasops: &mut R, font: &Font, pos: PixelsXY, ch: char) -> io::Result<()>
+where
+    R: RasterOps,
+{
+    let glyph = font.glyph(ch);
+    for j in 0..font.glyph_size.height {
+        for k in 0..font.stride {
+            let row = glyph[j * font.stride + k];
+            let mut mask = 0x80;
+            for i in 0..font.glyph_size.width {
+                let bit = row & mask;
+                if bit != 0 {
+                    // TODO(jmmv): The "as i16" conversions below are code smells.  We should
+                    // change the font glyph size representation to be u8s to allow widening
+                    // the integers instead of having to truncate them.
+                    let x = pos.x + i as i16 + k as i16 * 8;
+                    let y = pos.y + j as i16;
+                    rasops.draw_pixel(PixelsXY { x, y })?;
+                }
+                mask >>= 1;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Writes a single character `ch` at `pos`.
+pub fn draw_text<R>(rasops: &mut R, font: &Font, xy: PixelsXY, text: &str) -> io::Result<()>
+where
+    R: RasterOps,
+{
+    let mut pos = xy;
+    for ch in text.chars() {
+        draw_char(rasops, font, pos, ch)?;
+        pos.x += i16::try_from(font.glyph_size.width).expect("Must fit");
+    }
     Ok(())
 }
 
@@ -708,6 +749,53 @@ mod tests {
                 CapturedRasop::DrawLine(i16::MAX - 1, i16::MIN, i16::MAX - 1, i16::MAX - 1),
                 CapturedRasop::DrawLine(i16::MAX - 1, i16::MAX - 1, i16::MIN, i16::MAX - 1),
                 CapturedRasop::DrawLine(i16::MIN, i16::MAX - 1, i16::MIN, i16::MIN),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_text_empty() {
+        let mut rasops = RecordingRasops::default();
+        draw_text(&mut rasops, &crate::gfx::lcd::fonts::FONT_5X8, PixelsXY::new(10, 20), "")
+            .unwrap();
+        assert!(rasops.ops.is_empty());
+    }
+
+    #[test]
+    fn test_draw_text_one_char() {
+        let mut rasops = RecordingRasops::default();
+        draw_text(&mut rasops, &crate::gfx::lcd::fonts::FONT_5X8, PixelsXY::new(10, 20), "!")
+            .unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawPixel(12, 20),
+                CapturedRasop::DrawPixel(12, 21),
+                CapturedRasop::DrawPixel(12, 22),
+                CapturedRasop::DrawPixel(12, 23),
+                CapturedRasop::DrawPixel(12, 25),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_draw_text_two_chars() {
+        let mut rasops = RecordingRasops::default();
+        draw_text(&mut rasops, &crate::gfx::lcd::fonts::FONT_5X8, PixelsXY::new(10, 20), "!!")
+            .unwrap();
+        assert_eq!(
+            [
+                CapturedRasop::DrawPixel(12, 20),
+                CapturedRasop::DrawPixel(12, 21),
+                CapturedRasop::DrawPixel(12, 22),
+                CapturedRasop::DrawPixel(12, 23),
+                CapturedRasop::DrawPixel(12, 25),
+                CapturedRasop::DrawPixel(17, 20),
+                CapturedRasop::DrawPixel(17, 21),
+                CapturedRasop::DrawPixel(17, 22),
+                CapturedRasop::DrawPixel(17, 23),
+                CapturedRasop::DrawPixel(17, 25),
             ],
             rasops.ops.as_slice()
         );

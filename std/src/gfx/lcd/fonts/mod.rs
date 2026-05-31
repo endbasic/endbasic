@@ -16,6 +16,7 @@
 
 //! Support for bitmap fonts directly rendered onto an LCD.
 
+use crate::console::{CharsXY, SizeInPixels};
 use crate::gfx::lcd::LcdSize;
 use std::collections::HashMap;
 use std::io;
@@ -59,6 +60,18 @@ impl Font {
         let offset = ((ch as usize) - (' ' as usize)) * height;
         debug_assert!(offset < (self.data.len() + height));
         &self.data[offset..offset + height]
+    }
+
+    /// Computes the number of characters that fit within the given pixels `area`.
+    pub fn chars_in_area(&self, area: SizeInPixels) -> CharsXY {
+        CharsXY::new(
+            area.width
+                .checked_div(u16::try_from(self.glyph_size.width).expect("Must fit"))
+                .expect("Glyph size tested for non-zero during init"),
+            area.height
+                .checked_div(u16::try_from(self.glyph_size.height).expect("Must fit"))
+                .expect("Glyph size tested for non-zero during init"),
+        )
     }
 }
 
