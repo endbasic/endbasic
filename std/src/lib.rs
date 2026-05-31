@@ -311,6 +311,11 @@ impl MachineBuilder {
         self.clearables.push(clearable);
     }
 
+    /// Returns the current yielder, if one has been configured.
+    pub fn yielder(&self) -> Option<Rc<RefCell<dyn Yielder>>> {
+        self.yielder.clone()
+    }
+
     /// Overrides the default terminal-based console with the given one.
     pub fn with_console(mut self, console: Rc<RefCell<dyn console::Console>>) -> Self {
         self.console = Some(console);
@@ -462,9 +467,17 @@ impl InteractiveMachineBuilder {
         let storage = self.get_storage();
 
         exec::add_interactive(&mut self.builder);
-        program::add_all(&mut self.builder, program, console.clone(), storage.clone());
-        storage::add_all(&mut self.builder, console.clone(), storage);
-        help::add_all(&mut self.builder, console);
+        let yielder = self.builder.yielder();
+
+        program::add_all(
+            &mut self.builder,
+            program,
+            console.clone(),
+            storage.clone(),
+            yielder.clone(),
+        );
+        storage::add_all(&mut self.builder, console.clone(), storage, yielder.clone());
+        help::add_all(&mut self.builder, console, yielder);
 
         self.builder.build()
     }

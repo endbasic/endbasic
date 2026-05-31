@@ -16,6 +16,7 @@
 
 //! Stored program manipulation.
 
+use crate::Yielder;
 use crate::console::{Console, Pager, read_line};
 use crate::storage::Storage;
 use crate::strings::parse_boolean;
@@ -134,6 +135,7 @@ pub struct DisasmCommand {
     callables_metadata: Rc<RefCell<HashMap<SymbolKey, Rc<CallableMetadata>>>>,
     console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
 }
 
 struct MetadataCallable {
@@ -157,6 +159,7 @@ impl DisasmCommand {
         callables_metadata: Rc<RefCell<HashMap<SymbolKey, Rc<CallableMetadata>>>>,
         console: Rc<RefCell<dyn Console>>,
         program: Rc<RefCell<dyn Program>>,
+        yielder: Option<Rc<RefCell<dyn Yielder>>>,
     ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("DISASM")
@@ -173,6 +176,7 @@ assembly code cannot be reassembled nor modified at this point.",
             callables_metadata,
             console,
             program,
+            yielder,
         })
     }
 }
@@ -202,7 +206,7 @@ impl Callable for DisasmCommand {
         };
 
         let mut console = self.console.borrow_mut();
-        let mut pager = Pager::new(&mut *console)?;
+        let mut pager = Pager::new(&mut *console, self.yielder.clone())?;
         for line in image.disasm() {
             pager.print(&line).await?;
         }
@@ -256,11 +260,16 @@ pub struct ListCommand {
     metadata: Rc<CallableMetadata>,
     console: Rc<RefCell<dyn Console>>,
     program: Rc<RefCell<dyn Program>>,
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
 }
 
 impl ListCommand {
     /// Creates a new `LIST` command that dumps the `program` to the `console`.
-    pub fn new(console: Rc<RefCell<dyn Console>>, program: Rc<RefCell<dyn Program>>) -> Rc<Self> {
+    pub fn new(
+        console: Rc<RefCell<dyn Console>>,
+        program: Rc<RefCell<dyn Program>>,
+        yielder: Option<Rc<RefCell<dyn Yielder>>>,
+    ) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("LIST")
                 .with_async(true)
@@ -270,6 +279,7 @@ impl ListCommand {
                 .build(),
             console,
             program,
+            yielder,
         })
     }
 }
@@ -284,7 +294,7 @@ impl Callable for ListCommand {
         debug_assert_eq!(0, scope.nargs());
 
         let mut console = self.console.borrow_mut();
-        let mut pager = Pager::new(&mut *console)?;
+        let mut pager = Pager::new(&mut *console, self.yielder.clone())?;
         for line in self.program.borrow().text().lines() {
             pager.print(line).await?;
         }
@@ -573,14 +583,16 @@ pub fn add_all(
     program: Rc<RefCell<dyn Program>>,
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
 ) {
     machine.add_callable(DisasmCommand::new(
         machine.callables_metadata(),
         console.clone(),
         program.clone(),
+        yielder.clone(),
     ));
     machine.add_callable(EditCommand::new(console.clone(), program.clone()));
-    machine.add_callable(ListCommand::new(console.clone(), program.clone()));
+    machine.add_callable(ListCommand::new(console.clone(), program.clone(), yielder));
     machine.add_callable(LoadCommand::new(
         console.clone(),
         storage.clone(),
