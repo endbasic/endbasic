@@ -160,7 +160,7 @@ fn setup_console(
         signals_tx: Sender<Signal>,
         spec: &mut ConsoleSpec,
     ) -> io::Result<Rc<RefCell<dyn Console>>> {
-        endbasic_sdl::setup(spec, signals_tx)
+        endbasic_sdl::setup(spec, &endbasic_std::gfx::lcd::fonts::Fonts::all(), signals_tx)
     }
 
     /// Errors out during the creation of the graphical console when SDL support is not compiled in.

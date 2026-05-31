@@ -79,20 +79,20 @@ The above will fetch EndBASIC from <https://crates.io/>, build it with default
 settings, and then install the resulting binary under `~/.cargo/bin/`.
 
 If you want to enable graphics support (recommended), you will first have to
-install the `SDL2` and `SDL2_ttf` libraries.  Follow these steps depending on
-the platform you are on:
+install the `SDL2` library.  Follow these steps depending on the platform you
+are on:
 
 ```shell
 # On Debian-based systems:
-sudo apt install libsdl2-dev libsdl2-ttf-dev
+sudo apt install libsdl2-dev
 cargo install --features=sdl endbasic
 
 # On FreeBSD systems:
-sudo pkg install sdl2 sdl2_ttf
+sudo pkg install sdl2
 cargo install --features=sdl endbasic
 
 # On macOS systems with Homebrew:
-brew install sdl2 sdl2_ttf
+brew install sdl2
 cargo install --features=sdl endbasic
 
 # On Windows systems, this is tricky.  The easiest way is to clone this
@@ -105,7 +105,7 @@ If you want to enable support for the Raspberry Pi hardware (along with the
 recommended graphics features), do this on the Raspberry Pi itself:
 
 ```shell
-sudo apt install libsdl2-dev libsdl2-ttf-dev
+sudo apt install libsdl2-dev
 cargo install --features=rpi,sdl endbasic
 ```
 

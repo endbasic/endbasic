@@ -19,15 +19,15 @@
 //! All communication with this thread happens via channels to ensure all SDL operations are invoked
 //! from a single thread.
 
-use crate::font::{MonospacedFont, font_error_to_io_error};
 use crate::string_error_to_io_error;
 use async_trait::async_trait;
 use endbasic_std::Signal;
-use endbasic_std::console::drawing::{draw_circle, draw_circle_filled};
+use endbasic_std::console::drawing::{draw_circle, draw_circle_filled, draw_text};
 use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
     CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, RGB, Resolution, SizeInPixels,
 };
+use endbasic_std::gfx::lcd::fonts::Font;
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
 use sdl2::pixels::{Color, PixelFormatEnum};
@@ -41,8 +41,7 @@ use std::convert::TryFrom;
 use std::fmt::{self, Write};
 use std::io;
 #[cfg(test)]
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError};
 use std::thread;
@@ -187,7 +186,7 @@ struct Context {
     sdl: Sdl,
 
     /// Monospaced font to use in the console.
-    font: MonospacedFont<'static>,
+    font: &'static Font,
 
     /// Event pump to read keyboard events from.
     event_pump: EventPump,
@@ -219,14 +218,11 @@ struct Context {
 impl Context {
     /// Initializes a new SDL console.
     ///
-    /// The console is sized to `resolution` pixels.  Also loads the desired font from
-    /// `font_path` at `font_size` and uses it to calculate the size of the console in characters.
+    /// The console is sized to `resolution` pixels and the font is set to `font`.
     ///
     /// There can only be one active `SdlConsole` at any given time given that this initializes and
     /// owns the SDL context.
-    fn new(resolution: Resolution, font_path: PathBuf, font_size: u16) -> io::Result<Self> {
-        let font = MonospacedFont::load(&font_path, font_size)?;
-
+    fn new(resolution: Resolution, font: &'static Font) -> io::Result<Self> {
         let sdl = sdl2::init().map_err(string_error_to_io_error)?;
         let event_pump = sdl.event_pump().map_err(string_error_to_io_error)?;
         let video = sdl.video().map_err(string_error_to_io_error)?;
@@ -301,7 +297,7 @@ impl RasterOps for Context {
         RasterInfo {
             size_chars: self.size_chars,
             size_pixels: self.size_pixels,
-            glyph_size: self.font.glyph_size,
+            glyph_size: self.font.glyph_size.into(),
         }
     }
 
@@ -387,27 +383,7 @@ impl RasterOps for Context {
     }
 
     fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
-        debug_assert!(!text.is_empty(), "SDL does not like empty strings");
-
-        let len = match u16::try_from(text.chars().count()) {
-            Ok(v) => v,
-            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidInput, "String too long")),
-        };
-
-        let rect = Rect::new(
-            i32::from(xy.x),
-            i32::from(xy.y),
-            len.clamped_mul(self.font.glyph_size.width),
-            u32::from(self.font.glyph_size.height),
-        );
-
-        let surface =
-            self.font.font.render(text).blended(self.draw_color).map_err(font_error_to_io_error)?;
-        let texture = self
-            .texture_creator
-            .create_texture_from_surface(&surface)
-            .map_err(texture_value_error_to_io_error)?;
-        self.canvas.copy(&texture, None, rect).map_err(string_error_to_io_error)
+        draw_text(self, self.font, xy, text)
     }
 
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
@@ -456,11 +432,6 @@ impl SharedContext {
     fn push_event(&mut self, ev: Event) -> io::Result<()> {
         let event_ss = (*self.0).borrow().sdl.event().map_err(string_error_to_io_error)?;
         event_ss.push_event(ev).map_err(string_error_to_io_error)
-    }
-
-    #[cfg(test)]
-    fn raw_write(&mut self, text: &str, xy: PixelsXY) -> io::Result<()> {
-        (*self.0).borrow_mut().write_text(xy, text)
     }
 
     #[cfg(test)]
@@ -564,8 +535,6 @@ pub(crate) enum Request {
     #[cfg(test)]
     PushEvent(Event),
     #[cfg(test)]
-    RawWrite(String, PixelsXY),
-    #[cfg(test)]
     SaveBmp(PathBuf),
 }
 
@@ -601,14 +570,13 @@ pub(crate) fn run(
     resolution: Resolution,
     default_fg_color: Option<u8>,
     default_bg_color: Option<u8>,
-    font_path: PathBuf,
-    font_size: u16,
+    font: &'static Font,
     request_rx: Receiver<Request>,
     response_tx: SyncSender<Response>,
     on_key_tx: Sender<Key>,
     signals_tx: async_channel::Sender<Signal>,
 ) {
-    let ctx = match Context::new(resolution, font_path, font_size) {
+    let ctx = match Context::new(resolution, font) {
         Ok(ctx) => ctx,
         Err(e) => {
             response_tx.send(Response::Empty(Err(e))).expect("Channel must be alive");
@@ -663,9 +631,6 @@ pub(crate) fn run(
 
                     #[cfg(test)]
                     Request::PushEvent(ev) => Response::Empty(ctx.push_event(ev)),
-
-                    #[cfg(test)]
-                    Request::RawWrite(text, start) => Response::Empty(ctx.raw_write(&text, start)),
 
                     #[cfg(test)]
                     Request::SaveBmp(path) => Response::Empty(ctx.save_bmp(&path)),
