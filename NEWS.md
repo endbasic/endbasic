@@ -14,6 +14,9 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET**
 
+*   Added a new Linux-only `endbasic-fuse` binary to mount the EndBASIC
+    cloud service as a FUSE filesystem.
+
 *   Changed the sdl and web graphics backends to use our own font rendering
     engine (the one implemented for the ST7735s LCD).
 

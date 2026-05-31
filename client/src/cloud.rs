@@ -223,6 +223,23 @@ impl Service for CloudService {
         self.auth_data.borrow().as_ref().map(|x| x.username.to_owned())
     }
 
+    async fn list_users(&mut self) -> io::Result<Vec<String>> {
+        let response = self
+            .client
+            .get(self.make_url("api/users"))
+            .headers(self.default_headers())
+            .send()
+            .await
+            .map_err(reqwest_error_to_io_error)?;
+        match response.status() {
+            StatusCode::OK => {
+                let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
+                Ok(serde_json::from_reader(bytes.reader())?)
+            }
+            _ => Err(http_response_to_io_error(response).await),
+        }
+    }
+
     async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse> {
         let mut builder = self
             .client
@@ -427,6 +444,10 @@ mod testutils {
 
         fn logged_in_username(&self) -> Option<String> {
             self.service.logged_in_username()
+        }
+
+        async fn list_users(&mut self) -> io::Result<Vec<String>> {
+            self.service.list_users().await
         }
 
         async fn get_files(&mut self, username: &str) -> io::Result<GetFilesResponse> {

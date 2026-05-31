@@ -18,6 +18,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::io;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod cloud;
 pub use cloud::CloudService;
@@ -89,6 +90,22 @@ pub struct DirectoryEntry {
     pub length: u64,
 }
 
+/// A file entry with a parsed modification time, suitable for use by callers.
+pub struct FileEntry {
+    /// Name of the file.
+    pub filename: String,
+    /// Size of the file in bytes.
+    pub length: u64,
+    /// Last modification time.
+    pub mtime: SystemTime,
+}
+
+impl From<DirectoryEntry> for FileEntry {
+    fn from(e: DirectoryEntry) -> Self {
+        Self { filename: e.filename, length: e.length, mtime: UNIX_EPOCH + Duration::from_secs(e.mtime) }
+    }
+}
+
 /// Representation of a directory enumeration response.
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(Debug, Serialize))]
@@ -101,6 +118,13 @@ pub struct GetFilesResponse {
 
     /// Available disk quota, if known/applicable.
     pub disk_free: Option<DiskSpace>,
+}
+
+impl GetFilesResponse {
+    /// Converts the response into a list of file entries with parsed modification times.
+    pub fn into_files(self) -> Vec<FileEntry> {
+        self.files.into_iter().map(FileEntry::from).collect()
+    }
 }
 
 /// Representation of a signup request.
@@ -140,6 +164,9 @@ pub trait Service {
 
     /// Returns the logged in username if there is an active session.
     fn logged_in_username(&self) -> Option<String>;
+
+    /// Sends a request to the server to obtain the list of all known usernames.
+    async fn list_users(&mut self) -> io::Result<Vec<String>>;
 
     /// Sends a request to the server to obtain the list of files owned by `username` with a
     /// previously-acquired `access_token`.
