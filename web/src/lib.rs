@@ -323,7 +323,7 @@ impl WebTerminal {
         let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
-            .with_yielder(Box::new(self.yielder.clone()))
+            .with_yielder(Rc::from(RefCell::from(self.yielder.clone())))
             .with_signals_chan(self.signals_chan)
             .with_sleep_fn(Box::from(move |d| js_sleep(d, yielder.clone())));
         let program = Rc::from(RefCell::from(endbasic_repl::editor::Editor::default()));

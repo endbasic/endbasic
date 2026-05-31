@@ -352,7 +352,7 @@ mod tests {
 
         let mut machine = MachineBuilder::default()
             .with_signals_chan((tx.clone(), rx))
-            .with_yielder(Box::new(CountingYielder { count: yield_count.clone() }))
+            .with_yielder(Rc::from(RefCell::from(CountingYielder { count: yield_count.clone() })))
             .build();
 
         block_on(tx.send(Signal::Break)).unwrap();
