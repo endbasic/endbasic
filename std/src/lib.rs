@@ -114,7 +114,7 @@ pub struct Machine {
     actions: Rc<RefCell<Vec<MachineAction>>>,
     global_defs: Vec<GlobalDef>,
     console: Rc<RefCell<dyn console::Console>>,
-    yielder: Option<Box<dyn Yielder>>,
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
     signals_chan: (Sender<Signal>, Receiver<Signal>),
 }
 
@@ -180,7 +180,8 @@ impl Machine {
 
     /// Returns true if execution should stop after yielding to the host once.
     async fn should_stop_after_yield(&mut self) -> bool {
-        if let Some(yielder) = self.yielder.as_mut() {
+        if let Some(yielder) = self.yielder.as_ref() {
+            let mut yielder = yielder.borrow_mut();
             yielder.yield_now().await;
         }
         self.should_stop()
@@ -270,7 +271,7 @@ pub struct MachineBuilder {
     gpio_pins: Option<Rc<RefCell<dyn gpio::Pins>>>,
     sleep_fn: Option<exec::SleepFn>,
     actions: Rc<RefCell<Vec<MachineAction>>>,
-    yielder: Option<Box<dyn Yielder>>,
+    yielder: Option<Rc<RefCell<dyn Yielder>>>,
     signals_chan: Option<(Sender<Signal>, Receiver<Signal>)>,
     global_defs: Vec<GlobalDef>,
 }
@@ -335,7 +336,7 @@ impl MachineBuilder {
     }
 
     /// Overrides the default yielder with the given one.
-    pub fn with_yielder(mut self, yielder: Box<dyn Yielder>) -> Self {
+    pub fn with_yielder(mut self, yielder: Rc<RefCell<dyn Yielder>>) -> Self {
         self.yielder = Some(yielder);
         self
     }
