@@ -17,10 +17,11 @@
 //! Supporting code for EndBASIC's CLI.
 
 use anyhow::Result;
+use async_channel::{Receiver, Sender};
 use endbasic_client::CloudService;
 use endbasic_std::console::ConsoleFactory;
 use endbasic_std::storage::Storage;
-use endbasic_std::{Error as StdError, MachineBuilder};
+use endbasic_std::{Error as StdError, MachineBuilder, Signal};
 use getoptsargs::prelude::*;
 use std::cell::RefCell;
 use std::fs::File;
@@ -42,10 +43,10 @@ const INTERRUPTED_EXIT_CODE: i32 = 128 + 2;
 /// Creates a new EndBASIC machine builder based on the features enabled in this crate.
 fn new_machine_builder(
     console_factory: Box<dyn ConsoleFactory>,
+    signals_chan: (Sender<Signal>, Receiver<Signal>),
     gpio_pins_spec: Option<&str>,
 ) -> Result<MachineBuilder> {
-    let signals_chan = async_channel::unbounded();
-    let console = console_factory.build(signals_chan.0.clone())?;
+    let console = console_factory.build()?;
     let mut builder = MachineBuilder::default();
     builder = builder.with_console(console);
     builder = builder.with_signals_chan(signals_chan);
@@ -59,11 +60,12 @@ fn new_machine_builder(
 /// `service_url` is the base URL of the cloud service.
 pub async fn run_repl_loop(
     console_factory: Box<dyn ConsoleFactory>,
+    signals_chan: (Sender<Signal>, Receiver<Signal>),
     gpio_pins_spec: Option<&str>,
     local_drive_spec: &str,
     service_url: &str,
 ) -> Result<i32> {
-    let mut builder = new_machine_builder(console_factory, gpio_pins_spec)?;
+    let mut builder = new_machine_builder(console_factory, signals_chan, gpio_pins_spec)?;
     let console = builder.get_console();
     let program = Rc::from(RefCell::from(endbasic_repl::editor::Editor::default()));
     let storage = Rc::from(RefCell::from(Storage::default()));
@@ -92,9 +94,10 @@ pub async fn run_repl_loop(
 pub async fn run_script<P: AsRef<Path>>(
     path: P,
     console_factory: Box<dyn ConsoleFactory>,
+    signals_chan: (Sender<Signal>, Receiver<Signal>),
     gpio_pins_spec: Option<&str>,
 ) -> Result<i32> {
-    let builder = new_machine_builder(console_factory, gpio_pins_spec)?;
+    let builder = new_machine_builder(console_factory, signals_chan, gpio_pins_spec)?;
     let mut machine = builder.build();
     let mut input = File::open(path)?;
 
@@ -118,11 +121,12 @@ pub async fn run_script<P: AsRef<Path>>(
 pub async fn run_interactive(
     path: &str,
     console_factory: Box<dyn ConsoleFactory>,
+    signals_chan: (Sender<Signal>, Receiver<Signal>),
     gpio_pins_spec: Option<&str>,
     local_drive_spec: &str,
     service_url: &str,
 ) -> Result<i32> {
-    let mut builder = new_machine_builder(console_factory, gpio_pins_spec)?;
+    let mut builder = new_machine_builder(console_factory, signals_chan, gpio_pins_spec)?;
     let console = builder.get_console();
     let program = Rc::from(RefCell::from(endbasic_repl::editor::Editor::default()));
     let storage = Rc::from(RefCell::from(Storage::default()));
@@ -213,12 +217,14 @@ impl AppMode {
 pub async fn async_app_main(
     app_mode: AppMode,
     console_factory: Box<dyn ConsoleFactory>,
+    signals_chan: (Sender<Signal>, Receiver<Signal>),
     gpio_pins_spec: Option<String>,
     service_url: String,
 ) -> Result<i32> {
     match app_mode {
         AppMode::Repl(local_drive) => Ok(run_repl_loop(
             console_factory,
+            signals_chan,
             gpio_pins_spec.as_deref(),
             &local_drive,
             &service_url,
@@ -227,13 +233,14 @@ pub async fn async_app_main(
         AppMode::RunInteractive(file, local_drive) => Ok(run_interactive(
             &file,
             console_factory,
+            signals_chan,
             gpio_pins_spec.as_deref(),
             &local_drive,
             &service_url,
         )
         .await?),
         AppMode::RunScript(file) => {
-            Ok(run_script(file, console_factory, gpio_pins_spec.as_deref()).await?)
+            Ok(run_script(file, console_factory, signals_chan, gpio_pins_spec.as_deref()).await?)
         }
     }
 }
