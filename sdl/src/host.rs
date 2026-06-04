@@ -28,7 +28,8 @@ use endbasic_std::console::drawing::{
 };
 use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
-    CharsXY, ClearType, Console, GraphicsConsole, Key, PixelsXY, RGB, Resolution, SizeInPixels,
+    CharsXY, ClearType, Console, ConsoleHost, GraphicsConsole, Key, PixelsXY, RGB, Resolution,
+    SizeInPixels,
 };
 use endbasic_std::gfx::lcd::fonts::Font;
 use sdl2::event::Event;
@@ -733,6 +734,36 @@ pub(crate) fn run(
                 thread::sleep(Duration::from_millis(LOOP_DELAY_MS));
             }
         }
+    }
+}
+
+/// Host loop for an SDL-backed console.
+pub(crate) struct SdlConsoleHost {
+    pub(crate) resolution: Resolution,
+    pub(crate) default_fg_color: Option<u8>,
+    pub(crate) default_bg_color: Option<u8>,
+    pub(crate) font: &'static Font,
+    pub(crate) request_rx: Receiver<Request>,
+    pub(crate) response_tx: SyncSender<Response>,
+    pub(crate) on_key_tx: Sender<Key>,
+    pub(crate) signals_tx: async_channel::Sender<Signal>,
+}
+
+impl ConsoleHost for SdlConsoleHost {
+    fn run(self: Box<Self>) -> io::Result<()> {
+        // TODO(jmmv): The top-level run function should be inlined here but it was kept separate
+        // during the initial introduction of SdlConsoleHost to keep the diff clean.
+        run(
+            self.resolution,
+            self.default_fg_color,
+            self.default_bg_color,
+            self.font,
+            self.request_rx,
+            self.response_tx,
+            self.on_key_tx,
+            self.signals_tx,
+        );
+        Ok(())
     }
 }
 

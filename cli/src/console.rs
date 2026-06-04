@@ -56,12 +56,7 @@ pub fn setup_sdl_console(
     spec: &mut ConsoleSpec,
     signals_tx: Sender<Signal>,
 ) -> io::Result<ConsoleHandles> {
-    let factory = endbasic_sdl::SdlConsoleFactory::new(
-        spec,
-        signals_tx,
-        &endbasic_std::gfx::lcd::fonts::Fonts::all(),
-    )?;
-    Ok((Box::from(NoopConsoleHost), Box::from(factory)))
+    endbasic_sdl::setup(spec, signals_tx, &endbasic_std::gfx::lcd::fonts::Fonts::all())
 }
 
 /// Instantiates a console factory for an SDL-backed console with the given `spec`.

@@ -16,24 +16,19 @@
 
 //! Implementation of the EndBASIC console using SDL.
 
-use crate::host::{self, Request, Response};
-use async_channel::Sender;
+use crate::host::{Request, Response};
 use async_trait::async_trait;
-use endbasic_std::Signal;
 use endbasic_std::console::{
-    CharsXY, ClearType, Console, Key, PixelsXY, Resolution, SizeInPixels, remove_control_chars,
+    CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels, remove_control_chars,
 };
-use endbasic_std::gfx::lcd::fonts::Font;
 use std::io;
-use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
-use std::thread::{self, JoinHandle};
+use std::sync::mpsc::{Receiver, SyncSender, TryRecvError};
 
 /// Implementation of the EndBASIC console on top of an SDL2 window.
 ///
 /// This is only the "client" part of the console, which implements the `Console` trait and
 /// delegates all operations to a backing thread implemented by the `host` module.
 pub(crate) struct SdlConsole {
-    handle: Option<JoinHandle<()>>,
     request_tx: SyncSender<Request>,
     response_rx: Receiver<Response>,
     on_key_rx: Receiver<Key>,
@@ -43,42 +38,15 @@ pub(crate) struct SdlConsole {
 }
 
 impl SdlConsole {
-    /// Initializes a new SDL console.
-    ///
-    /// The console is sized to `resolution` pixels and its default colors are set to
-    /// `default_fg_color` and `default_bg_color`.  Also loads the desired font from `font_path` at
-    /// `font_size` and uses it to calculate the size of the console in characters.
-    ///
-    /// There can only be one active `SdlConsole` at any given time given that this initializes and
-    /// owns the SDL context.
+    /// Connects a new SDL console client to an already-configured host.
     pub(crate) fn new(
-        resolution: Resolution,
-        default_fg_color: Option<u8>,
-        default_bg_color: Option<u8>,
-        font: &'static Font,
-        signals_tx: Sender<Signal>,
+        request_tx: SyncSender<Request>,
+        response_rx: Receiver<Response>,
+        on_key_rx: Receiver<Key>,
     ) -> io::Result<Self> {
-        let (request_tx, request_rx) = mpsc::sync_channel(1);
-        let (response_tx, response_rx) = mpsc::sync_channel(1);
-        let (on_key_tx, on_key_rx) = mpsc::channel();
-        let handle = thread::spawn(move || {
-            host::run(
-                resolution,
-                default_fg_color,
-                default_bg_color,
-                font,
-                request_rx,
-                response_tx,
-                on_key_tx,
-                signals_tx,
-            );
-        });
-
-        // Wait for the console to be up and running.  We must do this for error propagation but
-        // also to ensure that the caller can free up the local temporary font resources, if any.
+        // Wait for the host to be up and running.  We must do this for error propagation.
         match response_rx.recv().expect("Channel must be alive") {
             Response::Empty(Ok(())) => Ok(Self {
-                handle: Some(handle),
                 request_tx,
                 response_rx,
                 on_key_rx,
@@ -106,11 +74,6 @@ impl SdlConsole {
 impl Drop for SdlConsole {
     fn drop(&mut self) {
         self.request_tx.send(Request::Exit).expect("Channel must be alive");
-        self.handle
-            .take()
-            .expect("Handle must always be present")
-            .join()
-            .expect("Thread should not have panicked");
     }
 }
 
@@ -280,7 +243,10 @@ impl Console for SdlConsole {
 #[cfg(test)]
 mod testutils {
     use super::*;
+    use crate::new_console_pair;
     use async_channel::{Receiver, TryRecvError};
+    use endbasic_std::Signal;
+    use endbasic_std::console::{ConsoleHost, Resolution};
     use endbasic_std::gfx::lcd::fonts::FONT_VGA8X16;
     use flate2::Compression;
     use flate2::read::GzDecoder;
@@ -297,6 +263,7 @@ mod testutils {
     use std::num::NonZeroU32;
     use std::path::PathBuf;
     use std::sync::{Mutex, MutexGuard};
+    use std::thread::{self, JoinHandle};
 
     /// Global lock to ensure we only instantiate a single `SdlConsole` at once.
     ///
@@ -329,14 +296,16 @@ mod testutils {
     #[must_use]
     pub(crate) struct SdlTest {
         /// The SDL console under test.
-        console: SdlConsole,
+        console: Option<SdlConsole>,
+
+        /// Handle to the background thread that runs the SDL host loop.
+        host: Option<JoinHandle<io::Result<()>>>,
 
         /// Channel via which we receive signals from the console.
         signals_rx: Receiver<Signal>,
 
         /// Guard to ensure there is a single `SdlConsole` alive at any given time. This must come
-        /// after `console` because the Rust drop rules dictate that struct elements are dropped in
-        /// the order in which they are defined.
+        /// after `host` because the host must stop before releasing the lock.
         _lock: MutexGuard<'static, ()>,
     }
 
@@ -345,7 +314,7 @@ mod testutils {
         pub(crate) fn new() -> Self {
             let lock = TEST_LOCK.lock().unwrap();
             let signals_chan = async_channel::unbounded();
-            let console = SdlConsole::new(
+            let (host, factory) = new_console_pair(
                 Resolution::Windowed((
                     NonZeroU32::new(800).unwrap(),
                     NonZeroU32::new(600).unwrap(),
@@ -354,14 +323,20 @@ mod testutils {
                 None,
                 &FONT_VGA8X16,
                 signals_chan.0,
-            )
-            .unwrap();
-            Self { _lock: lock, signals_rx: signals_chan.1, console }
+            );
+            let host = thread::spawn(move || Box::new(host).run());
+            let console = factory.build_console().unwrap();
+            Self {
+                _lock: lock,
+                console: Some(console),
+                host: Some(host),
+                signals_rx: signals_chan.1,
+            }
         }
 
         /// Obtains access to the SDL console.
         pub(crate) fn console(&mut self) -> &mut SdlConsole {
-            &mut self.console
+            self.console.as_mut().expect("Console must always be present")
         }
 
         /// Synchronously waits for the reception of just one signal.
@@ -379,7 +354,11 @@ mod testutils {
 
         /// Injects an SDL event into the console.
         pub(crate) fn push_event(&self, ev: Event) {
-            self.console.call(Request::PushEvent(ev)).unwrap()
+            self.console
+                .as_ref()
+                .expect("Console must always be present")
+                .call(Request::PushEvent(ev))
+                .unwrap()
         }
 
         /// Verifies that the current state of the console matches a golden imagine.  `bmp_basename`
@@ -389,7 +368,11 @@ mod testutils {
             let dir = tempfile::tempdir().unwrap();
             let actual_bmp = dir.path().join(format!("{}.bmp", bmp_basename));
 
-            self.console.call(Request::SaveBmp(actual_bmp.clone())).unwrap();
+            self.console
+                .as_ref()
+                .expect("Console must always be present")
+                .call(Request::SaveBmp(actual_bmp.clone()))
+                .unwrap();
 
             if matches!(env::var("REGEN").as_deref(), Ok("1") | Ok("true") | Ok("yes")) {
                 let mut input = BufReader::new(File::open(actual_bmp).unwrap());
@@ -463,12 +446,21 @@ mod testutils {
             assert!(equal, "Images do not match; see test output");
         }
     }
+
+    impl Drop for SdlTest {
+        fn drop(&mut self) {
+            drop(self.console.take().expect("Console must always be present"));
+            let host = self.host.take().expect("Host must always be present");
+            host.join().expect("Thread should not have panicked").expect("Host should not fail");
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::testutils::*;
     use super::*;
+    use endbasic_std::Signal;
     use futures_lite::future::block_on;
     use sdl2::event::Event;
     use sdl2::keyboard::{Keycode, Mod};
