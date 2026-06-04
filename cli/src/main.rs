@@ -76,7 +76,7 @@ fn app_main(matches: Matches) -> Result<i32> {
         .opt_str("service-url")
         .unwrap_or_else(|| endbasic_client::PROD_API_ADDRESS.to_owned());
 
-    let console_factory = setup_console(console_spec.as_deref())?;
+    let (console_host, console_factory) = setup_console(console_spec.as_deref())?;
 
     let app_mode = AppMode::from_matches(matches)?;
 
@@ -87,6 +87,7 @@ fn app_main(matches: Matches) -> Result<i32> {
         })
     });
 
+    console_host.run()?;
     interpreter.join().expect("Interpreter thread shoult not have panicked")
 }
 
