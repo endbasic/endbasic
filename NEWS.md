@@ -30,6 +30,11 @@ for the time being.**
     `HELP` or `DIR`) don't block and print everything at once: the contents
     now appear line by line.
 
+*   Issue #218: Fixed the SDL console on macOS by moving graphical operations
+    to happen on the main thread and the REPL to a background thread.
+    Technically, this had been broken since the debut of the SDL console, but
+    it wasn't until recently that macOS started crashing EndBASIC.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**
