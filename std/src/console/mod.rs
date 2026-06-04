@@ -17,8 +17,6 @@
 //! Console representation and manipulation.
 
 use crate::Clearable;
-use crate::Signal;
-use async_channel::Sender;
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -353,7 +351,7 @@ impl ConsoleHost for NoopConsoleHost {
 /// Send-safe factory into the REPL thread.
 pub trait ConsoleFactory: Send {
     /// Creates a new console and wires it up to inject signals into `signals_tx`.
-    fn build(self: Box<Self>, signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>>;
+    fn build(self: Box<Self>) -> io::Result<Rc<RefCell<dyn Console>>>;
 }
 
 /// Resets the state of a console in a best-effort manner.

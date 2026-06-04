@@ -507,6 +507,7 @@ where
     default_fg_color: Option<u8>,
     default_bg_color: Option<u8>,
     font: &'static Font,
+    signals_tx: Sender<Signal>,
 }
 
 impl<P, F, B, KF, K> St7735sConsoleFactory<P, F, B, KF, K>
@@ -525,6 +526,7 @@ where
         keyboard_factory: KF,
         spec: &mut ConsoleSpec<'_>,
         fonts: &Fonts,
+        signals_tx: Sender<Signal>,
     ) -> io::Result<Self> {
         let default_fg_color = spec.take_keyed_flag::<u8>("fg_color")?;
         let default_bg_color = spec.take_keyed_flag::<u8>("bg_color")?;
@@ -532,7 +534,15 @@ where
         let font_name = spec.take_keyed_flag_str("font").unwrap_or(FONT_5X8.name);
         let font = fonts.get(font_name)?;
 
-        Ok(Self { pins, new_spi, keyboard_factory, default_fg_color, default_bg_color, font })
+        Ok(Self {
+            pins,
+            new_spi,
+            keyboard_factory,
+            default_fg_color,
+            default_bg_color,
+            font,
+            signals_tx,
+        })
     }
 }
 
@@ -544,9 +554,16 @@ where
     KF: FnOnce(Sender<Signal>) -> io::Result<K> + Send,
     K: InputOps + Send + 'static,
 {
-    fn build(self: Box<Self>, signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
-        let Self { pins, new_spi, keyboard_factory, default_fg_color, default_bg_color, font } =
-            *self;
+    fn build(self: Box<Self>) -> io::Result<Rc<RefCell<dyn Console>>> {
+        let Self {
+            pins,
+            new_spi,
+            keyboard_factory,
+            default_fg_color,
+            default_bg_color,
+            font,
+            signals_tx,
+        } = *self;
 
         let keyboard = keyboard_factory(signals_tx)?;
         let pins = Arc::from(Mutex::from(pins));

@@ -42,11 +42,16 @@ pub struct SdlConsoleFactory {
     default_fg_color: Option<u8>,
     default_bg_color: Option<u8>,
     font: &'static Font,
+    signals_tx: Sender<Signal>,
 }
 
 impl SdlConsoleFactory {
     /// Creates an SDL console factory based on the given `spec`.
-    pub fn new(spec: &mut ConsoleSpec<'_>, fonts: &Fonts) -> io::Result<Self> {
+    pub fn new(
+        spec: &mut ConsoleSpec<'_>,
+        signals_tx: Sender<Signal>,
+        fonts: &Fonts,
+    ) -> io::Result<Self> {
         let resolution: Resolution = spec.take_keyed_flag("resolution")?.unwrap_or_else(|| {
             let width = NonZeroU32::new(DEFAULT_RESOLUTION_PIXELS.0).unwrap();
             let height = NonZeroU32::new(DEFAULT_RESOLUTION_PIXELS.1).unwrap();
@@ -59,18 +64,18 @@ impl SdlConsoleFactory {
         let font_name = spec.take_keyed_flag_str("font").unwrap_or(FONT_VGA8X16.name);
         let font = fonts.get(font_name)?;
 
-        Ok(SdlConsoleFactory { resolution, default_fg_color, default_bg_color, font })
+        Ok(SdlConsoleFactory { resolution, default_fg_color, default_bg_color, font, signals_tx })
     }
 }
 
 impl ConsoleFactory for SdlConsoleFactory {
-    fn build(self: Box<Self>, signals_tx: Sender<Signal>) -> io::Result<Rc<RefCell<dyn Console>>> {
+    fn build(self: Box<Self>) -> io::Result<Rc<RefCell<dyn Console>>> {
         let console = console::SdlConsole::new(
             self.resolution,
             self.default_fg_color,
             self.default_bg_color,
             self.font,
-            signals_tx,
+            self.signals_tx,
         )?;
         Ok(Rc::from(RefCell::from(console)))
     }

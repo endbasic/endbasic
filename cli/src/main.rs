@@ -76,14 +76,23 @@ fn app_main(matches: Matches) -> Result<i32> {
         .opt_str("service-url")
         .unwrap_or_else(|| endbasic_client::PROD_API_ADDRESS.to_owned());
 
-    let (console_host, console_factory) = setup_console(console_spec.as_deref())?;
+    let (signals_tx, signals_rx) = async_channel::unbounded();
+    let (console_host, console_factory) =
+        setup_console(console_spec.as_deref(), signals_tx.clone())?;
 
     let app_mode = AppMode::from_matches(matches)?;
 
     let interpreter = thread::spawn(move || -> Result<i32> {
         let runtime = tokio::runtime::Runtime::new()?;
         runtime.block_on(async move {
-            async_app_main(app_mode, console_factory, gpio_pins_spec, service_url).await
+            async_app_main(
+                app_mode,
+                console_factory,
+                (signals_tx, signals_rx),
+                gpio_pins_spec,
+                service_url,
+            )
+            .await
         })
     });
 
