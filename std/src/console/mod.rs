@@ -330,6 +330,21 @@ pub trait Console {
     fn set_sync(&mut self, _enabled: bool) -> io::Result<bool>;
 }
 
+/// Trait to run the console's host on the main UI thread (if needed).
+pub trait ConsoleHost {
+    /// Executes the console's host event loop.
+    fn run(self: Box<Self>) -> io::Result<()>;
+}
+
+/// A console host that does nothing for all consoles which can run on a secondary thread.
+pub struct NoopConsoleHost;
+
+impl ConsoleHost for NoopConsoleHost {
+    fn run(self: Box<Self>) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 /// Trait for an object that is able to instantiate a console.
 ///
 /// Console objects are not `Send` so we must instantiate them within the thread that runs
