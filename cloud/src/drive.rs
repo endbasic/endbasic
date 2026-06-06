@@ -15,9 +15,9 @@
 
 //! Cloud-based implementation of an EndBASIC storage drive.
 
-use crate::*;
 use async_trait::async_trait;
-use endbasic_std::storage::{Drive, DriveFactory, DriveFiles, FileAcls, Metadata};
+use endbasic_client::*;
+use endbasic_std::storage::{DiskSpace, Drive, DriveFactory, DriveFiles, FileAcls, Metadata};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io;
@@ -56,8 +56,8 @@ impl Drive for CloudDrive {
         }
         Ok(DriveFiles::new(
             entries,
-            response.disk_quota.map(|x| x.into()),
-            response.disk_free.map(|x| x.into()),
+            response.disk_quota.map(|x| DiskSpace { bytes: x.bytes, files: x.files }),
+            response.disk_free.map(|x| DiskSpace { bytes: x.bytes, files: x.files }),
         ))
     }
 
@@ -66,7 +66,8 @@ impl Drive for CloudDrive {
     }
 
     async fn get_acls(&self, filename: &str) -> io::Result<FileAcls> {
-        self.service.borrow_mut().get_file_acls(&self.username, filename).await
+        let readers = self.service.borrow_mut().get_file_acls(&self.username, filename).await?;
+        Ok(FileAcls::default().with_readers(readers))
     }
 
     async fn put(&mut self, filename: &str, content: &[u8]) -> io::Result<()> {
@@ -82,7 +83,10 @@ impl Drive for CloudDrive {
         add: &FileAcls,
         remove: &FileAcls,
     ) -> io::Result<()> {
-        self.service.borrow_mut().patch_file_acls(&self.username, filename, add, remove).await
+        self.service
+            .borrow_mut()
+            .patch_file_acls(&self.username, filename, &add.readers, &remove.readers)
+            .await
     }
 }
 
@@ -115,6 +119,7 @@ impl DriveFactory for CloudDriveFactory {
 mod tests {
     use super::*;
     use crate::testutils::*;
+    use endbasic_client::testutils::*;
 
     #[tokio::test]
     async fn test_clouddrive_delete() {
@@ -141,8 +146,8 @@ mod tests {
                     DirectoryEntry { filename: "one".to_owned(), mtime: 9000, length: 15 },
                     DirectoryEntry { filename: "two".to_owned(), mtime: 8000, length: 17 },
                 ],
-                disk_quota: Some(DiskSpace::new(10000, 100).into()),
-                disk_free: Some(DiskSpace::new(123, 45).into()),
+                disk_quota: Some(endbasic_client::DiskSpace { bytes: 10000, files: 100 }),
+                disk_free: Some(endbasic_client::DiskSpace { bytes: 123, files: 45 }),
             }),
         );
         let result = drive.enumerate().await.unwrap();
@@ -220,7 +225,7 @@ mod tests {
         service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), "the-user");
 
-        let response = FileAcls { readers: vec!["r1".to_owned(), "r2".to_owned()] };
+        let response = vec!["r1".to_owned(), "r2".to_owned()];
         service.borrow_mut().add_mock_get_file_acls("the-user", "the-filename", Ok(response));
         let result = drive.get_acls("the-filename").await.unwrap();
         assert_eq!(FileAcls::default().with_readers(["r1".to_owned(), "r2".to_owned()]), result);
@@ -234,11 +239,7 @@ mod tests {
         service.borrow_mut().do_login().await;
         let drive = CloudDrive::new(service.clone(), "the-user");
 
-        service.borrow_mut().add_mock_get_file_acls(
-            "the-user",
-            "the-filename",
-            Ok(FileAcls::default()),
-        );
+        service.borrow_mut().add_mock_get_file_acls("the-user", "the-filename", Ok(vec![]));
         let result = drive.get_acls("the-filename").await.unwrap();
         assert_eq!(FileAcls::default(), result);
 
@@ -335,8 +336,8 @@ mod tests {
                     mtime: 1622556024,
                     length: 15,
                 }],
-                disk_quota: Some(DiskSpace::new(10000, 100).into()),
-                disk_free: Some(DiskSpace::new(123, 45).into()),
+                disk_quota: Some(endbasic_client::DiskSpace { bytes: 10000, files: 100 }),
+                disk_free: Some(endbasic_client::DiskSpace { bytes: 123, files: 45 }),
             }),
         );
         t.get_service().borrow_mut().add_mock_get_files(

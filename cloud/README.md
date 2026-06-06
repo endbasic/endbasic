@@ -1,4 +1,4 @@
-# The EndBASIC programming language - cloud service API client
+# The EndBASIC programming language - cloud service integration
 
 [![Crates.io](https://img.shields.io/crates/v/endbasic-client.svg)](https://crates.io/crates/endbasic-client/)
 [![Docs.rs](https://docs.rs/endbasic-client/badge.svg)](https://docs.rs/endbasic-client/)
@@ -23,6 +23,14 @@ EndBASIC is free software under the [AGPL v3+](LICENSE).
 
 ## What's in this crate?
 
-`endbasic-client` provides a client for the EndBASIC cloud service API.  This
-service offers remote file storage and file sharing capabilities to allow
-publishing creations to the public or to other users.
+`endbasic-cloud` provides integration (a cloud-backed storage drive and related
+REPL commands) with the EndBASIC cloud service.  This service offers remote
+file storage and file sharing capabilities to allow publishing creations to the
+public or to other users.
+
+This library extends the interpreter with the following commands:
+
+*   `LOGIN`: Logs into an account and mounts the user's own cloud drive.
+*   `LOGOUT`: Logs out of an account.
+*   `SHARE`: Gets or modifies sharing permissions on a file.
+*   `SIGNUP`: Interactively creates an account.

@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "cli",
     "client",
+    "cloud",
     "core",
     "core",
     "repl",

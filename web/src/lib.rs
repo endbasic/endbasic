@@ -332,7 +332,7 @@ impl WebTerminal {
 
         let service =
             Rc::from(RefCell::from(endbasic_client::CloudService::new(&self.service_url)?));
-        endbasic_client::add_all(
+        endbasic_cloud::add_all(
             &mut builder,
             service,
             console.clone(),

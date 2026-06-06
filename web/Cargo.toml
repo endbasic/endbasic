@@ -38,6 +38,10 @@ wasm-bindgen-futures = "0.4"
 version = "0.13.99" # ENDBASIC-VERSION
 path = "../client"
 
+[dependencies.endbasic-cloud]
+version = "0.13.99" # ENDBASIC-VERSION
+path = "../cloud"
+
 [dependencies.endbasic-core]
 version = "0.13.99" # ENDBASIC-VERSION
 path = "../core"

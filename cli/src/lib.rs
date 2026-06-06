@@ -72,7 +72,7 @@ pub async fn run_repl_loop(
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
     let service = Rc::from(RefCell::from(CloudService::new(service_url)?));
-    endbasic_client::add_all(
+    endbasic_cloud::add_all(
         &mut builder,
         service,
         console.clone(),
@@ -133,7 +133,7 @@ pub async fn run_interactive(
     setup_storage(&mut storage.borrow_mut(), local_drive_spec)?;
 
     let service = Rc::from(RefCell::from(CloudService::new(service_url)?));
-    endbasic_client::add_all(
+    endbasic_cloud::add_all(
         &mut builder,
         service,
         console.clone(),

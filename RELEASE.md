@@ -37,7 +37,7 @@
 1.  Push the new crates out. This is the last step because it's not reversible:
 
     ```
-    for c in core std repl client terminal sdl st7735s rpi cli; do
+    for c in core std repl client cloud terminal sdl st7735s rpi cli; do
         ( cd $c && cargo publish ) || break
     done
     ```

@@ -267,6 +267,7 @@ dependencies = [
  "async-channel",
  "dirs",
  "endbasic-client",
+ "endbasic-cloud",
  "endbasic-core",
  "endbasic-repl",
  "endbasic-rpi",
@@ -287,16 +288,27 @@ dependencies = [
  "async-trait",
  "base64",
  "bytes",
- "endbasic-core",
- "endbasic-std",
  "rand",
  "reqwest",
  "serde",
  "serde_json",
  "serde_test",
- "time",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "endbasic-cloud"
+version = "0.13.99"
+dependencies = [
+ "async-trait",
+ "endbasic-client",
+ "endbasic-core",
+ "endbasic-std",
+ "rand",
+ "serde_test",
+ "time",
+ "tokio",
 ]
 
 [[package]]
@@ -398,6 +410,7 @@ dependencies = [
  "async-trait",
  "console_error_panic_hook",
  "endbasic-client",
+ "endbasic-cloud",
  "endbasic-core",
  "endbasic-repl",
  "endbasic-std",

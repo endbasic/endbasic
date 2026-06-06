@@ -19,8 +19,6 @@ use crate::*;
 use async_trait::async_trait;
 use base64::prelude::*;
 use bytes::Buf;
-use endbasic_std::console::remove_control_chars;
-use endbasic_std::storage::FileAcls;
 use reqwest::Response;
 use reqwest::StatusCode;
 use reqwest::header::HeaderMap;
@@ -52,17 +50,12 @@ async fn http_response_to_io_error(response: Response) -> io::Error {
 
     match response.text().await {
         Ok(text) => match serde_json::from_str::<ErrorResponse>(&text) {
-            Ok(response) => io::Error::new(
-                kind,
-                format!("{} (server code: {})", remove_control_chars(response.message), status),
-            ),
+            Ok(response) => {
+                io::Error::new(kind, format!("{} (server code: {})", response.message, status))
+            }
             _ => io::Error::new(
                 kind,
-                format!(
-                    "HTTP request returned status {} with text '{}'",
-                    status,
-                    remove_control_chars(text)
-                ),
+                format!("HTTP request returned status {} with text '{}'", status, text),
             ),
         },
         Err(e) => io::Error::new(
@@ -70,7 +63,7 @@ async fn http_response_to_io_error(response: Response) -> io::Error {
             format!(
                 "HTTP request returned status {} and failed to get text due to {}",
                 status,
-                remove_control_chars(e.to_string())
+                e.to_string()
             ),
         ),
     }
@@ -266,7 +259,7 @@ impl Service for CloudService {
         }
     }
 
-    async fn get_file_acls(&mut self, username: &str, filename: &str) -> io::Result<FileAcls> {
+    async fn get_file_acls(&mut self, username: &str, filename: &str) -> io::Result<Vec<String>> {
         let mut headers = self.default_headers();
         headers.insert("X-EndBASIC-GetContent", "false".parse().unwrap());
         headers.insert("X-EndBASIC-GetReaders", "true".parse().unwrap());
@@ -296,7 +289,7 @@ impl Service for CloudService {
                 let bytes = response.bytes().await.map_err(reqwest_error_to_io_error)?;
                 debug_assert!(bytes.is_empty(), "Did not expect server to return content");
 
-                Ok(FileAcls::default().with_readers(readers))
+                Ok(readers)
             }
             _ => Err(http_response_to_io_error(response).await),
         }
@@ -331,8 +324,8 @@ impl Service for CloudService {
         &mut self,
         username: &str,
         filename: &str,
-        add: &FileAcls,
-        remove: &FileAcls,
+        add_readers: &Vec<String>,
+        remove_readers: &Vec<String>,
     ) -> io::Result<()> {
         let auth_data = self.auth_data.borrow();
 
@@ -344,10 +337,10 @@ impl Service for CloudService {
             // Ensure we have at least one header to go through the header-based request handler.
             .header("X-EndBASIC-PatchContent", "false");
 
-        for reader in add.readers() {
+        for reader in add_readers {
             builder = builder.header("X-EndBASIC-AddReader", reader);
         }
-        for reader in remove.readers() {
+        for reader in remove_readers {
             builder = builder.header("X-EndBASIC-RemoveReader", reader);
         }
 
@@ -444,7 +437,11 @@ mod testutils {
             self.service.get_file(username, filename).await
         }
 
-        async fn get_file_acls(&mut self, username: &str, filename: &str) -> io::Result<FileAcls> {
+        async fn get_file_acls(
+            &mut self,
+            username: &str,
+            filename: &str,
+        ) -> io::Result<Vec<String>> {
             self.service.get_file_acls(username, filename).await
         }
 
@@ -466,10 +463,10 @@ mod testutils {
             &mut self,
             username: &str,
             filename: &str,
-            add: &FileAcls,
-            remove: &FileAcls,
+            add_readers: &Vec<String>,
+            remove_readers: &Vec<String>,
         ) -> io::Result<()> {
-            self.service.patch_file_acls(username, filename, add, remove).await
+            self.service.patch_file_acls(username, filename, add_readers, remove_readers).await
         }
 
         async fn delete_file(&mut self, username: &str, filename: &str) -> io::Result<()> {
@@ -643,10 +640,10 @@ mod tests {
             }
             let disk_quota: DiskSpace = response.disk_quota.unwrap().into();
             let disk_free: DiskSpace = response.disk_free.unwrap().into();
-            assert!(disk_quota.bytes() > 0);
-            assert!(disk_quota.files() > 0);
-            assert!(disk_free.bytes() >= needed_bytes, "Not enough space for test run");
-            assert!(disk_free.files() >= needed_files, "Not enough space for test run");
+            assert!(disk_quota.bytes > 0);
+            assert!(disk_quota.files > 0);
+            assert!(disk_free.bytes >= needed_bytes, "Not enough space for test run");
+            assert!(disk_free.files >= needed_files, "Not enough space for test run");
 
             for (filename, _content) in &filenames_and_contents {
                 let err = context.service.get_file(&username, filename).await.unwrap_err();
@@ -778,12 +775,7 @@ mod tests {
             context.do_login(1).await;
             context
                 .service
-                .patch_file_acls(
-                    &username1,
-                    &filename,
-                    &FileAcls::default().with_readers([username2]),
-                    &FileAcls::default(),
-                )
+                .patch_file_acls(&username1, &filename, &vec![username2], &vec![])
                 .await
                 .unwrap();
 
@@ -821,12 +813,7 @@ mod tests {
             context.do_login(1).await;
             context
                 .service
-                .patch_file_acls(
-                    &username1,
-                    &filename,
-                    &FileAcls::default().with_readers(["public".to_owned()]),
-                    &FileAcls::default(),
-                )
+                .patch_file_acls(&username1, &filename, &vec!["public".to_owned()], &vec![])
                 .await
                 .unwrap();
 

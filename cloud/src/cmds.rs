@@ -18,6 +18,7 @@
 
 use crate::*;
 use async_trait::async_trait;
+use endbasic_client::*;
 use endbasic_core::{
     ArgSep, ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata,
     CallableMetadataBuilder, ExprType, RepeatedSyntax, RepeatedTypeSyntax, RequiredValueSyntax,
