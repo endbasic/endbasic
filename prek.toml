@@ -1,0 +1,43 @@
+# EndBASIC
+# Copyright 2026 Julio Merino
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "do-not-submit"
+name = "Check for [D]O NOT SUBMIT markers"
+language = "system"
+entry = "sh"
+args = ["-c", '! grep -rn "[D]O NOT SUBMIT" --exclude-dir=.git --exclude-dir=target .']
+pass_filenames = false
+always_run = true
+
+[[repos.hooks]]
+id = "check-versions"
+name = "Check version consistency"
+language = "script"
+entry = "admin/check-versions.sh"
+pass_filenames = false
+always_run = true
+
+[[repos.hooks]]
+id = "cargo-rust"
+name = "Check Rust code (clippy + fmt)"
+language = "script"
+entry = "admin/check-rust.sh"
+pass_filenames = false
+always_run = true
