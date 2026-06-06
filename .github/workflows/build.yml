@@ -80,7 +80,7 @@ jobs:
             - uses: actions/checkout@v6
             - uses: mozilla-actions/sccache-action@v0.0.10
             - run: choco install --allow-empty-checksums unzip zip
-            - run: ./.github/workflows/setup-sdl.ps1
+            - run: ./admin/setup-sdl.ps1
             - run: ./.github/workflows/release.sh windows-x86_64-sdl
               shell: bash
             - uses: actions/upload-artifact@v7

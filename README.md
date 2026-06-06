@@ -97,7 +97,7 @@ cargo install --features=sdl endbasic
 
 # On Windows systems, this is tricky.  The easiest way is to clone this
 # repository and then do the following from PowerShell:
-.\.github\workflows\setup-sdl.ps1
+.\admin\setup-sdl.ps1
 cargo build --release --features=sdl endbasic
 ```
 

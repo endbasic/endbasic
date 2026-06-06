@@ -16,8 +16,8 @@
         *   `git checkout -b release origin/master`.
 
 1.  Create a PR to update the version number everywhere necessary.  You can
-    use the `.github/workflows/update-version.sh` script to do this, but then
-    make sure that following files were modified as described:
+    use the `./admin/update-version.sh` script to do this, but then make sure
+    that following files were modified as described:
 
     *   `NEWS.md`: Set next version number, add date, and clean up notes.
     *   `README.md`: Update latest version number and release date.
