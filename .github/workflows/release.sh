@@ -71,9 +71,6 @@ main() {
         linux-armv7-rpi-sdl)
             [ ! -f .cargo/config ] || err "Won't override existing .cargo/config"
             cp .cargo/config.rpi .cargo/config
-            # TODO(jmmv): Should figure out how to cross-compile with the native TLS library
-            # instead of doing this hack.
-            sed -i s,native-tls,rustls-tls,g client/Cargo.toml
             ( cd cli && cargo build --release --features=rpi,sdl-bundled )
             rm -f .cargo/config
 

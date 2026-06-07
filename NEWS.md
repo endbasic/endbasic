@@ -41,6 +41,9 @@ for the time being.**
 *   Added SDL2 support for the prebuilt binaries for the Raspberry Pi that we
     distribute from the website.
 
+*   Switched the EndBASIC Service client to use Rustls instead of OpenSSL for
+    easier cross-compilation and consistency across builds.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**
