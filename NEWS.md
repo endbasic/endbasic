@@ -44,6 +44,9 @@ for the time being.**
 *   Switched the EndBASIC Service client to use Rustls instead of OpenSSL for
     easier cross-compilation and consistency across builds.
 
+*   Added an aarch64 SDL2 prebuilt binary for the Raspberry Pi in addition to
+    the existing armv7 build to support Raspbian 64 bits.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**
