@@ -1074,7 +1074,7 @@ mod tests {
         let program = r#"
             ON ERROR GOTO @handler
             END
-            
+
             @handler
             PRINT "captured: "; ERRMSG
             END 1

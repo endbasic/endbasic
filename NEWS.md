@@ -105,7 +105,7 @@ for the time being.**
 *   Added a new `endbasic-st7735s` crate to assimilate the driver for the
     ST7735S LCD, decoupling its implementation from the Linux-specific bits in
     the `endbasic-rpi` crate.
-    
+
 *   Added support for font selection to the `st7735s` console backend.  Fonts
     can be selected via the new console flag format, using a format like
     `--console=st7735s:font=5x8`.  There is support for two fonts now: the
@@ -123,14 +123,14 @@ for the time being.**
 *   Changed the `KILL` command so that it no longer automatically appends a
     `.BAS` extension to filenames given to it.  This allow deleting files that
     don't have an extension.
-    
+
 *   Added a new `COPY` command to copy files.  The previous approach of `LOAD`
     followed by `SAVE` doesn't work for binary files, and we want to support
     binary files to handle e.g. images.
-    
+
 *   Fixed the rendering of zero-sized rectangles in the SDL console so that
     debug builds don't crash and so that the behavior matches the web console.
-    
+
 *   Added support for `EXIT FUNCTION`, `EXIT FOR`, and `EXIT SUB`.
 
 *   Fixed crashes when using the SDL 3 compatibility bindings for SDL 2.
