@@ -16,11 +16,51 @@
 //! Interactive line reader.
 
 use crate::console::{Console, Key, LineBuffer};
-use std::borrow::Cow;
 use std::io;
 
 /// Character to print when typing a secure string.
 const SECURE_CHAR: &str = "*";
+
+struct PromptInfo {
+    prompt: String,
+    prompt_len: usize,
+    max_line_len: usize,
+}
+
+struct LineState {
+    prompt_len: usize,
+    pos: usize,
+    line_len: usize,
+}
+
+/// Returns the current prompt information based on the console width.
+fn prompt_info(prompt: &str, console_width: usize) -> PromptInfo {
+    let prompt = if prompt.len() >= console_width {
+        if console_width >= 5 {
+            format!("{}...", &prompt[0..console_width - 5])
+        } else {
+            String::new()
+        }
+    } else {
+        prompt.to_owned()
+    };
+    let prompt_len = prompt.len();
+    let max_line_len = console_width.saturating_sub(prompt_len).saturating_sub(1);
+    PromptInfo { prompt, prompt_len, max_line_len }
+}
+
+/// Truncates `line` to fit within `max_line_len` and clamps `pos` within the resulting line.
+fn fit_line(line: &mut LineBuffer, pos: &mut usize, max_line_len: usize) {
+    if line.len() > max_line_len {
+        line.split_off(max_line_len);
+    }
+    *pos = (*pos).min(line.len());
+}
+
+/// Returns the text to display for `line`.
+fn display_line(line: &LineBuffer, echo: bool) -> String {
+    if echo { line.to_string() } else { SECURE_CHAR.repeat(line.len()) }
+}
 
 /// Refreshes the current input line to display `line` assuming that the cursor is currently
 /// offset by `pos` characters from the beginning of the input and that the previous line was
@@ -30,19 +70,56 @@ fn update_line(
     pos: usize,
     clear_len: usize,
     line: &LineBuffer,
+    echo: bool,
 ) -> io::Result<()> {
     console.hide_cursor()?;
     if pos > 0 {
         console.move_within_line(-(pos as i16))?;
     }
-    if !line.is_empty() {
-        console.write(&line.to_string())?;
+    let line_text = display_line(line, echo);
+    if !line_text.is_empty() {
+        console.write(&line_text)?;
     }
     let line_len = line.len();
     if line_len < clear_len {
         let diff = clear_len - line_len;
         console.write(&" ".repeat(diff))?;
         console.move_within_line(-(diff as i16))?;
+    }
+    console.show_cursor()
+}
+
+/// Refreshes the current input line, including the prompt.
+fn redraw_line(
+    console: &mut dyn Console,
+    old_state: LineState,
+    prompt: &str,
+    line: &LineBuffer,
+    pos: usize,
+    echo: bool,
+) -> io::Result<()> {
+    console.hide_cursor()?;
+    let old_abs_pos = old_state.prompt_len + old_state.pos;
+    if old_abs_pos > 0 {
+        console.move_within_line(-(old_abs_pos as i16))?;
+    }
+    if !prompt.is_empty() {
+        console.write(prompt)?;
+    }
+    let line_text = display_line(line, echo);
+    if !line_text.is_empty() {
+        console.write(&line_text)?;
+    }
+    let old_total_len = old_state.prompt_len + old_state.line_len;
+    let new_total_len = prompt.len() + line.len();
+    if new_total_len < old_total_len {
+        let diff = old_total_len - new_total_len;
+        console.write(&" ".repeat(diff))?;
+        console.move_within_line(-(diff as i16))?;
+    }
+    let line_len = line.len();
+    if pos < line_len {
+        console.move_within_line(-((line_len - pos) as i16))?;
     }
     console.show_cursor()
 }
@@ -57,41 +134,21 @@ async fn read_line_interactive(
     mut history: Option<&mut Vec<String>>,
     echo: bool,
 ) -> io::Result<String> {
-    let console_width = {
-        let console_size = console.size_chars()?;
-        usize::from(console_size.x)
-    };
-
-    let mut prompt = Cow::from(prompt);
-    let mut prompt_len = prompt.len();
-    if prompt_len >= console_width {
-        if console_width >= 5 {
-            prompt = Cow::from(format!("{}...", &prompt[0..console_width - 5]));
-        } else {
-            prompt = Cow::from("");
-        }
-        prompt_len = prompt.len();
-    }
-
+    let mut current_prompt = prompt_info(prompt, usize::from(console.size_chars()?.x));
     let mut line = LineBuffer::from(previous);
-    if !prompt.is_empty() || !line.is_empty() {
+    let mut pos = line.len();
+    fit_line(&mut line, &mut pos, current_prompt.max_line_len);
+    if !current_prompt.prompt.is_empty() || !line.is_empty() {
         if echo {
-            console.write(&format!("{}{}", prompt, line))?;
+            console.write(&format!("{}{}", current_prompt.prompt, line))?;
         } else {
-            console.write(&format!("{}{}", prompt, "*".repeat(line.len())))?;
+            console.write(&format!("{}{}", current_prompt.prompt, "*".repeat(line.len())))?;
         }
         console.sync_now()?;
     }
 
-    let width = {
-        // Assumes that the prompt was printed at column 0.  If that was not the case, line length
-        // calculation does not work.
-        console_width - prompt_len
-    };
-
     // Insertion position *within* the line, without accounting for the prompt.
     // TODO(zenria): Handle UTF-8 graphemes.
-    let mut pos = line.len();
 
     let mut history_pos = match history.as_mut() {
         Some(history) => {
@@ -102,6 +159,17 @@ async fn read_line_interactive(
     };
 
     loop {
+        let new_prompt_info = prompt_info(prompt, usize::from(console.size_chars()?.x));
+        if current_prompt.prompt != new_prompt_info.prompt
+            || current_prompt.max_line_len != new_prompt_info.max_line_len
+        {
+            let old_prompt_len = current_prompt.prompt_len;
+            let old_state = LineState { prompt_len: old_prompt_len, pos, line_len: line.len() };
+            fit_line(&mut line, &mut pos, new_prompt_info.max_line_len);
+            redraw_line(console, old_state, &new_prompt_info.prompt, &line, pos, echo)?;
+            current_prompt = new_prompt_info;
+        }
+
         match console.read_key().await? {
             Key::ArrowUp => {
                 if let Some(history) = history.as_mut() {
@@ -109,14 +177,15 @@ async fn read_line_interactive(
                         continue;
                     }
 
-                    let clear_len = line.len();
+                    let old_line_len = line.len();
+                    let old_pos = pos;
 
                     history[history_pos] = line.into_inner();
                     history_pos -= 1;
                     line = LineBuffer::from(&history[history_pos]);
-
-                    update_line(console, pos, clear_len, &line)?;
-
+                    pos = line.len();
+                    fit_line(&mut line, &mut pos, current_prompt.max_line_len);
+                    update_line(console, old_pos, old_line_len, &line, echo)?;
                     pos = line.len();
                 }
             }
@@ -127,14 +196,15 @@ async fn read_line_interactive(
                         continue;
                     }
 
-                    let clear_len = line.len();
+                    let old_line_len = line.len();
+                    let old_pos = pos;
 
                     history[history_pos] = line.to_string();
                     history_pos += 1;
                     line = LineBuffer::from(&history[history_pos]);
-
-                    update_line(console, pos, clear_len, &line)?;
-
+                    pos = line.len();
+                    fit_line(&mut line, &mut pos, current_prompt.max_line_len);
+                    update_line(console, old_pos, old_line_len, &line, echo)?;
                     pos = line.len();
                 }
             }
@@ -183,8 +253,7 @@ async fn read_line_interactive(
 
             Key::Char(ch) => {
                 let line_len = line.len();
-                debug_assert!(line_len < width);
-                if line_len == width - 1 {
+                if line_len >= current_prompt.max_line_len {
                     // TODO(jmmv): Implement support for lines that exceed the width of the input
                     // field (the width of the screen).
                     continue;
@@ -870,6 +939,60 @@ mod tests {
     }
 
     #[test]
+    fn test_read_line_interactive_resize_truncates_existing_line() {
+        let mut console = MockConsole::default();
+        console.set_interactive(true);
+        console.set_size_chars(CharsXY::new(15, 5));
+        console.add_resize_event(CharsXY::new(10, 5));
+        console.add_input_keys(&[Key::Unknown, Key::NewLine]);
+
+        let line = block_on(read_line_interactive(&mut console, "", "12345678901234", None, true))
+            .unwrap();
+        assert_eq!("123456789", &line);
+        assert_eq!(
+            &[
+                CapturedOut::Write("12345678901234".to_string()),
+                CapturedOut::SyncNow,
+                CapturedOut::HideCursor,
+                CapturedOut::MoveWithinLine(-14),
+                CapturedOut::Write("123456789".to_string()),
+                CapturedOut::Write("     ".to_string()),
+                CapturedOut::MoveWithinLine(-5),
+                CapturedOut::ShowCursor,
+                CapturedOut::Print("".to_owned()),
+            ],
+            console.captured_out()
+        );
+    }
+
+    #[test]
+    fn test_read_line_interactive_resize_truncates_prompt_and_line() {
+        let mut console = MockConsole::default();
+        console.set_interactive(true);
+        console.set_size_chars(CharsXY::new(15, 5));
+        console.add_resize_event(CharsXY::new(3, 5));
+        console.add_input_keys(&[Key::Unknown, Key::NewLine]);
+
+        let line =
+            block_on(read_line_interactive(&mut console, "Ready> ", "1234", None, true)).unwrap();
+        assert_eq!("12", &line);
+        assert_eq!(
+            &[
+                CapturedOut::Write("Ready> 1234".to_string()),
+                CapturedOut::SyncNow,
+                CapturedOut::HideCursor,
+                CapturedOut::MoveWithinLine(-11),
+                CapturedOut::Write("12".to_string()),
+                CapturedOut::Write("         ".to_string()),
+                CapturedOut::MoveWithinLine(-9),
+                CapturedOut::ShowCursor,
+                CapturedOut::Print("".to_owned()),
+            ],
+            console.captured_out()
+        );
+    }
+
+    #[test]
     fn test_read_line_interactive_history_not_enabled_by_default() {
         ReadLineInteractiveTest::default().add_key(Key::ArrowUp).accept();
         ReadLineInteractiveTest::default().add_key(Key::ArrowDown).accept();
@@ -925,7 +1048,7 @@ mod tests {
             //
             .set_history(
                 vec!["first".to_owned(), "long second line".to_owned(), "last".to_owned()],
-                vec!["first".to_owned(), "long second line".to_owned(), "last".to_owned()],
+                vec!["first".to_owned(), "long second ".to_owned(), "last".to_owned()],
             )
             //
             .add_key(Key::ArrowUp)
@@ -936,15 +1059,15 @@ mod tests {
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-("last".len() as i16)))
-            .add_output(CapturedOut::Write("long second line".to_string()))
+            .add_output(CapturedOut::Write("long second ".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-("long second line".len() as i16)))
+            .add_output(CapturedOut::MoveWithinLine(-("long second ".len() as i16)))
             .add_output(CapturedOut::Write("first".to_string()))
-            .add_output(CapturedOut::Write("           ".to_string()))
-            .add_output(CapturedOut::MoveWithinLine(-("           ".len() as i16)))
+            .add_output(CapturedOut::Write("       ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-("       ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
@@ -952,15 +1075,15 @@ mod tests {
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-("first".len() as i16)))
-            .add_output(CapturedOut::Write("long second line".to_string()))
+            .add_output(CapturedOut::Write("long second ".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-("long second line".len() as i16)))
+            .add_output(CapturedOut::MoveWithinLine(-("long second ".len() as i16)))
             .add_output(CapturedOut::Write("last".to_string()))
-            .add_output(CapturedOut::Write("            ".to_string()))
-            .add_output(CapturedOut::MoveWithinLine(-("            ".len() as i16)))
+            .add_output(CapturedOut::Write("        ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-("        ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
