@@ -68,18 +68,17 @@ main() {
 
     local target=
     case "${name}" in
-        linux-armv7-rpi)
+        linux-armv7-rpi-sdl)
             [ ! -f .cargo/config ] || err "Won't override existing .cargo/config"
             cp .cargo/config.rpi .cargo/config
             # TODO(jmmv): Should figure out how to cross-compile with the native TLS library
             # instead of doing this hack.
             sed -i s,native-tls,rustls-tls,g client/Cargo.toml
-            # TODO(jmmv): Should enable --features=sdl but need to figure out how to cross-build
-            # for it.
-            ( cd cli && cargo build --release --features=rpi )
+            ( cd cli && cargo build --release --features=rpi,sdl-bundled )
             rm -f .cargo/config
 
             cp ./target/armv7-unknown-linux-gnueabihf/release/endbasic "${distname}"
+            cp ./target/armv7-unknown-linux-gnueabihf/release/libSDL2.so* "${distname}"
             ;;
 
         macos*)

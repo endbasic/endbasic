@@ -18,6 +18,7 @@ workspace = true
 default = ["crossterm"]
 crossterm = ["endbasic-terminal"]
 sdl = ["endbasic-sdl"]
+sdl-bundled = ["sdl", "endbasic-sdl/bundled"]
 rpi = ["endbasic-rpi", "endbasic-st7735s"]
 
 [dependencies]
