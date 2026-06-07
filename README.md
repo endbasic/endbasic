@@ -87,6 +87,10 @@ are on:
 sudo apt install libsdl2-dev pkg-config
 cargo install --features=sdl endbasic
 
+# On Fedora-based systems:
+sudo dnf install SDL2-devel pkg-config
+cargo install --features=sdl endbasic
+
 # On FreeBSD systems:
 sudo pkg install pkgconf sdl2
 cargo install --features=sdl endbasic
