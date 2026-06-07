@@ -148,7 +148,7 @@ impl Editor {
         }
         status.truncate(width);
 
-        console.locate(CharsXY::new(0, console_size.y - 1))?;
+        console.locate(CharsXY::new(0, console_size.y.saturating_sub(1)))?;
         console.set_color(STATUS_COLOR.0, STATUS_COLOR.1)?;
         console.write(&status)?;
         Ok(())
@@ -160,6 +160,8 @@ impl Editor {
     /// after calling this function, and the caller should also hide the cursor before calling this
     /// function.
     fn refresh(&self, console: &mut dyn Console, console_size: CharsXY) -> io::Result<()> {
+        let max_rows = usize::from(console_size.y.saturating_sub(1));
+
         console.set_color(TEXT_COLOR.0, TEXT_COLOR.1)?;
         console.clear(ClearType::All)?;
         self.refresh_status(console, console_size)?;
@@ -168,7 +170,7 @@ impl Editor {
 
         let mut row = self.viewport_pos.line;
         let mut printed_rows = 0;
-        while row < self.content.len() && printed_rows < console_size.y - 1 {
+        while row < self.content.len() && printed_rows < max_rows {
             let line = &self.content[row];
             let line_len = line.len();
             if line_len > self.viewport_pos.col {
@@ -213,27 +215,28 @@ impl Editor {
 
     /// Internal implementation of the interactive editor, which interacts with the `console`.
     async fn edit_interactively(&mut self, console: &mut dyn Console) -> io::Result<()> {
-        let console_size = console.size_chars()?;
-
         if self.content.is_empty() {
             self.content.push(LineBuffer::default());
         }
 
         let mut need_refresh = true;
+        let mut last_console_size = None;
         loop {
+            let console_size = console.size_chars()?;
+            if last_console_size != Some(console_size) {
+                need_refresh = true;
+                last_console_size = Some(console_size);
+            }
+
             // The key handling below only deals with moving the insertion position within the file
             // but does not bother to update the viewport. Adjust it now, if necessary.
-            let width = usize::from(console_size.x);
-            let height = usize::from(console_size.y);
+            let width = usize::from(console_size.x).max(1);
+            let text_rows = usize::from(console_size.y.saturating_sub(1)).max(1);
             if self.file_pos.line < self.viewport_pos.line {
                 self.viewport_pos.line = self.file_pos.line;
                 need_refresh = true;
-            } else if self.file_pos.line > self.viewport_pos.line + height - 2 {
-                if self.file_pos.line > height - 2 {
-                    self.viewport_pos.line = self.file_pos.line - (height - 2);
-                } else {
-                    self.viewport_pos.line = 0;
-                }
+            } else if self.file_pos.line >= self.viewport_pos.line + text_rows {
+                self.viewport_pos.line = self.file_pos.line + 1 - text_rows;
                 need_refresh = true;
             }
 
@@ -241,7 +244,7 @@ impl Editor {
                 self.viewport_pos.col = self.file_pos.col;
                 need_refresh = true;
             } else if self.file_pos.col >= self.viewport_pos.col + width {
-                self.viewport_pos.col = self.file_pos.col - width + 1;
+                self.viewport_pos.col = self.file_pos.col + 1 - width;
                 need_refresh = true;
             }
 
@@ -357,7 +360,7 @@ impl Editor {
                     self.file_pos.col += 1;
                     self.insert_col = self.file_pos.col;
 
-                    if cursor_pos.x < console_size.x - 1 && !need_refresh {
+                    if usize::from(cursor_pos.x) + 1 < width && !need_refresh {
                         console.write(ch.encode_utf8(&mut buf))?;
                     }
 
@@ -399,9 +402,9 @@ impl Editor {
                     self.dirty = true;
                 }
 
-                Key::PageDown => self.move_down(usize::from(console_size.y - 2)),
+                Key::PageDown => self.move_down(text_rows.saturating_sub(1)),
 
-                Key::PageUp => self.move_up(usize::from(console_size.y - 2)),
+                Key::PageUp => self.move_up(text_rows.saturating_sub(1)),
 
                 Key::Tab => {
                     let line = &mut self.content[self.file_pos.line];
@@ -476,6 +479,7 @@ impl Program for Editor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use endbasic_std::console::CharsXY;
     use endbasic_std::testutils::*;
     use futures_lite::future::block_on;
 
@@ -594,6 +598,12 @@ mod tests {
         /// Registers that the file has been modified.
         fn set_dirty(mut self) -> Self {
             self.dirty = true;
+            self
+        }
+
+        /// Changes the console size used to compute subsequent expected output.
+        fn set_console_size(mut self, console_size: CharsXY) -> Self {
+            self.console_size = console_size;
             self
         }
 
@@ -968,6 +978,33 @@ mod tests {
             cb,
             ob,
         );
+    }
+
+    #[test]
+    fn test_resize_height_forces_refresh_and_updates_page_movement() {
+        let mut console = MockConsole::default();
+        console.set_interactive(true);
+        console.set_size_chars(yx(10, 40));
+
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["1", "2", "3", "4", "5", "6", "7", "8", "9"], yx(0, 0));
+
+        console.add_input_keys(&[Key::PageDown]);
+        ob = ob.quick_refresh(linecol(8, 0), yx(8, 0));
+
+        console.add_resize_event(yx(5, 40));
+        console.add_input_keys(&[Key::Unknown]);
+        ob = ob.set_console_size(yx(5, 40));
+        ob = ob.refresh(linecol(8, 0), &["6", "7", "8", "9"], yx(3, 0));
+
+        console.add_input_keys(&[Key::PageDown, Key::Escape]);
+        ob = ob.refresh(linecol(11, 0), &["9", "10", "11", "12"], yx(3, 0));
+
+        let mut editor = Editor::default();
+        editor.load(Some(TEST_FILENAME), "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n");
+        block_on(editor.edit(&mut console)).unwrap();
+
+        assert_eq!(ob.build(), console.captured_out());
     }
 
     #[test]
@@ -1441,6 +1478,32 @@ mod tests {
         );
 
         run_editor("ab\n\nxyz\n", "ab\n12345678901234567890123456789012345678ABC\nxyz\n", cb, ob);
+    }
+
+    #[test]
+    fn test_resize_width_forces_refresh_and_clamps_cursor() {
+        let mut console = MockConsole::default();
+        console.set_interactive(true);
+        console.set_size_chars(yx(10, 40));
+
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["1234567890123456789012345678901234567890"], yx(0, 0));
+
+        console.add_input_keys(&[Key::End]);
+        ob = ob.refresh(linecol(0, 40), &["234567890123456789012345678901234567890"], yx(0, 39));
+
+        console.add_resize_event(yx(10, 25));
+        console.add_input_keys(&[Key::Unknown]);
+        ob = ob.set_console_size(yx(10, 25));
+        ob = ob.refresh(linecol(0, 40), &["789012345678901234567890"], yx(0, 24));
+
+        console.add_input_keys(&[Key::Escape]);
+
+        let mut editor = Editor::default();
+        editor.load(Some(TEST_FILENAME), "1234567890123456789012345678901234567890\n");
+        block_on(editor.edit(&mut console)).unwrap();
+
+        assert_eq!(ob.build(), console.captured_out());
     }
 
     #[test]
