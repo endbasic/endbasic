@@ -27,9 +27,14 @@ path = "../core"
 version = "0.13.99" # ENDBASIC-VERSION
 path = "../std"
 
-[dependencies.sdl2]
+[target.'cfg(target_os = "windows")'.dependencies.sdl2]
 version = "0.38"
 default-features = false
+
+[target.'cfg(not(target_os = "windows"))'.dependencies.sdl2]
+version = "0.38"
+default-features = false
+features = ["use-pkgconfig"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

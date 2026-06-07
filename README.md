@@ -84,15 +84,15 @@ are on:
 
 ```shell
 # On Debian-based systems:
-sudo apt install libsdl2-dev
+sudo apt install libsdl2-dev pkg-config
 cargo install --features=sdl endbasic
 
 # On FreeBSD systems:
-sudo pkg install sdl2
+sudo pkg install pkgconf sdl2
 cargo install --features=sdl endbasic
 
 # On macOS systems with Homebrew:
-brew install sdl2
+brew install pkg-config sdl2
 cargo install --features=sdl endbasic
 
 # On Windows systems, this is tricky.  The easiest way is to clone this
@@ -105,7 +105,7 @@ If you want to enable support for the Raspberry Pi hardware (along with the
 recommended graphics features), do this on the Raspberry Pi itself:
 
 ```shell
-sudo apt install libsdl2-dev
+sudo apt install libsdl2-dev pkg-config
 cargo install --features=rpi,sdl endbasic
 ```
 

@@ -1610,6 +1610,7 @@ checksum = "3ff61407fc75d4b0bbc93dc7e4d6c196439965fbef8e4a4f003a36095823eac0"
 dependencies = [
  "cfg-if",
  "libc",
+ "pkg-config",
  "version-compare",
 ]
 
