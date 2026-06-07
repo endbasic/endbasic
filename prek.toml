@@ -15,6 +15,33 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 [[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+
+[[repos.hooks]]
+id = "check-case-conflict"
+
+[[repos.hooks]]
+id = "check-executables-have-shebangs"
+
+[[repos.hooks]]
+id = "check-merge-conflict"
+
+[[repos.hooks]]
+id = "check-shebang-scripts-are-executable"
+
+[[repos.hooks]]
+id = "detect-private-key"
+
+[[repos.hooks]]
+id = "end-of-file-fixer"
+exclude = "^cli/tests/.*\\.out$"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+exclude = "^(cli/tests/.*\\.out|core/tests/.*\\.md)$"
+
+[[repos]]
 repo = "local"
 
 [[repos.hooks]]
