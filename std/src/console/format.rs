@@ -129,7 +129,7 @@ pub(crate) async fn refill_and_page<S: AsRef<str>, P: IntoIterator<Item = S>>(
     paragraphs: P,
     indent: &str,
 ) -> io::Result<()> {
-    for line in refill_many(paragraphs, indent, usize::from(pager.columns())) {
+    for line in refill_many(paragraphs, indent, usize::from(pager.columns()?)) {
         pager.print(&line).await?;
     }
     Ok(())

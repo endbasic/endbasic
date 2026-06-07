@@ -15,11 +15,14 @@
 
 //! A simple paginator for commands that produce long outputs
 
-use super::{CharsXY, Console, Key, is_narrow};
+use super::{Console, Key, is_narrow};
 use crate::Yielder;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
+
+#[cfg(test)]
+use super::CharsXY;
 
 /// Message to print on a narrow console when the screen is full.
 const MORE_MESSAGE_NARROW: &str = " << More >> ";
@@ -35,12 +38,6 @@ pub(crate) struct Pager<'a> {
     /// Optional hook to yield output production back to the host.
     yielder: Option<Rc<RefCell<dyn Yielder>>>,
 
-    /// Cached size of the console.
-    size: CharsXY,
-
-    /// The message to print when the screen is full.
-    more_message: &'static str,
-
     /// Number of columns printed so far on the current line.
     cur_columns: usize,
 
@@ -54,14 +51,17 @@ impl<'a> Pager<'a> {
         console: &'a mut dyn Console,
         yielder: Option<Rc<RefCell<dyn Yielder>>>,
     ) -> io::Result<Self> {
-        let size = console.size_chars()?;
-        let more_message = if is_narrow(console) { MORE_MESSAGE_NARROW } else { MORE_MESSAGE_WIDE };
-        Ok(Self { console, yielder, size, more_message, cur_columns: 0, cur_lines: 0 })
+        Ok(Self { console, yielder, cur_columns: 0, cur_lines: 0 })
     }
 
     /// Returns the maximum number of columns of the console.
-    pub(crate) fn columns(&self) -> u16 {
-        self.size.x
+    pub(crate) fn columns(&self) -> io::Result<u16> {
+        Ok(self.console.size_chars()?.x)
+    }
+
+    /// Returns the message to print when the screen is full.
+    fn more_message(&self) -> &'static str {
+        if is_narrow(self.console) { MORE_MESSAGE_NARROW } else { MORE_MESSAGE_WIDE }
     }
 
     /// Gets the console's current foreground and background colors.
@@ -88,15 +88,16 @@ impl<'a> Pager<'a> {
                 yielder.yield_now().await;
             }
 
+            let size = self.console.size_chars()?;
             self.cur_columns += text.len();
-            self.cur_lines += (self.cur_columns / usize::from(self.size.x)) + 1;
+            self.cur_lines += (self.cur_columns / usize::from(size.x)) + 1;
 
-            if self.cur_lines >= usize::from(self.size.y) - 1 {
+            if self.cur_lines >= usize::from(size.y) - 1 {
                 let previous_color = self.console.color();
                 if previous_color != (None, None) {
                     self.console.set_color(None, None)?;
                 }
-                self.console.print(self.more_message)?;
+                self.console.print(self.more_message())?;
                 if previous_color != (None, None) {
                     self.console.set_color(previous_color.0, previous_color.1)?;
                 }
@@ -355,6 +356,66 @@ mod tests {
                 CapturedOut::Print("line 1".to_owned()),
                 CapturedOut::Print("line 2".to_owned()),
                 CapturedOut::Print(MORE_MESSAGE_WIDE.to_owned()),
+            ],
+            cb.captured_out()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_columns_follow_resize() {
+        let mut cb = MockConsole::default();
+        cb.set_interactive(true);
+        cb.set_size_chars(CharsXY::new(10, 3));
+        let size = cb.size_chars_handle();
+
+        let pager = Pager::new(&mut cb, None).unwrap();
+        assert_eq!(10, pager.columns().unwrap());
+
+        *size.borrow_mut() = CharsXY::new(20, 3);
+        assert_eq!(20, pager.columns().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_paging_message_follows_resize() {
+        let mut cb = MockConsole::default();
+        cb.set_interactive(true);
+        cb.set_size_chars(CharsXY::new(10, 3));
+        cb.add_input_keys(&[Key::NewLine]);
+        let size = cb.size_chars_handle();
+
+        let mut pager = Pager::new(&mut cb, None).unwrap();
+        pager.print("line 1").await.unwrap();
+        *size.borrow_mut() = CharsXY::new(60, 3);
+        pager.print("line 2").await.unwrap();
+
+        assert_eq!(
+            [
+                CapturedOut::Print("line 1".to_owned()),
+                CapturedOut::Print("line 2".to_owned()),
+                CapturedOut::Print(MORE_MESSAGE_WIDE.to_owned()),
+            ],
+            cb.captured_out()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_paging_height_follows_resize() {
+        let mut cb = MockConsole::default();
+        cb.set_interactive(true);
+        cb.set_size_chars(CharsXY::new(10, 5));
+        cb.add_input_keys(&[Key::NewLine]);
+        let size = cb.size_chars_handle();
+
+        let mut pager = Pager::new(&mut cb, None).unwrap();
+        pager.print("line 1").await.unwrap();
+        *size.borrow_mut() = CharsXY::new(10, 3);
+        pager.print("line 2").await.unwrap();
+
+        assert_eq!(
+            [
+                CapturedOut::Print("line 1".to_owned()),
+                CapturedOut::Print("line 2".to_owned()),
+                CapturedOut::Print(MORE_MESSAGE_NARROW.to_owned()),
             ],
             cb.captured_out()
         );
