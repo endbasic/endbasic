@@ -17,8 +17,9 @@ workspace = true
 [dependencies]
 async-channel = "2.2"
 async-trait = "0.1"
-crossterm = "0.27"
-tokio = { version = "1", features = ["rt"] }
+crossterm = { version = "0.27", features = ["event-stream"] }
+futures-util = "0.3"
+tokio = { version = "1", features = ["macros", "rt"] }
 
 [dependencies.endbasic-core]
 version = "0.13.99" # ENDBASIC-VERSION
