@@ -108,16 +108,26 @@ pub enum CapturedOut {
     SetSync(bool),
 }
 
+/// Input events to feed to the mock console.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum InputEvent {
+    /// Represents a regular key press.
+    Key(Key),
+
+    /// Represents a resize of the text console.
+    ResizeChars(CharsXY),
+}
+
 /// A console that supplies golden input and captures all output.
 pub struct MockConsole {
-    /// Sequence of keys to yield on `read_key` calls.
-    golden_in: VecDeque<Key>,
+    /// Sequence of input events to yield on `read_key` calls.
+    golden_in: VecDeque<InputEvent>,
 
     /// Sequence of all messages printed.
     captured_out: Vec<CapturedOut>,
 
     /// The size of the mock text console.
-    size_chars: CharsXY,
+    size_chars: Rc<RefCell<CharsXY>>,
 
     /// The size of the mock graphical console.
     size_pixels: Option<SizeInPixels>,
@@ -141,7 +151,7 @@ impl MockConsole {
         Self {
             golden_in: VecDeque::new(),
             captured_out: vec![],
-            size_chars: CharsXY::new(u16::MAX, u16::MAX),
+            size_chars: Rc::from(RefCell::from(CharsXY::new(u16::MAX, u16::MAX))),
             size_pixels: None,
             interactive: false,
             signals_tx,
@@ -155,16 +165,21 @@ impl MockConsole {
     pub fn add_input_chars(&mut self, s: &str) {
         for ch in s.chars() {
             match ch {
-                '\n' => self.golden_in.push_back(Key::NewLine),
-                '\r' => self.golden_in.push_back(Key::CarriageReturn),
-                ch => self.golden_in.push_back(Key::Char(ch)),
+                '\n' => self.golden_in.push_back(InputEvent::Key(Key::NewLine)),
+                '\r' => self.golden_in.push_back(InputEvent::Key(Key::CarriageReturn)),
+                ch => self.golden_in.push_back(InputEvent::Key(Key::Char(ch))),
             }
         }
     }
 
     /// Adds a bunch of keys as golden input.
     pub fn add_input_keys(&mut self, keys: &[Key]) {
-        self.golden_in.extend(keys.iter().cloned());
+        self.golden_in.extend(keys.iter().cloned().map(InputEvent::Key));
+    }
+
+    /// Adds a resize of the text console as golden input.
+    pub fn add_resize_event(&mut self, size: CharsXY) {
+        self.golden_in.push_back(InputEvent::ResizeChars(size));
     }
 
     /// Obtains a reference to the captured output.
@@ -182,7 +197,12 @@ impl MockConsole {
 
     /// Sets the size of the mock text console.
     pub fn set_size_chars(&mut self, size: CharsXY) {
-        self.size_chars = size;
+        *self.size_chars.borrow_mut() = size;
+    }
+
+    /// Returns a shared handle to the size of the mock text console.
+    pub fn size_chars_handle(&self) -> Rc<RefCell<CharsXY>> {
+        self.size_chars.clone()
     }
 
     /// Sets the size of the mock graphical console.
@@ -194,13 +214,24 @@ impl MockConsole {
     pub fn set_interactive(&mut self, interactive: bool) {
         self.interactive = interactive;
     }
+
+    /// Consumes queued resize events and returns the next available key, if any.
+    fn pop_input_key(&mut self) -> Option<Key> {
+        loop {
+            match self.golden_in.pop_front() {
+                Some(InputEvent::Key(key)) => return Some(key),
+                Some(InputEvent::ResizeChars(size)) => *self.size_chars.borrow_mut() = size,
+                None => return None,
+            }
+        }
+    }
 }
 
 impl Drop for MockConsole {
     fn drop(&mut self) {
         assert!(
             self.golden_in.is_empty(),
-            "Not all golden input chars were consumed; {} left",
+            "Not all golden input events were consumed; {} left",
             self.golden_in.len()
         );
     }
@@ -247,8 +278,9 @@ impl Console for MockConsole {
     }
 
     fn locate(&mut self, pos: CharsXY) -> io::Result<()> {
-        assert!(pos.x < self.size_chars.x);
-        assert!(pos.y < self.size_chars.y);
+        let size_chars = *self.size_chars.borrow();
+        assert!(pos.x < size_chars.x);
+        assert!(pos.y < size_chars.y);
         self.captured_out.push(CapturedOut::Locate(pos));
         Ok(())
     }
@@ -266,7 +298,7 @@ impl Console for MockConsole {
     }
 
     async fn poll_key(&mut self) -> io::Result<Option<Key>> {
-        match self.golden_in.pop_front() {
+        match self.pop_input_key() {
             Some(ch) => {
                 if ch == Key::Interrupt
                     && let Some(signals_tx) = &self.signals_tx
@@ -280,7 +312,7 @@ impl Console for MockConsole {
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
-        match self.golden_in.pop_front() {
+        match self.pop_input_key() {
             Some(ch) => {
                 if ch == Key::Interrupt
                     && let Some(signals_tx) = &self.signals_tx
@@ -299,7 +331,7 @@ impl Console for MockConsole {
     }
 
     fn size_chars(&self) -> io::Result<CharsXY> {
-        Ok(self.size_chars)
+        Ok(*self.size_chars.borrow())
     }
 
     fn size_pixels(&self) -> io::Result<SizeInPixels> {
