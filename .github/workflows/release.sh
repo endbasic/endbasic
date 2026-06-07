@@ -68,6 +68,16 @@ main() {
 
     local target=
     case "${name}" in
+        linux-aarch64-rpi-sdl)
+            [ ! -f .cargo/config ] || err "Won't override existing .cargo/config"
+            cp .cargo/config.rpi64 .cargo/config
+            ( cd cli && cargo build --release --features=rpi,sdl-bundled )
+            rm -f .cargo/config
+
+            cp ./target/aarch64-unknown-linux-gnu/release/endbasic "${distname}"
+            cp ./target/aarch64-unknown-linux-gnu/release/libSDL2.so* "${distname}"
+            ;;
+
         linux-armv7-rpi-sdl)
             [ ! -f .cargo/config ] || err "Won't override existing .cargo/config"
             cp .cargo/config.rpi .cargo/config
