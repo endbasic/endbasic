@@ -14,6 +14,9 @@ edition = "2024"
 [lints]
 workspace = true
 
+[features]
+bundled = ["sdl2/bundled"]
+
 [dependencies]
 async-channel = "2.2"
 async-trait = "0.1"

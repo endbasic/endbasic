@@ -38,6 +38,9 @@ for the time being.**
 *   Issue #223: Enabled the use of pkg-config to detect SDL, which fixes build
     problems on nixOS and, I think, should also fix issues on macOS.
 
+*   Added SDL2 support for the prebuilt binaries for the Raspberry Pi that we
+    distribute from the website.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**

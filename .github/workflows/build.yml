@@ -18,7 +18,7 @@ name: Build release
 on: push
 
 jobs:
-    linux-armv7-rpi:
+    linux-armv7-rpi-sdl:
         runs-on: ubuntu-latest
         env:
             RUSTC_WRAPPER: "sccache"
@@ -31,12 +31,12 @@ jobs:
             - uses: actions/checkout@v6
             - uses: mozilla-actions/sccache-action@v0.0.10
             - run: sudo apt update
-            - run: sudo apt install gcc-arm-linux-gnueabihf
-            - run: ./.github/workflows/release.sh linux-armv7-rpi
+            - run: sudo apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+            - run: ./.github/workflows/release.sh linux-armv7-rpi-sdl
             - uses: actions/upload-artifact@v7
               with:
-                name: endbasic-linux-armv7-rpi
-                path: endbasic-linux-armv7-rpi/*
+                name: endbasic-linux-armv7-rpi-sdl
+                path: endbasic-linux-armv7-rpi-sdl/*
                 retention-days: 1
 
     linux-x86_64-sdl:
@@ -91,7 +91,7 @@ jobs:
 
     create-release:
         if: startsWith(github.ref, 'refs/tags/')
-        needs: [linux-armv7-rpi, linux-x86_64-sdl, macos-arm64-sdl, windows-x86_64-sdl]
+        needs: [linux-armv7-rpi-sdl, linux-x86_64-sdl, macos-arm64-sdl, windows-x86_64-sdl]
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v6
@@ -104,7 +104,7 @@ jobs:
               id: assets
               run: >
                 ./.github/workflows/release-assets.sh
-                linux-armv7-rpi linux-x86_64-sdl macos-arm64-sdl windows-x86_64-sdl
+                linux-armv7-rpi-sdl linux-x86_64-sdl macos-arm64-sdl windows-x86_64-sdl
                 >>"$GITHUB_OUTPUT"
             - name: Create release draft
               uses: ncipollo/release-action@v1
