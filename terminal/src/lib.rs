@@ -18,7 +18,7 @@
 
 use async_channel::{Receiver, Sender, TryRecvError};
 use async_trait::async_trait;
-use crossterm::event::{self, KeyEventKind};
+use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::tty::IsTty;
 use crossterm::{QueueableCommand, cursor, style, terminal};
 use endbasic_std::Signal;
@@ -26,9 +26,45 @@ use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
     CharsXY, ClearType, Console, Key, get_env_var_as_u16, read_key_from_stdin, remove_control_chars,
 };
+use futures_util::StreamExt;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::io::{self, StdoutLock, Write};
+
+/// Converts a crossterm `KeyEvent` given in `ev` for key presses to our own `Key` type.
+fn parse_key_event(ev: KeyEvent) -> Option<Key> {
+    if ev.kind != KeyEventKind::Press {
+        return None;
+    }
+
+    let key = match ev.code {
+        KeyCode::Backspace => Key::Backspace,
+        KeyCode::End => Key::End,
+        KeyCode::Esc => Key::Escape,
+        KeyCode::Home => Key::Home,
+        KeyCode::Tab => Key::Tab,
+        KeyCode::Up => Key::ArrowUp,
+        KeyCode::Down => Key::ArrowDown,
+        KeyCode::Left => Key::ArrowLeft,
+        KeyCode::Right => Key::ArrowRight,
+        KeyCode::PageDown => Key::PageDown,
+        KeyCode::PageUp => Key::PageUp,
+        KeyCode::Char('a') if ev.modifiers == KeyModifiers::CONTROL => Key::Home,
+        KeyCode::Char('b') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowLeft,
+        KeyCode::Char('c') if ev.modifiers == KeyModifiers::CONTROL => Key::Interrupt,
+        KeyCode::Char('d') if ev.modifiers == KeyModifiers::CONTROL => Key::Eof,
+        KeyCode::Char('e') if ev.modifiers == KeyModifiers::CONTROL => Key::End,
+        KeyCode::Char('f') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowRight,
+        KeyCode::Char('j') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
+        KeyCode::Char('m') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
+        KeyCode::Char('n') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowDown,
+        KeyCode::Char('p') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowUp,
+        KeyCode::Char(ch) => Key::Char(ch),
+        KeyCode::Enter => Key::NewLine,
+        _ => Key::Unknown,
+    };
+    Some(key)
+}
 
 /// Implementation of the EndBASIC console to interact with stdin and stdout.
 pub struct TerminalConsole {
@@ -57,6 +93,7 @@ pub struct TerminalConsole {
 
 impl Drop for TerminalConsole {
     fn drop(&mut self) {
+        self.on_key_rx.close();
         if self.is_tty {
             terminal::disable_raw_mode().unwrap();
         }
@@ -87,7 +124,11 @@ impl TerminalConsole {
 
         if is_tty {
             terminal::enable_raw_mode()?;
-            tokio::task::spawn(TerminalConsole::raw_key_handler(on_key_tx.clone(), signals_tx));
+            tokio::task::spawn(TerminalConsole::raw_key_handler(
+                EventStream::new(),
+                on_key_tx.clone(),
+                signals_tx,
+            ));
         } else {
             tokio::task::spawn(TerminalConsole::stdio_key_handler(on_key_tx.clone()));
         }
@@ -108,58 +149,21 @@ impl TerminalConsole {
 
     /// Async task to wait for key events on a raw terminal and translate them into events for the
     /// console or the machine.
-    async fn raw_key_handler(on_key_tx: Sender<Key>, signals_tx: Sender<Signal>) {
-        use event::{KeyCode, KeyModifiers};
-
+    async fn raw_key_handler<S>(mut events: S, on_key_tx: Sender<Key>, signals_tx: Sender<Signal>)
+    where
+        S: futures_util::stream::Stream<Item = io::Result<Event>> + Unpin,
+    {
         loop {
-            let key = match event::read() {
-                Ok(event::Event::Key(ev)) => {
-                    if ev.kind != KeyEventKind::Press {
-                        continue;
-                    }
-
-                    match ev.code {
-                        KeyCode::Backspace => Key::Backspace,
-                        KeyCode::End => Key::End,
-                        KeyCode::Esc => Key::Escape,
-                        KeyCode::Home => Key::Home,
-                        KeyCode::Tab => Key::Tab,
-                        KeyCode::Up => Key::ArrowUp,
-                        KeyCode::Down => Key::ArrowDown,
-                        KeyCode::Left => Key::ArrowLeft,
-                        KeyCode::Right => Key::ArrowRight,
-                        KeyCode::PageDown => Key::PageDown,
-                        KeyCode::PageUp => Key::PageUp,
-                        KeyCode::Char('a') if ev.modifiers == KeyModifiers::CONTROL => Key::Home,
-                        KeyCode::Char('b') if ev.modifiers == KeyModifiers::CONTROL => {
-                            Key::ArrowLeft
-                        }
-                        KeyCode::Char('c') if ev.modifiers == KeyModifiers::CONTROL => {
-                            Key::Interrupt
-                        }
-                        KeyCode::Char('d') if ev.modifiers == KeyModifiers::CONTROL => Key::Eof,
-                        KeyCode::Char('e') if ev.modifiers == KeyModifiers::CONTROL => Key::End,
-                        KeyCode::Char('f') if ev.modifiers == KeyModifiers::CONTROL => {
-                            Key::ArrowRight
-                        }
-                        KeyCode::Char('j') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
-                        KeyCode::Char('m') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
-                        KeyCode::Char('n') if ev.modifiers == KeyModifiers::CONTROL => {
-                            Key::ArrowDown
-                        }
-                        KeyCode::Char('p') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowUp,
-                        KeyCode::Char(ch) => Key::Char(ch),
-                        KeyCode::Enter => Key::NewLine,
-                        _ => Key::Unknown,
-                    }
-                }
-                Ok(_) => {
-                    // Not a key event; ignore and try again.
-                    continue;
-                }
-                Err(_) => {
-                    // There is not much we can do if we get an error from crossterm.
-                    Key::Unknown
+            let key = tokio::select! {
+                _ = on_key_tx.closed() => break,
+                maybe_event = events.next() => match maybe_event {
+                    Some(Ok(Event::Key(ev))) => match parse_key_event(ev) {
+                        Some(key) => key,
+                        None => continue,
+                    },
+                    Some(Ok(_)) => continue,
+                    Some(Err(_)) => Key::Unknown,
+                    None => break,
                 }
             };
 
@@ -194,6 +198,10 @@ impl TerminalConsole {
 
         let mut done = false;
         while !done {
+            if on_key_tx.is_closed() {
+                break;
+            }
+
             let key = match read_key_from_stdin(&mut buffer) {
                 Ok(key) => key,
                 Err(_) => {
@@ -207,7 +215,9 @@ impl TerminalConsole {
             // This should never fail but can if the receiver outruns the console because we don't
             // await for the handler to terminate (which we cannot do safely because `Drop` is not
             // async).
-            let _ = on_key_tx.send(key).await;
+            if on_key_tx.send(key).await.is_err() {
+                break;
+            }
         }
 
         on_key_tx.close();
@@ -425,5 +435,51 @@ impl Console for TerminalConsole {
         let previous = self.sync_enabled;
         self.sync_enabled = enabled;
         Ok(previous)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures_util::stream;
+    use std::thread;
+
+    #[test]
+    fn test_drive_raw_keys_eof_does_not_terminate_worker() {
+        let (on_key_tx, on_key_rx) = async_channel::unbounded();
+        let (signals_tx, _signals_rx) = async_channel::unbounded();
+        let events = stream::iter([Ok(Event::Key(KeyEvent::new(
+            KeyCode::Char('d'),
+            KeyModifiers::CONTROL,
+        )))]);
+
+        let handle = thread::spawn(move || {
+            let runtime =
+                tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            runtime.block_on(TerminalConsole::raw_key_handler(events, on_key_tx, signals_tx));
+        });
+
+        assert_eq!(Key::Eof, on_key_rx.recv_blocking().unwrap());
+
+        on_key_rx.close();
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_drive_raw_keys_shutdown_without_extra_key() {
+        let (on_key_tx, on_key_rx) = async_channel::unbounded();
+        let (signals_tx, _signals_rx) = async_channel::unbounded();
+        let events = stream::pending();
+
+        let handle = thread::spawn(move || {
+            let runtime =
+                tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            runtime.block_on(TerminalConsole::raw_key_handler(events, on_key_tx, signals_tx));
+        });
+
+        on_key_rx.close();
+        handle.join().unwrap();
+
+        assert_eq!(Err(TryRecvError::Closed), on_key_rx.try_recv());
     }
 }
