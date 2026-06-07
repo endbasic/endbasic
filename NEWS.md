@@ -35,6 +35,9 @@ for the time being.**
     Technically, this had been broken since the debut of the SDL console, but
     it wasn't until recently that macOS started crashing EndBASIC.
 
+*   Issue #223: Enabled the use of pkg-config to detect SDL, which fixes build
+    problems on nixOS and, I think, should also fix issues on macOS.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**
