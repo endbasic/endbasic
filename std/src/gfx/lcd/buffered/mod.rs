@@ -369,6 +369,17 @@ where
         if self.sync { Ok(()) } else { self.force_present_canvas() }
     }
 
+    fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
+        let xy = match self.clip_xy(xy) {
+            Some(xy) => xy,
+            None => return Ok(None),
+        };
+
+        let offset = self.fb_addr(xy.x, xy.y);
+        let pixel = &self.fb[offset..offset + self.stride];
+        Ok(self.ansi_colors.get(pixel).copied())
+    }
+
     fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<Self::ID> {
         self.assert_xy_size_in_range(xy, size);
         let x1y1 = self.clip_xy(xy).expect("Internal ops must receive valid coordinates");

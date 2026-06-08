@@ -125,6 +125,9 @@ pub struct MockConsole {
     /// Whether the console is interactive or not.
     interactive: bool,
 
+    /// Optional colors to return from `peek_pixel` calls.
+    peek_pixels: Vec<(PixelsXY, Option<u8>)>,
+
     /// Channel through which to send signals, if present.
     signals_tx: Option<Sender<Signal>>,
 }
@@ -144,6 +147,7 @@ impl MockConsole {
             size_chars: CharsXY::new(u16::MAX, u16::MAX),
             size_pixels: None,
             interactive: false,
+            peek_pixels: vec![],
             signals_tx,
         }
     }
@@ -193,6 +197,12 @@ impl MockConsole {
     /// Sets whether the mock console is interactive or not.
     pub fn set_interactive(&mut self, interactive: bool) {
         self.interactive = interactive;
+    }
+
+    /// Sets the color to return from `peek_pixel` at the given location.
+    pub fn set_peek_pixel(&mut self, xy: PixelsXY, color: Option<u8>) {
+        self.peek_pixels.retain(|(candidate, _)| *candidate != xy);
+        self.peek_pixels.push((xy, color));
     }
 }
 
@@ -385,6 +395,16 @@ impl Console for MockConsole {
     ) -> io::Result<()> {
         self.captured_out.push(CapturedOut::DrawTriFilled(x1y1, x2y2, x3y3));
         Ok(())
+    }
+
+    fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
+        Ok(self
+            .peek_pixels
+            .iter()
+            .rev()
+            .find(|(candidate, _)| *candidate == xy)
+            .map(|(_, color)| *color)
+            .unwrap_or(None))
     }
 
     fn sync_now(&mut self) -> io::Result<()> {

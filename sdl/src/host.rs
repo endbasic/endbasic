@@ -29,7 +29,7 @@ use endbasic_std::console::drawing::{
 use endbasic_std::console::graphics::{ClampedInto, ClampedMul, InputOps, RasterInfo, RasterOps};
 use endbasic_std::console::{
     CharsXY, ClearType, Console, ConsoleHost, GraphicsConsole, Key, PixelsXY, RGB, Resolution,
-    SizeInPixels,
+    SizeInPixels, rgb_to_ansi_color,
 };
 use endbasic_std::gfx::lcd::fonts::Font;
 use sdl2::event::Event;
@@ -311,6 +311,14 @@ impl Context {
             draw_color,
         })
     }
+
+    /// Returns true if the point falls within the canvas bounds.
+    fn contains_pixel(&self, xy: PixelsXY) -> bool {
+        xy.x >= 0
+            && xy.y >= 0
+            && u16::try_from(xy.x).unwrap_or(u16::MAX) < self.size_pixels.width
+            && u16::try_from(xy.y).unwrap_or(u16::MAX) < self.size_pixels.height
+    }
 }
 
 impl RasterOps for Context {
@@ -344,6 +352,19 @@ impl RasterOps for Context {
             .blit(None, &mut window_surface, None)
             .map_err(string_error_to_io_error)?;
         window_surface.finish().map_err(string_error_to_io_error)
+    }
+
+    fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
+        if !self.contains_pixel(xy) {
+            return Ok(None);
+        }
+
+        let rect = rect_origin_size(xy, SizeInPixels::new(1, 1));
+        let data = self
+            .canvas
+            .read_pixels(rect, PixelFormatEnum::RGB24)
+            .map_err(string_error_to_io_error)?;
+        Ok(rgb_to_ansi_color((data[0], data[1], data[2])))
     }
 
     fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<Self::ID> {
@@ -505,6 +526,10 @@ impl RasterOps for SharedContext {
         (*self.0).borrow_mut().present_canvas()
     }
 
+    fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
+        (*self.0).borrow().peek_pixel(xy)
+    }
+
     fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<Self::ID> {
         (*self.0).borrow_mut().read_pixels(xy, size)
     }
@@ -598,6 +623,7 @@ pub(crate) enum Request {
     DrawRectFilled(PixelsXY, PixelsXY),
     DrawTri(PixelsXY, PixelsXY, PixelsXY),
     DrawTriFilled(PixelsXY, PixelsXY, PixelsXY),
+    PeekPixel(PixelsXY),
     SyncNow,
     SetSync(bool),
 
@@ -611,6 +637,7 @@ pub(crate) enum Request {
 #[derive(Debug)]
 pub(crate) enum Response {
     Empty(io::Result<()>),
+    PeekPixel(io::Result<Option<u8>>),
     SizeChars(CharsXY),
     SizePixels(SizeInPixels),
     SetSync(io::Result<bool>),
@@ -705,6 +732,7 @@ pub(crate) fn run(
                     Request::DrawTriFilled(x1y1, x2y2, x3y3) => {
                         Response::Empty(console.draw_tri_filled(x1y1, x2y2, x3y3))
                     }
+                    Request::PeekPixel(xy) => Response::PeekPixel(console.peek_pixel(xy)),
                     Request::SyncNow => Response::Empty(console.sync_now()),
                     Request::SetSync(enabled) => Response::SetSync(console.set_sync(enabled)),
 

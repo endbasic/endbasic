@@ -310,6 +310,11 @@ pub trait Console {
         Err(io::Error::other("No graphics support in this console"))
     }
 
+    /// Returns the color number of the pixel at `_xy` if it is in bounds and exactly mappable.
+    fn peek_pixel(&self, _xy: PixelsXY) -> io::Result<Option<u8>> {
+        Err(io::Error::other("No graphics support in this console"))
+    }
+
     /// Causes any buffered output to be synced.
     ///
     /// This is a no-op when video syncing is enabled because output is never buffered in that case.
