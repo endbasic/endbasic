@@ -449,6 +449,10 @@ mod testutils {
             unimplemented!();
         }
 
+        fn peek_pixel(&self, _xy: PixelsXY) -> io::Result<Option<u8>> {
+            unimplemented!();
+        }
+
         fn read_pixels(&mut self, _xy: PixelsXY, _size: SizeInPixels) -> io::Result<Self::ID> {
             unimplemented!();
         }

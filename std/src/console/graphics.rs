@@ -211,6 +211,9 @@ pub trait RasterOps {
     /// Should ignore any sync values that the backend might have cached via `set_sync`.
     fn present_canvas(&mut self) -> io::Result<()>;
 
+    /// Returns the color number of the pixel at `xy` if it is in bounds and exactly mappable.
+    fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>>;
+
     /// Reads the raw pixel data for the rectangular region specified by `xy` and `size`.
     fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<Self::ID>;
 
@@ -769,6 +772,10 @@ where
         self.raster_ops.set_draw_color(self.fg_color);
         self.raster_ops.draw_tri_filled(x1y1, x2y2, x3y3)?;
         self.present_canvas()
+    }
+
+    fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
+        self.raster_ops.peek_pixel(xy)
     }
 
     fn sync_now(&mut self) -> io::Result<()> {

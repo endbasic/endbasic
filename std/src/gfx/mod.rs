@@ -403,6 +403,62 @@ impl Callable for GfxLineCommand {
     }
 }
 
+/// The `GFX_PEEK` function.
+pub struct GfxPeekFunction {
+    metadata: Rc<CallableMetadata>,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxPeekFunction {
+    /// Creates a new instance of the function.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_PEEK")
+                .with_return_type(ExprType::Integer)
+                .with_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns the color number of the pixel at (x,y).
+Returns -1 if the pixel lies outside of the graphical console or if its color cannot be mapped \
+back to a COLOR value.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+impl Callable for GfxPeekFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(2, scope.nargs());
+        let xy = parse_coordinates(&scope, 0, 1)?;
+        let color = self.console.borrow().peek_pixel(xy)?.map(i32::from).unwrap_or(-1);
+        scope.return_integer(color)
+    }
+}
+
 /// The `GFX_PIXEL` command.
 pub struct GfxPixelCommand {
     metadata: Rc<CallableMetadata>,
@@ -1033,6 +1089,7 @@ pub fn add_all(machine: &mut MachineBuilder, console: Rc<RefCell<dyn Console>>) 
     machine.add_callable(GfxCirclefCommand::new(console.clone()));
     machine.add_callable(GfxHeightFunction::new(console.clone()));
     machine.add_callable(GfxLineCommand::new(console.clone()));
+    machine.add_callable(GfxPeekFunction::new(console.clone()));
     machine.add_callable(GfxPixelCommand::new(console.clone()));
     machine.add_callable(GfxPolyCommand::new(console.clone()));
     machine.add_callable(GfxPolyfCommand::new(console.clone()));
@@ -1382,6 +1439,45 @@ mod tests {
         for cmd in &["GFX_PIXEL \"a\", 1", "GFX_PIXEL 1, \"a\""] {
             let pos = cmd.find('"').unwrap() + 1;
             check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), cmd);
+        }
+    }
+
+    #[test]
+    fn test_gfx_peek_ok() {
+        let mut t = Tester::default();
+        t.get_console().borrow_mut().set_peek_pixel(PixelsXY::new(1, 2), Some(7));
+        t.run("result = GFX_PEEK(1, 2)").expect_var("result", 7i32).check();
+
+        let mut t = Tester::default();
+        t.get_console().borrow_mut().set_peek_pixel(PixelsXY::new(1, 2), None);
+        t.run("result = GFX_PEEK(1, 2)").expect_var("result", -1i32).check();
+
+        Tester::default()
+            .run("result = GFX_PEEK(-31000.2, 31999.7)")
+            .expect_var("result", -1i32)
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_peek_errors() {
+        for expr in &["GFX_PEEK()", "GFX_PEEK(1)", "GFX_PEEK(1, 2, 3)"] {
+            check_expr_compilation_error("1:10: GFX_PEEK expected x%, y%", expr);
+        }
+        check_expr_compilation_error("1:20: Unexpected ;", "GFX_PEEK(1; 2)");
+
+        for expr in &["GFX_PEEK(-40000, 1)", "GFX_PEEK(1, -40000)"] {
+            let pos = expr.find('-').unwrap() + 10;
+            check_expr_error(format!("1:{}: Coordinate -40000 out of range", pos), expr);
+        }
+
+        for expr in &["GFX_PEEK(40000, 1)", "GFX_PEEK(1, 40000)"] {
+            let pos = expr.find('4').unwrap() + 10;
+            check_expr_error(format!("1:{}: Coordinate 40000 out of range", pos), expr);
+        }
+
+        for expr in &[r#"GFX_PEEK("a", 1)"#, r#"GFX_PEEK(1, "a")"#] {
+            let pos = expr.find('"').unwrap() + 10;
+            check_expr_compilation_error(format!("1:{}: STRING is not a number", pos), expr);
         }
     }
 

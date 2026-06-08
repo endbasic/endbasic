@@ -227,6 +227,14 @@ impl Console for SdlConsole {
         self.call(Request::DrawTriFilled(x1y1, x2y2, x3y3))
     }
 
+    fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
+        self.request_tx.send(Request::PeekPixel(xy)).expect("Channel must be alive");
+        match self.response_rx.recv().expect("Channel must be alive") {
+            Response::PeekPixel(result) => result,
+            _ => panic!("Unexpected response type"),
+        }
+    }
+
     fn sync_now(&mut self) -> io::Result<()> {
         self.call(Request::SyncNow)
     }
@@ -339,6 +347,11 @@ mod testutils {
             self.console.as_mut().expect("Console must always be present")
         }
 
+        /// Obtains shared access to the SDL console.
+        pub(crate) fn console_ref(&self) -> &SdlConsole {
+            self.console.as_ref().expect("Console must always be present")
+        }
+
         /// Synchronously waits for the reception of just one signal.
         pub(crate) fn wait_one_signal(&self) -> Signal {
             let signal = block_on(self.signals_rx.recv()).unwrap();
@@ -354,11 +367,7 @@ mod testutils {
 
         /// Injects an SDL event into the console.
         pub(crate) fn push_event(&self, ev: Event) {
-            self.console
-                .as_ref()
-                .expect("Console must always be present")
-                .call(Request::PushEvent(ev))
-                .unwrap()
+            self.console_ref().call(Request::PushEvent(ev)).unwrap()
         }
 
         /// Verifies that the current state of the console matches a golden imagine.  `bmp_basename`
@@ -901,6 +910,37 @@ mod tests {
         console.draw_rect_filled(xy(40, 40), xy(45, 40)).unwrap();
 
         test.verify("sdl-draw-one-sized-rectangles");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_sdl_console_peek_pixel_exact_match() {
+        let mut test = SdlTest::new();
+
+        test.console().hide_cursor().unwrap();
+        test.console().set_color(Some(15), None).unwrap();
+        test.console().draw_pixel(PixelsXY::new(3, 4)).unwrap();
+
+        assert_eq!(Some(15), test.console().peek_pixel(PixelsXY::new(3, 4)).unwrap());
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_sdl_console_peek_pixel_out_of_bounds() {
+        let test = SdlTest::new();
+
+        assert_eq!(None, test.console_ref().peek_pixel(PixelsXY::new(-1, 0)).unwrap());
+        assert_eq!(None, test.console_ref().peek_pixel(PixelsXY::new(0, -1)).unwrap());
+
+        let size = test.console_ref().size_pixels().unwrap();
+        assert_eq!(
+            None,
+            test.console_ref().peek_pixel(PixelsXY::new(size.width as i16, 0)).unwrap()
+        );
+        assert_eq!(
+            None,
+            test.console_ref().peek_pixel(PixelsXY::new(0, size.height as i16)).unwrap()
+        );
     }
 
     #[test]

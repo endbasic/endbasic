@@ -169,6 +169,7 @@ Output from HELP "GRAPHICS":
     >> [38;5;14mGFX_CIRCLEF[39m    Draws a filled circle of radius r centered at (x,y).
     >> [38;5;14mGFX_HEIGHT%[39m    Returns the height in pixels of the graphical console.
     >> [38;5;14mGFX_LINE   [39m    Draws a line from (x1,y1) to (x2,y2).
+    >> [38;5;14mGFX_PEEK%  [39m    Returns the color number of the pixel at (x,y).
     >> [38;5;14mGFX_PIXEL  [39m    Draws a pixel at (x,y).
     >> [38;5;14mGFX_POLY   [39m    Draws a polygon with vertices at (x1,y1), (x2,y2), ..., and (xN,yN).
     >> [38;5;14mGFX_POLYF  [39m    Draws a filled polygon with vertices at (x1,y1), (x2,y2), ..., and (xN,yN).
@@ -1229,6 +1230,15 @@ Output from HELP "GFX_HEIGHT":
     Returns the height in pixels of the graphical console.
 
     See GFX_WIDTH to query the other dimension.
+
+Output from HELP "GFX_PEEK":
+
+[38;5;11m    GFX_PEEK%(x%, y%)
+[39m
+    Returns the color number of the pixel at (x,y).
+
+    Returns -1 if the pixel lies outside of the graphical console or if its
+    color cannot be mapped back to a COLOR value.
 
 Output from HELP "GFX_WIDTH":
 

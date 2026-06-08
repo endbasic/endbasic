@@ -494,6 +494,10 @@ impl<P: Pins + Send, B: SpiBus, K: InputOps> Console for ST7735SConsole<P, B, K>
         self.inner.draw_tri_filled(x1y1, x2y2, x3y3)
     }
 
+    fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
+        self.inner.peek_pixel(xy)
+    }
+
     fn sync_now(&mut self) -> io::Result<()> {
         self.inner.sync_now()
     }

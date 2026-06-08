@@ -19,7 +19,7 @@ use crate::WebYielder;
 use async_trait::async_trait;
 use endbasic_std::console::drawing::draw_text;
 use endbasic_std::console::graphics::{RasterInfo, RasterOps};
-use endbasic_std::console::{PixelsXY, RGB, SizeInPixels};
+use endbasic_std::console::{PixelsXY, RGB, SizeInPixels, rgb_to_ansi_color};
 use endbasic_std::gfx::lcd::fonts::Font;
 use std::convert::TryFrom;
 use std::f64::consts::PI;
@@ -144,6 +144,14 @@ impl CanvasRasterOps {
         Ok(raster_ops)
     }
 
+    /// Returns true if the point falls within the canvas bounds.
+    fn contains_pixel(&self, xy: PixelsXY) -> bool {
+        xy.x >= 0
+            && xy.y >= 0
+            && u16::try_from(xy.x).unwrap_or(u16::MAX) < self.size_pixels.width
+            && u16::try_from(xy.y).unwrap_or(u16::MAX) < self.size_pixels.height
+    }
+
     /// Sets the fill color of the canvas to `rgb`.
     fn set_fill_style_rgb(&mut self, rgb: RGB) {
         if self.fill_color != rgb {
@@ -202,6 +210,19 @@ impl RasterOps for CanvasRasterOps {
     fn present_canvas(&mut self) -> io::Result<()> {
         self.yielder.request_paint();
         Ok(())
+    }
+
+    fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
+        if !self.contains_pixel(xy) {
+            return Ok(None);
+        }
+
+        let data = self
+            .context
+            .get_image_data(f64::from(xy.x), f64::from(xy.y), 1.0, 1.0)
+            .map_err(js_value_to_io_error)?;
+        let pixels = data.data();
+        Ok(rgb_to_ansi_color((pixels[0], pixels[1], pixels[2])))
     }
 
     fn read_pixels(&mut self, xy: PixelsXY, size: SizeInPixels) -> io::Result<ImageData> {

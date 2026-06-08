@@ -24,6 +24,8 @@ for the time being.**
 
 *   Added `GFX_POLY` and `GFX_POLYF` to draw outlined and filled polygons.
 
+*   Added `GFX_PEEK` to query the color number of a pixel.
+
 *   Added the `DEMOS:/BOUNCE.BAS` graphics demo to showcase animated shapes.
 
 *   Fixed the web frontend so that commands that print long outputs (like

@@ -275,6 +275,37 @@ fn test_new_ansi_colors_uses_first_lossy_encoded_match() {
 }
 
 #[test]
+fn test_peek_pixel_uses_first_lossy_encoded_match() {
+    let mut lcd = BufferedLcd::new(LossyLcd, &FONT_5X8);
+
+    let expected = (u8::MIN..=u8::MAX)
+        .find(|color| (ansi_color_to_rgb(*color).0 >> 4) == 0)
+        .expect("Must have a matching color");
+    lcd.put_pixels(PixelsXY::new(0, 0), &(vec![0], SizeInPixels::new(1, 1))).unwrap();
+
+    assert_eq!(Some(expected), lcd.peek_pixel(PixelsXY::new(0, 0)).unwrap());
+}
+
+#[test]
+fn test_peek_pixel_out_of_bounds_returns_none() {
+    let lcd = BufferedLcd::new(LossyLcd, &FONT_5X8);
+
+    assert_eq!(None, lcd.peek_pixel(PixelsXY::new(-1, 0)).unwrap());
+    assert_eq!(None, lcd.peek_pixel(PixelsXY::new(0, -1)).unwrap());
+    assert_eq!(None, lcd.peek_pixel(PixelsXY::new(1, 0)).unwrap());
+    assert_eq!(None, lcd.peek_pixel(PixelsXY::new(0, 1)).unwrap());
+}
+
+#[test]
+fn test_peek_pixel_unmappable_color_returns_none() {
+    let mut lcd = BufferedLcd::new(LossyLcd, &FONT_5X8);
+
+    lcd.put_pixels(PixelsXY::new(0, 0), &(vec![16], SizeInPixels::new(1, 1))).unwrap();
+
+    assert_eq!(None, lcd.peek_pixel(PixelsXY::new(0, 0)).unwrap());
+}
+
+#[test]
 fn test_read_pixels_sync() {
     Tester::new(size(10, 12))
         .op(|l| l.set_draw_color((120, 40, 180)))
