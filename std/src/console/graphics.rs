@@ -17,7 +17,7 @@
 
 use super::{
     AnsiColor, CharsXY, ClearType, Console, Key, LineBuffer, PixelsXY, RGB, SizeInPixels,
-    ansi_color_to_rgb, remove_control_chars,
+    ansi_color_to_rgb, drawing, remove_control_chars,
 };
 use async_trait::async_trait;
 use std::convert::TryFrom;
@@ -669,6 +669,13 @@ where
         self.draw_cursor()?;
         self.set_sync(previous)?;
         Ok(())
+    }
+
+    fn bucket_fill(&mut self, xy: PixelsXY) -> io::Result<()> {
+        let fill_color = self.ansi_fg_color.unwrap_or(self.default_fg_color);
+        self.raster_ops.set_draw_color(self.fg_color);
+        drawing::bucket_fill(&mut self.raster_ops, xy, fill_color)?;
+        self.present_canvas()
     }
 
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {

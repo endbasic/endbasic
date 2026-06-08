@@ -297,6 +297,63 @@ impl Callable for GfxCirclefCommand {
     }
 }
 
+/// The `GFX_FILL` command.
+pub struct GfxFillCommand {
+    metadata: Rc<CallableMetadata>,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl GfxFillCommand {
+    /// Creates a new `GFX_FILL` command that fills a region on `console`.
+    pub fn new(console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("GFX_FILL")
+                .with_syntax(&[(
+                    &[
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("x"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::Exactly(ArgSep::Long),
+                        ),
+                        SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("y"),
+                                vtype: ExprType::Integer,
+                            },
+                            ArgSepSyntax::End,
+                        ),
+                    ],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Fills the region around (x,y).
+Fills the 4-connected region containing (x,y) using the foreground color as selected by COLOR.  \
+If the seed pixel lies outside of the graphical console or if its color cannot be mapped back to a \
+COLOR value, this command does nothing.",
+                )
+                .build(),
+            console,
+        })
+    }
+}
+
+impl Callable for GfxFillCommand {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(2, scope.nargs());
+        let xy = parse_coordinates(&scope, 0, 1)?;
+
+        self.console.borrow_mut().bucket_fill(xy)?;
+        Ok(())
+    }
+}
+
 /// The `GFX_HEIGHT` function.
 pub struct GfxHeightFunction {
     metadata: Rc<CallableMetadata>,
@@ -1087,6 +1144,7 @@ impl Callable for GfxWidthFunction {
 pub fn add_all(machine: &mut MachineBuilder, console: Rc<RefCell<dyn Console>>) {
     machine.add_callable(GfxCircleCommand::new(console.clone()));
     machine.add_callable(GfxCirclefCommand::new(console.clone()));
+    machine.add_callable(GfxFillCommand::new(console.clone()));
     machine.add_callable(GfxHeightFunction::new(console.clone()));
     machine.add_callable(GfxLineCommand::new(console.clone()));
     machine.add_callable(GfxPeekFunction::new(console.clone()));
@@ -1366,6 +1424,44 @@ mod tests {
     #[test]
     fn test_gfx_circlef_errors() {
         check_errors_xy_radius("GFX_CIRCLEF");
+    }
+
+    #[test]
+    fn test_gfx_fill_ok() {
+        Tester::default()
+            .run("GFX_FILL 1, 2")
+            .expect_output([CapturedOut::BucketFill(PixelsXY { x: 1, y: 2 })])
+            .check();
+
+        Tester::default()
+            .run("GFX_FILL -31000, -32000")
+            .expect_output([CapturedOut::BucketFill(PixelsXY { x: -31000, y: -32000 })])
+            .check();
+
+        Tester::default()
+            .run("GFX_FILL 30999.5, 31999.7")
+            .expect_output([CapturedOut::BucketFill(PixelsXY { x: 31000, y: 32000 })])
+            .check();
+    }
+
+    #[test]
+    fn test_gfx_fill_errors() {
+        for cmd in &["GFX_FILL , 2", "GFX_FILL 1, 2, 3", "GFX_FILL 1"] {
+            check_stmt_compilation_err("1:1: GFX_FILL expected x%, y%", cmd);
+        }
+        check_stmt_compilation_err("1:11: GFX_FILL expected x%, y%", "GFX_FILL 1; 2");
+
+        for cmd in &["GFX_FILL -40000, 1", "GFX_FILL 1, -40000"] {
+            check_stmt_err(
+                format!("1:{}: Coordinate -40000 out of range", cmd.find('-').unwrap() + 1),
+                cmd,
+            );
+        }
+
+        for cmd in &["GFX_FILL \"a\", 1", "GFX_FILL 1, \"a\""] {
+            let pos = cmd.find('"').unwrap() + 1;
+            check_stmt_compilation_err(format!("1:{}: STRING is not a number", pos), cmd);
+        }
     }
 
     #[test]

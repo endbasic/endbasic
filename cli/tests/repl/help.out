@@ -167,6 +167,7 @@ Output from HELP "GRAPHICS":
 
     >> [38;5;14mGFX_CIRCLE [39m    Draws a circle of radius r centered at (x,y).
     >> [38;5;14mGFX_CIRCLEF[39m    Draws a filled circle of radius r centered at (x,y).
+    >> [38;5;14mGFX_FILL   [39m    Fills the region around (x,y).
     >> [38;5;14mGFX_HEIGHT%[39m    Returns the height in pixels of the graphical console.
     >> [38;5;14mGFX_LINE   [39m    Draws a line from (x1,y1) to (x2,y2).
     >> [38;5;14mGFX_PEEK%  [39m    Returns the color number of the pixel at (x,y).
@@ -738,6 +739,17 @@ Output from HELP "GFX_CIRCLEF":
 
     The outline and area of the circle are drawn using the foreground color
     as selected by COLOR.
+
+Output from HELP "GFX_FILL":
+
+[38;5;11m    GFX_FILL x%, y%
+[39m
+    Fills the region around (x,y).
+
+    Fills the 4-connected region containing (x,y) using the foreground
+    color as selected by COLOR.  If the seed pixel lies outside of the
+    graphical console or if its color cannot be mapped back to a COLOR
+    value, this command does nothing.
 
 Output from HELP "GFX_LINE":
 

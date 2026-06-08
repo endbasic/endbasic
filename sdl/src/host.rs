@@ -613,6 +613,7 @@ pub(crate) enum Request {
     SizeChars,
     SizePixels,
     Write(String),
+    BucketFill(PixelsXY),
     DrawCircle(PixelsXY, u16),
     DrawCircleFilled(PixelsXY, u16),
     DrawLine(PixelsXY, PixelsXY),
@@ -710,6 +711,7 @@ pub(crate) fn run(
                     Request::SizeChars => Response::SizeChars(info.size_chars),
                     Request::SizePixels => Response::SizePixels(info.size_pixels),
                     Request::Write(text) => Response::Empty(console.write(&text)),
+                    Request::BucketFill(xy) => Response::Empty(console.bucket_fill(xy)),
                     Request::DrawCircle(center, radius) => {
                         Response::Empty(console.draw_circle(center, radius))
                     }

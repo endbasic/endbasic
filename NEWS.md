@@ -26,6 +26,8 @@ for the time being.**
 
 *   Added `GFX_PEEK` to query the color number of a pixel.
 
+*   Added `GFX_FILL` to perform a 4-way bucket fill.
+
 *   Added the `DEMOS:/BOUNCE.BAS` graphics demo to showcase animated shapes.
 
 *   Fixed the web frontend so that commands that print long outputs (like

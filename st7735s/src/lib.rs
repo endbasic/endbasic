@@ -449,6 +449,10 @@ impl<P: Pins + Send, B: SpiBus, K: InputOps> Console for ST7735SConsole<P, B, K>
         self.inner.write(text)
     }
 
+    fn bucket_fill(&mut self, xy: PixelsXY) -> io::Result<()> {
+        self.inner.bucket_fill(xy)
+    }
+
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
         self.inner.draw_circle(center, radius)
     }

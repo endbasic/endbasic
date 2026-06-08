@@ -71,6 +71,9 @@ pub enum CapturedOut {
     /// Represents a call to `Console::write`.
     Write(String),
 
+    /// Represents a call to `Console::bucket_fill`.
+    BucketFill(PixelsXY),
+
     /// Represents a call to `Console::draw_circle`.
     DrawCircle(PixelsXY, u16),
 
@@ -323,6 +326,11 @@ impl Console for MockConsole {
         let text = remove_control_chars(text.to_owned());
 
         self.captured_out.push(CapturedOut::Write(text));
+        Ok(())
+    }
+
+    fn bucket_fill(&mut self, xy: PixelsXY) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::BucketFill(xy));
         Ok(())
     }
 

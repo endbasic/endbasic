@@ -122,6 +122,44 @@ where
     }
 }
 
+/// Fills the 4-connected region around `xy` via `rasops`.
+pub fn bucket_fill<R>(rasops: &mut R, xy: PixelsXY, fill_color: u8) -> io::Result<()>
+where
+    R: RasterOps,
+{
+    let seed_color = match rasops.peek_pixel(xy)? {
+        Some(color) => color,
+        None => return Ok(()),
+    };
+    if seed_color == fill_color {
+        return Ok(());
+    }
+
+    let mut pending = vec![xy];
+    while let Some(xy) = pending.pop() {
+        if rasops.peek_pixel(xy)? != Some(seed_color) {
+            continue;
+        }
+
+        rasops.draw_pixel(xy)?;
+
+        if xy.x > i16::MIN {
+            pending.push(PixelsXY::new(xy.x - 1, xy.y));
+        }
+        if xy.x < i16::MAX {
+            pending.push(PixelsXY::new(xy.x + 1, xy.y));
+        }
+        if xy.y > i16::MIN {
+            pending.push(PixelsXY::new(xy.x, xy.y - 1));
+        }
+        if xy.y < i16::MAX {
+            pending.push(PixelsXY::new(xy.x, xy.y + 1));
+        }
+    }
+
+    Ok(())
+}
+
 /// Draws a circle via `rasops` with `center` and `radius`.
 ///
 /// This implements the [Midpoint circle
@@ -411,7 +449,7 @@ where
 mod testutils {
     use super::*;
     use crate::console::graphics::RasterInfo;
-    use crate::console::{RGB, SizeInPixels};
+    use crate::console::{RGB, SizeInPixels, rgb_to_ansi_color};
 
     /// Representation of captured raster operations.
     #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -421,9 +459,21 @@ mod testutils {
     }
 
     /// An implementation of `RasterOps` that captures calls for later validation.
+    ///
+    /// This also captures the minimum set of side-effects required by tests (like the active color
+    /// or some pixels directly drawn).
     #[derive(Default)]
     pub(crate) struct RecordingRasops {
         pub(crate) ops: Vec<CapturedRasop>,
+        pub(crate) draw_color: Option<u8>,
+        pub(crate) pixels: Vec<(PixelsXY, Option<u8>)>,
+    }
+
+    impl RecordingRasops {
+        pub(crate) fn set_pixel(&mut self, xy: PixelsXY, color: Option<u8>) {
+            self.pixels.retain(|(candidate, _)| *candidate != xy);
+            self.pixels.push((xy, color));
+        }
     }
 
     impl RasterOps for RecordingRasops {
@@ -433,8 +483,8 @@ mod testutils {
             unimplemented!();
         }
 
-        fn set_draw_color(&mut self, _color: RGB) {
-            unimplemented!();
+        fn set_draw_color(&mut self, color: RGB) {
+            self.draw_color = rgb_to_ansi_color(color);
         }
 
         fn clear(&mut self) -> io::Result<()> {
@@ -449,8 +499,14 @@ mod testutils {
             unimplemented!();
         }
 
-        fn peek_pixel(&self, _xy: PixelsXY) -> io::Result<Option<u8>> {
-            unimplemented!();
+        fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
+            Ok(self
+                .pixels
+                .iter()
+                .rev()
+                .find(|(candidate, _)| *candidate == xy)
+                .map(|(_, color)| *color)
+                .unwrap_or(None))
         }
 
         fn read_pixels(&mut self, _xy: PixelsXY, _size: SizeInPixels) -> io::Result<Self::ID> {
@@ -489,6 +545,7 @@ mod testutils {
 
         fn draw_pixel(&mut self, xy: PixelsXY) -> io::Result<()> {
             self.ops.push(CapturedRasop::DrawPixel(xy.x, xy.y));
+            self.set_pixel(xy, self.draw_color);
             Ok(())
         }
 
@@ -532,6 +589,66 @@ mod testutils {
 mod tests {
     use super::testutils::*;
     use super::*;
+    use crate::console::ansi_color_to_rgb;
+
+    #[test]
+    fn test_bucket_fill_connected_region() {
+        let mut rasops = RecordingRasops::default();
+        rasops.set_draw_color(ansi_color_to_rgb(7));
+        for xy in [
+            PixelsXY::new(0, 0),
+            PixelsXY::new(1, 0),
+            PixelsXY::new(0, 1),
+            PixelsXY::new(2, 1),
+            PixelsXY::new(1, 2),
+        ] {
+            rasops.set_pixel(xy, Some(2));
+        }
+
+        bucket_fill(&mut rasops, PixelsXY::new(0, 0), 7).unwrap();
+
+        rasops.ops.sort();
+        assert_eq!(
+            [
+                CapturedRasop::DrawPixel(0, 0),
+                CapturedRasop::DrawPixel(0, 1),
+                CapturedRasop::DrawPixel(1, 0),
+            ],
+            rasops.ops.as_slice()
+        );
+    }
+
+    #[test]
+    fn test_bucket_fill_diagonal_is_not_connected() {
+        let mut rasops = RecordingRasops::default();
+        rasops.set_draw_color(ansi_color_to_rgb(7));
+        rasops.set_pixel(PixelsXY::new(0, 0), Some(2));
+        rasops.set_pixel(PixelsXY::new(1, 1), Some(2));
+
+        bucket_fill(&mut rasops, PixelsXY::new(0, 0), 7).unwrap();
+
+        assert_eq!([CapturedRasop::DrawPixel(0, 0)], rasops.ops.as_slice());
+        assert_eq!(Some(2), rasops.peek_pixel(PixelsXY::new(1, 1)).unwrap());
+    }
+
+    #[test]
+    fn test_bucket_fill_out_of_bounds_is_noop() {
+        let mut rasops = RecordingRasops::default();
+        rasops.set_draw_color(ansi_color_to_rgb(7));
+        bucket_fill(&mut rasops, PixelsXY::new(10, 20), 7).unwrap();
+        assert!(rasops.ops.is_empty());
+    }
+
+    #[test]
+    fn test_bucket_fill_same_color_is_noop() {
+        let mut rasops = RecordingRasops::default();
+        rasops.set_draw_color(ansi_color_to_rgb(7));
+        rasops.set_pixel(PixelsXY::new(10, 20), Some(7));
+
+        bucket_fill(&mut rasops, PixelsXY::new(10, 20), 7).unwrap();
+
+        assert!(rasops.ops.is_empty());
+    }
 
     #[test]
     fn test_draw_circle_zero() {
