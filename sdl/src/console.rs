@@ -182,6 +182,10 @@ impl Console for SdlConsole {
         self.call(Request::Write(text))
     }
 
+    fn bucket_fill(&mut self, xy: PixelsXY) -> io::Result<()> {
+        self.call(Request::BucketFill(xy))
+    }
+
     fn draw_circle(&mut self, center: PixelsXY, radius: u16) -> io::Result<()> {
         self.call(Request::DrawCircle(center, radius))
     }

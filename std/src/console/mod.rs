@@ -255,6 +255,11 @@ pub trait Console {
     ///
     fn write(&mut self, text: &str) -> io::Result<()>;
 
+    /// Fills the 4-connected region around `_xy` using the current drawing color.
+    fn bucket_fill(&mut self, _xy: PixelsXY) -> io::Result<()> {
+        Err(io::Error::other("No graphics support in this console"))
+    }
+
     /// Draws the outline of a circle at `_center` with `_radius` using the current drawing color.
     fn draw_circle(&mut self, _center: PixelsXY, _radius: u16) -> io::Result<()> {
         Err(io::Error::other("No graphics support in this console"))
