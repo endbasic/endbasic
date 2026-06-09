@@ -48,6 +48,9 @@ pub trait Lcd {
     /// Returns the dimensions of the LCD and size of the `Pixel` (stride).
     fn info(&self) -> (LcdSize, usize);
 
+    /// Decodes a set of bytes previously encoded with `encode` into their `rgb` color.
+    fn decode(&self, pixel: &[u8]) -> RGB;
+
     /// Encodes an `rgb` color into the `Pixel` expected by the LCD.
     fn encode(&self, rgb: RGB) -> Self::Pixel;
 

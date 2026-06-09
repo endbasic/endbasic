@@ -347,6 +347,17 @@ impl<P: Pins, B: SpiBus> Lcd for ST7735SLcd<P, B> {
         (self.size_pixels, 2)
     }
 
+    fn decode(&self, pixel: &[u8]) -> RGB {
+        debug_assert_eq!(2, pixel.len());
+
+        let pixel = u16::from_be_bytes([pixel[0], pixel[1]]);
+        let r = ((pixel >> 11) & 0x1f) as u8;
+        let g = ((pixel >> 5) & 0x3f) as u8;
+        let b = (pixel & 0x1f) as u8;
+
+        ((r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2))
+    }
+
     fn encode(&self, rgb: RGB) -> Self::Pixel {
         let rgb = (u16::from(rgb.0), u16::from(rgb.1), u16::from(rgb.2));
 
@@ -579,7 +590,19 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use endbasic_std::gfx::lcd::AsByteSlice;
+    use endbasic_std::gpio::MockPins;
     use std::io::Write;
+    use std::sync::{Arc, Mutex};
+
+    /// Creates an LCD wired to mock implementations for testing purposes.
+    fn make_simple_mock_lcd() -> ST7735SLcd<MockPins, MockSpiBus> {
+        ST7735SLcd {
+            pins: Arc::from(Mutex::from(MockPins::default())),
+            spi_bus: MockSpiBus::default(),
+            size_pixels: LcdSize { width: 128, height: 128 },
+        }
+    }
 
     #[derive(Default)]
     struct MockSpiBus {
@@ -625,5 +648,40 @@ mod tests {
         let mut bus = MockSpiBus { max_size: 6, ..Default::default() };
         lcd_write(&mut bus, &[0, 1, 2, 3, 4, 5, 6]).unwrap();
         assert_eq!(vec![vec![0, 1, 2, 3, 4, 5], vec![6]], bus.writes);
+    }
+
+    #[test]
+    fn test_rgb565_decode_known_values() {
+        let lcd = make_simple_mock_lcd();
+
+        assert_eq!((0, 0, 0), lcd.decode(&[0x00, 0x00]));
+        assert_eq!((255, 255, 255), lcd.decode(&[0xff, 0xff]));
+        assert_eq!((255, 0, 0), lcd.decode(&[0xf8, 0x00]));
+        assert_eq!((0, 255, 0), lcd.decode(&[0x07, 0xe0]));
+        assert_eq!((0, 0, 255), lcd.decode(&[0x00, 0x1f]));
+    }
+
+    #[test]
+    fn test_rgb565_encode_decode_round_trip_quantized_values() {
+        let lcd = make_simple_mock_lcd();
+
+        for rgb in [
+            (0, 0, 0),
+            (255, 255, 255),
+            (255, 0, 0),
+            (0, 255, 0),
+            (0, 0, 255),
+            (123, 85, 57),
+            (16, 32, 48),
+        ] {
+            let encoded = lcd.encode(rgb);
+            let decoded = lcd.decode(encoded.as_slice());
+            let expected = (
+                (rgb.0 & 0xf8) | (rgb.0 >> 5),
+                (rgb.1 & 0xfc) | (rgb.1 >> 6),
+                (rgb.2 & 0xf8) | (rgb.2 >> 5),
+            );
+            assert_eq!(expected, decoded, "rgb = {:?}", rgb);
+        }
     }
 }

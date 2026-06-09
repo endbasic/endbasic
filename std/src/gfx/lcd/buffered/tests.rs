@@ -18,8 +18,10 @@
 use super::testutils::*;
 use super::*;
 use crate::console::graphics::RasterOps;
-use crate::console::{CharsXY, PixelsXY, SizeInPixels};
+use crate::console::{CharsXY, PixelsXY, RGB, SizeInPixels, ansi_color_to_rgb};
+use crate::gfx::lcd::AsByteSlice;
 use crate::gfx::lcd::fonts::{FONT_5X8, FONT_16X16};
+use std::io;
 
 #[test]
 fn test_new_does_nothing() {
@@ -228,6 +230,48 @@ fn test_present_canvas() {
         .expect_damage(xy(0, 0), xy(0, 0))
         .expect_op("set_data: from=(5, 6), to=(5, 6), data=[1, 2, 3]")
         .check();
+}
+
+#[derive(Clone, Copy)]
+struct LossyPixel([u8; 1]);
+
+impl AsByteSlice for LossyPixel {
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+struct LossyLcd;
+
+impl Lcd for LossyLcd {
+    type Pixel = LossyPixel;
+
+    fn info(&self) -> (LcdSize, usize) {
+        (size(1, 1), 1)
+    }
+
+    fn decode(&self, pixel: &[u8]) -> RGB {
+        (pixel[0], pixel[0], pixel[0])
+    }
+
+    fn encode(&self, rgb: RGB) -> Self::Pixel {
+        LossyPixel([rgb.0 >> 4])
+    }
+
+    fn set_data(&mut self, _x1y1: LcdXY, _x2y2: LcdXY, _data: &[u8]) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn test_new_ansi_colors_uses_first_lossy_encoded_match() {
+    let lcd = BufferedLcd::new(LossyLcd, &FONT_5X8);
+
+    let expected = (u8::MIN..=u8::MAX)
+        .find(|color| (ansi_color_to_rgb(*color).0 >> 4) == 0)
+        .expect("Must have a matching color");
+
+    assert_eq!(Some(&expected), lcd.ansi_colors.get(&vec![0]));
 }
 
 #[test]

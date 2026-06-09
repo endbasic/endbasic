@@ -305,3 +305,28 @@ static COLORS: &[RGB] = &[
 pub fn ansi_color_to_rgb(color: u8) -> RGB {
     COLORS[(color as usize) % COLORS.len()]
 }
+
+/// Converts an RGB color to an ANSI color number if there is an exact match.
+///
+/// This function does a linear scan of the known colors table and, as such, should not be
+/// used in performance-critical places.
+// TODO(jmmv): Make this efficient and remove the warning above.
+pub fn rgb_to_ansi_color(rgb: RGB) -> Option<u8> {
+    COLORS.iter().position(|candidate| *candidate == rgb).map(|index| index as u8)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rgb_to_ansi_color_exact_match() {
+        assert_eq!(Some(0), rgb_to_ansi_color((0, 0, 0)));
+        assert_eq!(Some(15), rgb_to_ansi_color((255, 255, 255)));
+    }
+
+    #[test]
+    fn test_rgb_to_ansi_color_no_match() {
+        assert_eq!(None, rgb_to_ansi_color((1, 2, 3)));
+    }
+}

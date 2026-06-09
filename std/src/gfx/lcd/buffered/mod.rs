@@ -15,11 +15,11 @@
 
 //! Buffered implementation of the `RasterOps` for a hardware LCD.
 
-use crate::console::drawing;
 use crate::console::graphics::{RasterInfo, RasterOps};
-use crate::console::{CharsXY, PixelsXY, RGB, SizeInPixels};
+use crate::console::{CharsXY, PixelsXY, RGB, SizeInPixels, ansi_color_to_rgb, drawing};
 use crate::gfx::lcd::fonts::Font;
 use crate::gfx::lcd::{AsByteSlice, Lcd, LcdSize, LcdXY, to_xy_size};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io;
 
@@ -46,6 +46,7 @@ pub struct BufferedLcd<L: Lcd> {
     size_pixels: LcdSize,
     size_chars: CharsXY,
 
+    ansi_colors: HashMap<Vec<u8>, u8>,
     draw_color: L::Pixel,
     row_buffer: Vec<u8>,
 }
@@ -65,6 +66,17 @@ where
 
         let size_chars = font.chars_in_area(size.into());
 
+        // Precompute the table of encoded ANSI colors.  This is necessary for O(1) decoding
+        // of rendered pixels.
+        let ansi_colors = {
+            let mut ansi_colors = HashMap::new();
+            for color in u8::MIN..=u8::MAX {
+                let pixel = lcd.encode(ansi_color_to_rgb(color));
+                ansi_colors.entry(pixel.as_slice().to_vec()).or_insert(color);
+            }
+            ansi_colors
+        };
+
         let draw_color = lcd.encode((255, 255, 255));
         let row_buffer = Vec::with_capacity(size.width * stride);
 
@@ -77,6 +89,7 @@ where
             damage: None,
             size_pixels: size,
             size_chars,
+            ansi_colors,
             draw_color,
             row_buffer,
         }
