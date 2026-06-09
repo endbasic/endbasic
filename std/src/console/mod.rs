@@ -28,7 +28,7 @@ use std::str;
 mod cmds;
 pub(crate) use cmds::add_all;
 mod colors;
-pub use colors::{AnsiColor, RGB, ansi_color_to_rgb};
+pub use colors::{AnsiColor, RGB, ansi_color_to_rgb, rgb_to_ansi_color};
 pub mod drawing;
 mod format;
 pub(crate) use format::refill_and_page;

@@ -64,6 +64,10 @@ impl Lcd for LcdRecorder {
         (self.size, 3)
     }
 
+    fn decode(&self, pixel: &[u8]) -> RGB {
+        (pixel[0], pixel[1], pixel[2])
+    }
+
     fn encode(&self, rgb: RGB) -> Self::Pixel {
         RGB888Pixel([rgb.0, rgb.1, rgb.2])
     }
