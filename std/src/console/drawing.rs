@@ -450,6 +450,7 @@ mod testutils {
     use super::*;
     use crate::console::graphics::RasterInfo;
     use crate::console::{RGB, SizeInPixels, rgb_to_ansi_color};
+    use std::collections::HashMap;
 
     /// Representation of captured raster operations.
     #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -466,13 +467,12 @@ mod testutils {
     pub(crate) struct RecordingRasops {
         pub(crate) ops: Vec<CapturedRasop>,
         pub(crate) draw_color: Option<u8>,
-        pub(crate) pixels: Vec<(PixelsXY, Option<u8>)>,
+        pub(crate) pixels: HashMap<PixelsXY, Option<u8>>,
     }
 
     impl RecordingRasops {
         pub(crate) fn set_pixel(&mut self, xy: PixelsXY, color: Option<u8>) {
-            self.pixels.retain(|(candidate, _)| *candidate != xy);
-            self.pixels.push((xy, color));
+            self.pixels.insert(xy, color);
         }
     }
 
@@ -500,13 +500,7 @@ mod testutils {
         }
 
         fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
-            Ok(self
-                .pixels
-                .iter()
-                .rev()
-                .find(|(candidate, _)| *candidate == xy)
-                .map(|(_, color)| *color)
-                .unwrap_or(None))
+            Ok(self.pixels.get(&xy).copied().unwrap_or(None))
         }
 
         fn read_pixels(&mut self, _xy: PixelsXY, _size: SizeInPixels) -> io::Result<Self::ID> {
