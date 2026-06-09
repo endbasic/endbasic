@@ -1044,13 +1044,9 @@ This is the first and only topic with just one line.
                 CapturedOut::SetColor(Some(100), Some(200)),
             ])
             .expect_prints([""])
-            .expect_output([
-                CapturedOut::SetColor(None, None),
-                CapturedOut::Print(
-                    " << Press any key for more; ESC or Ctrl+C to stop >> ".to_owned(),
-                ),
-                CapturedOut::SetColor(Some(100), Some(200)),
-            ])
+            .expect_output([CapturedOut::Print(
+                " << Press any key for more; ESC or Ctrl+C to stop >> ".to_owned(),
+            )])
             .expect_output([
                 CapturedOut::Write("    >> ".to_owned()),
                 CapturedOut::SetColor(Some(LINK_COLOR), Some(200)),
@@ -1071,13 +1067,9 @@ This is the first and only topic with just one line.
                 "    Type END or press CTRL+D to exit.",
                 "",
             ])
-            .expect_output([
-                CapturedOut::SetColor(None, None),
-                CapturedOut::Print(
-                    " << Press any key for more; ESC or Ctrl+C to stop >> ".to_owned(),
-                ),
-                CapturedOut::SetColor(Some(100), Some(200)),
-            ])
+            .expect_output([CapturedOut::Print(
+                " << Press any key for more; ESC or Ctrl+C to stop >> ".to_owned(),
+            )])
             .check();
     }
 }
