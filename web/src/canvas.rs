@@ -273,7 +273,20 @@ impl RasterOps for CanvasRasterOps {
             )
             .map_err(js_value_to_io_error)?;
 
-        self.context.set_global_composite_operation(&saved).map_err(js_value_to_io_error)
+        self.context.set_global_composite_operation(&saved).map_err(js_value_to_io_error)?;
+
+        let delta_y = i32::from(x1y1.y) - i32::from(x2y2.y);
+        debug_assert_eq!(x1y1.x, x2y2.x);
+        debug_assert!(delta_y >= 0);
+        if delta_y > 0 {
+            self.context.fill_rect(
+                f64::from(x1y1.x),
+                f64::from(x2y2.y) + f64::from(size.height),
+                f64::from(size.width),
+                f64::from(delta_y),
+            );
+        }
+        Ok(())
     }
 
     fn write_text(&mut self, xy: PixelsXY, text: &str) -> io::Result<()> {
@@ -367,5 +380,42 @@ impl RasterOps for CanvasRasterOps {
         self.context.close_path();
         self.context.fill();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use endbasic_std::console::{AnsiColor, ansi_color_to_rgb};
+    use endbasic_std::gfx::lcd::fonts::FONT_5X8;
+    use wasm_bindgen_test::*;
+
+    fn new_test_raster_ops(width: u32, height: u32) -> CanvasRasterOps {
+        let document = web_sys::window().unwrap().document().unwrap();
+        let canvas =
+            document.create_element("canvas").unwrap().dyn_into::<HtmlCanvasElement>().unwrap();
+        canvas.set_width(width);
+        canvas.set_height(height);
+        CanvasRasterOps::new(canvas, &FONT_5X8, WebYielder::new()).unwrap()
+    }
+
+    #[wasm_bindgen_test]
+    fn test_move_pixels_clears_exposed_scroll_area() {
+        let mut raster_ops = new_test_raster_ops(5, 24);
+
+        raster_ops.set_draw_color((0, 0, 0));
+        raster_ops.clear().unwrap();
+
+        let blue = ansi_color_to_rgb(AnsiColor::Blue as u8);
+        raster_ops.set_draw_color(blue);
+        raster_ops.draw_rect_filled(PixelsXY::new(0, 8), SizeInPixels::new(5, 16)).unwrap();
+        raster_ops
+            .move_pixels(PixelsXY::new(0, 8), PixelsXY::new(0, 0), SizeInPixels::new(5, 16))
+            .unwrap();
+
+        assert_eq!(
+            Some(AnsiColor::Blue as u8),
+            raster_ops.peek_pixel(PixelsXY::new(0, 20)).unwrap()
+        );
     }
 }
