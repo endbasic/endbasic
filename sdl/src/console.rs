@@ -535,6 +535,20 @@ mod tests {
 
     #[test]
     #[ignore = "Requires a graphical environment"]
+    fn test_sdl_console_scroll_uses_only_the_text_viewport() {
+        let mut test = SdlTest::new();
+        let size = test.console().size_chars().unwrap();
+
+        test.console().hide_cursor().unwrap();
+        test.console().locate(CharsXY { x: 0, y: size.y - 1 }).unwrap();
+        test.console().set_color(Some(11), Some(4)).unwrap();
+        test.console().print("").unwrap();
+
+        test.verify("sdl-scroll-text-viewport");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_clear() {
         let mut test = SdlTest::new();
 

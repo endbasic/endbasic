@@ -420,15 +420,19 @@ where
             return Ok(());
         }
 
+        let text_height: u16 = self.size_chars.y.clamped_mul(self.glyph_size.height);
         let x1y1 = PixelsXY::new(0, self.glyph_size.height.clamped_into());
         let x2y2 = PixelsXY::new(0, 0);
-        let size = SizeInPixels::new(
-            self.size_pixels.width,
-            self.size_pixels.height - self.glyph_size.height,
-        );
+        let size = SizeInPixels::new(self.size_pixels.width, text_height - self.glyph_size.height);
 
         self.raster_ops.set_draw_color(self.bg_color);
         self.raster_ops.move_pixels(x1y1, x2y2, size)?;
+        if text_height < self.size_pixels.height {
+            let xy = PixelsXY::new(0, text_height.clamped_into());
+            let size =
+                SizeInPixels::new(self.size_pixels.width, self.size_pixels.height - text_height);
+            self.raster_ops.draw_rect_filled(xy, size)?;
+        }
 
         self.cursor_pos.x = 0;
         Ok(())
