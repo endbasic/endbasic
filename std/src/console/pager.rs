@@ -92,14 +92,7 @@ impl<'a> Pager<'a> {
             self.cur_lines += (self.cur_columns / usize::from(self.size.x)) + 1;
 
             if self.cur_lines >= usize::from(self.size.y) - 1 {
-                let previous_color = self.console.color();
-                if previous_color != (None, None) {
-                    self.console.set_color(None, None)?;
-                }
                 self.console.print(self.more_message)?;
-                if previous_color != (None, None) {
-                    self.console.set_color(previous_color.0, previous_color.1)?;
-                }
                 if matches!(self.console.read_key().await?, Key::Escape | Key::Interrupt) {
                     return Err(io::Error::new(io::ErrorKind::Interrupted, "Interrupted"));
                 }
@@ -310,7 +303,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_paging_use_default_color_for_message() {
+    async fn test_paging_preserves_color_for_message() {
         let mut cb = MockConsole::default();
         cb.set_size_chars(CharsXY { x: 10, y: 3 });
         cb.set_interactive(true);
@@ -327,9 +320,7 @@ mod tests {
                 CapturedOut::SetColor(Some(3), Some(5)),
                 CapturedOut::Print("line 1".to_owned()),
                 CapturedOut::Print("line 2".to_owned()),
-                CapturedOut::SetColor(None, None),
                 CapturedOut::Print(MORE_MESSAGE_NARROW.to_owned()),
-                CapturedOut::SetColor(Some(3), Some(5)),
                 CapturedOut::Print("line 3".to_owned()),
             ],
             cb.captured_out()

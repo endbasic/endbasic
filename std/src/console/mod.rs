@@ -202,6 +202,8 @@ pub trait Console {
     /// Sets the console's foreground and background colors to `fg` and `bg`.
     ///
     /// If any of the colors is `None`, the color is left unchanged.
+    // TODO(jmmv): Clarify/fix this API contract.  Implementations currently treat `None` as a
+    // request to restore the default color instead of leaving the color unchanged.
     fn set_color(&mut self, fg: Option<u8>, bg: Option<u8>) -> io::Result<()>;
 
     /// Enters the alternate console.
