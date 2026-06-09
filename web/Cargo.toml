@@ -55,6 +55,8 @@ version = "0.3.77"
 features = [
     "CanvasRenderingContext2d",
     "ContextAttributes2d",
+    "Document",
+    "Element",
     "EventTarget",
     "HtmlCanvasElement",
     "ImageData",

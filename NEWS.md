@@ -51,6 +51,9 @@ for the time being.**
 *   Added an aarch64 SDL2 prebuilt binary for the Raspberry Pi in addition to
     the existing armv7 build to support Raspbian 64 bits.
 
+*   Fixed various issues in the web and SDL consoles with blanking new lines
+    and the whole screen when a non-default color is set.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**
