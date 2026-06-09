@@ -129,7 +129,7 @@ pub struct MockConsole {
     interactive: bool,
 
     /// Optional colors to return from `peek_pixel` calls.
-    peek_pixels: Vec<(PixelsXY, Option<u8>)>,
+    peek_pixels: HashMap<PixelsXY, Option<u8>>,
 
     /// Channel through which to send signals, if present.
     signals_tx: Option<Sender<Signal>>,
@@ -150,7 +150,7 @@ impl MockConsole {
             size_chars: CharsXY::new(u16::MAX, u16::MAX),
             size_pixels: None,
             interactive: false,
-            peek_pixels: vec![],
+            peek_pixels: HashMap::default(),
             signals_tx,
         }
     }
@@ -204,8 +204,7 @@ impl MockConsole {
 
     /// Sets the color to return from `peek_pixel` at the given location.
     pub fn set_peek_pixel(&mut self, xy: PixelsXY, color: Option<u8>) {
-        self.peek_pixels.retain(|(candidate, _)| *candidate != xy);
-        self.peek_pixels.push((xy, color));
+        self.peek_pixels.insert(xy, color);
     }
 }
 
@@ -406,13 +405,7 @@ impl Console for MockConsole {
     }
 
     fn peek_pixel(&self, xy: PixelsXY) -> io::Result<Option<u8>> {
-        Ok(self
-            .peek_pixels
-            .iter()
-            .rev()
-            .find(|(candidate, _)| *candidate == xy)
-            .map(|(_, color)| *color)
-            .unwrap_or(None))
+        Ok(self.peek_pixels.get(&xy).copied().unwrap_or(None))
     }
 
     fn sync_now(&mut self) -> io::Result<()> {

@@ -141,7 +141,7 @@ impl CharsXY {
 ///
 /// Coordinates can be off-screen, which means they can be negative and/or can exceed the
 /// bottom-right margin.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct PixelsXY {
     /// The column number.
     pub x: i16,
