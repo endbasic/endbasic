@@ -702,7 +702,7 @@ mod tests {
         assert_poll_is_none(test.console());
 
         test.push_event(Event::Quit { timestamp: 0 });
-        assert_poll_is_key(test.console(), Key::Eof);
+        assert_poll_is_key(test.console(), Key::EofOrDelete);
         assert_poll_is_none(test.console());
 
         test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
@@ -741,7 +741,7 @@ mod tests {
         let mut test = SdlTest::new();
 
         test.push_event(Event::Quit { timestamp: 0 });
-        assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
+        assert_eq!(Key::EofOrDelete, block_on(test.console().read_key()).unwrap());
 
         test.push_event(key_down(Keycode::C, Mod::LCTRLMOD));
         assert_eq!(Key::Interrupt, block_on(test.console().read_key()).unwrap());
@@ -751,9 +751,9 @@ mod tests {
         assert_eq!(Signal::Break, test.wait_one_signal());
 
         test.push_event(key_down(Keycode::D, Mod::LCTRLMOD));
-        assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
+        assert_eq!(Key::EofOrDelete, block_on(test.console().read_key()).unwrap());
         test.push_event(key_down(Keycode::D, Mod::RCTRLMOD));
-        assert_eq!(Key::Eof, block_on(test.console().read_key()).unwrap());
+        assert_eq!(Key::EofOrDelete, block_on(test.console().read_key()).unwrap());
 
         test.push_event(key_down(Keycode::D, Mod::empty()));
         test.push_event(key_down(Keycode::Up, Mod::empty()));

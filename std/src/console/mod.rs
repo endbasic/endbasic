@@ -76,14 +76,16 @@ pub enum Key {
     /// The end key or `Ctrl-E`.
     End,
 
-    /// Indicates a request for termination (e.g. `Ctrl-D`).
-    Eof,
+    /// Indicates `Ctrl-D` in interactive consoles, or an end-of-input condition in raw ones.
+    ///
+    /// Consumers may interpret this as EOF or as delete depending on context.
+    EofOrDelete,
 
     /// The escape key.
     Escape,
 
     /// Indicates a request for interrupt (e.g. `Ctrl-C`).
-    // TODO(jmmv): This (and maybe Eof too) should probably be represented as a more generic
+    // TODO(jmmv): This (and maybe EofOrDelete too) should probably be represented as a more
     // Control(char) value so that we can represent other control sequences and allow the logic in
     // here to determine what to do with each.
     Interrupt,
@@ -461,13 +463,13 @@ pub fn read_key_from_stdin(buffer: &mut VecDeque<Key>) -> io::Result<Key> {
     if buffer.is_empty() {
         let mut line = String::new();
         if io::stdin().read_line(&mut line)? == 0 {
-            return Ok(Key::Eof);
+            return Ok(Key::EofOrDelete);
         }
         *buffer = line_to_keys(line);
     }
     match buffer.pop_front() {
         Some(key) => Ok(key),
-        None => Ok(Key::Eof),
+        None => Ok(Key::EofOrDelete),
     }
 }
 

@@ -55,7 +55,7 @@ fn on_key_event_into_key(dom_event: KeyboardEvent) -> Key {
         b'A' if dom_event.ctrl_key() => Key::Home,
         b'B' if dom_event.ctrl_key() => Key::ArrowLeft,
         b'C' if dom_event.ctrl_key() => Key::Interrupt,
-        b'D' if dom_event.ctrl_key() => Key::Eof,
+        b'D' if dom_event.ctrl_key() => Key::EofOrDelete,
         b'E' if dom_event.ctrl_key() => Key::End,
         b'F' if dom_event.ctrl_key() => Key::ArrowRight,
         b'J' if dom_event.ctrl_key() => Key::NewLine,

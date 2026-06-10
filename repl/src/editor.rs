@@ -281,7 +281,7 @@ impl Editor {
             console.sync_now()?;
 
             match console.read_key().await? {
-                Key::Escape | Key::Eof | Key::Interrupt => break,
+                Key::Escape | Key::Interrupt => break,
 
                 Key::ArrowUp => self.move_up(1),
 
@@ -348,7 +348,7 @@ impl Editor {
                     self.insert_col = self.file_pos.col;
                 }
 
-                Key::Delete => {
+                Key::Delete | Key::EofOrDelete => {
                     if self.file_pos.col < self.content[self.file_pos.line].len() {
                         let line = &mut self.content[self.file_pos.line];
                         line.remove(self.file_pos.col);
@@ -653,10 +653,11 @@ mod tests {
 
         let mut console = MockConsole::default();
         console.set_size_chars(yx(10, 40));
+        console.add_input_keys(&[Key::Escape]);
         block_on(editor.edit(&mut console)).unwrap();
         assert!(!editor.is_dirty());
 
-        console.add_input_keys(&[Key::Char('x')]);
+        console.add_input_keys(&[Key::Char('x'), Key::Escape]);
         block_on(editor.edit(&mut console)).unwrap();
         assert!(editor.is_dirty());
 
@@ -668,7 +669,7 @@ mod tests {
         assert_eq!("different\n", editor.text());
         assert!(!editor.is_dirty());
 
-        console.add_input_keys(&[Key::Char('x')]);
+        console.add_input_keys(&[Key::Char('x'), Key::Escape]);
         block_on(editor.edit(&mut console)).unwrap();
         assert!(editor.is_dirty());
 
@@ -1102,8 +1103,7 @@ mod tests {
         run_editor("          aligned", "aligned\n", cb, ob);
     }
 
-    #[test]
-    fn test_delete_in_middle_of_line() {
+    fn do_delete_in_middle_of_line_test(key: Key) {
         let mut cb = MockConsole::default();
         cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
@@ -1114,11 +1114,21 @@ mod tests {
             ob = ob.quick_refresh(linecol(0, usize::from(i + 1)), yx(0, i + 1));
         }
 
-        cb.add_input_keys(&[Key::Delete]);
+        cb.add_input_keys(&[key]);
         ob = ob.set_dirty();
         ob = ob.refresh(linecol(0, 7), &["has a tpo"], yx(0, 7));
 
         run_editor("has a typo\n", "has a tpo\n", cb, ob);
+    }
+
+    #[test]
+    fn test_delete_in_middle_of_line() {
+        do_delete_in_middle_of_line_test(Key::Delete)
+    }
+
+    #[test]
+    fn test_ctrl_d_in_middle_of_line() {
+        do_delete_in_middle_of_line_test(Key::EofOrDelete)
     }
 
     #[test]
@@ -1143,8 +1153,7 @@ mod tests {
         run_editor("sample\n", "sampl\n", cb, ob);
     }
 
-    #[test]
-    fn test_delete_joins_with_next_line() {
+    fn do_delete_joins_with_next_line_test(key: Key) {
         let mut cb = MockConsole::default();
         cb.set_size_chars(yx(10, 40));
         let mut ob = OutputBuilder::new(yx(10, 40));
@@ -1155,11 +1164,21 @@ mod tests {
             ob = ob.quick_refresh(linecol(0, usize::from(i + 1)), yx(0, i + 1));
         }
 
-        cb.add_input_keys(&[Key::Delete]);
+        cb.add_input_keys(&[key]);
         ob = ob.set_dirty();
         ob = ob.refresh(linecol(0, 5), &["firstsecond"], yx(0, 5));
 
         run_editor("first\nsecond\n", "firstsecond\n", cb, ob);
+    }
+
+    #[test]
+    fn test_delete_joins_with_next_line() {
+        do_delete_joins_with_next_line_test(Key::Delete)
+    }
+
+    #[test]
+    fn test_ctrl_d_joins_with_next_line() {
+        do_delete_joins_with_next_line_test(Key::EofOrDelete)
     }
 
     #[test]

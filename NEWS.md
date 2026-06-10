@@ -56,6 +56,9 @@ for the time being.**
 
 *   Issue #221: Added support for the delete key in the editor and readline.
 
+*   Fixed Ctrl-D so that it does not produce an EOF (and thus does not exit
+    the interpreter) when pressed within a non-empty line.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**

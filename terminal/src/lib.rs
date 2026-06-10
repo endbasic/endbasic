@@ -53,7 +53,7 @@ fn parse_key_event(ev: KeyEvent) -> Option<Key> {
         KeyCode::Char('a') if ev.modifiers == KeyModifiers::CONTROL => Key::Home,
         KeyCode::Char('b') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowLeft,
         KeyCode::Char('c') if ev.modifiers == KeyModifiers::CONTROL => Key::Interrupt,
-        KeyCode::Char('d') if ev.modifiers == KeyModifiers::CONTROL => Key::Eof,
+        KeyCode::Char('d') if ev.modifiers == KeyModifiers::CONTROL => Key::EofOrDelete,
         KeyCode::Char('e') if ev.modifiers == KeyModifiers::CONTROL => Key::End,
         KeyCode::Char('f') if ev.modifiers == KeyModifiers::CONTROL => Key::ArrowRight,
         KeyCode::Char('j') if ev.modifiers == KeyModifiers::CONTROL => Key::NewLine,
@@ -211,7 +211,7 @@ impl TerminalConsole {
                 }
             };
 
-            done = key == Key::Eof;
+            done = key == Key::EofOrDelete;
 
             // This should never fail but can if the receiver outruns the console because we don't
             // await for the handler to terminate (which we cannot do safely because `Drop` is not
@@ -236,14 +236,14 @@ impl InputOps for TerminalConsole {
         match self.on_key_rx.try_recv() {
             Ok(k) => Ok(Some(k)),
             Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Closed) => Ok(Some(Key::Eof)),
+            Err(TryRecvError::Closed) => Ok(Some(Key::EofOrDelete)),
         }
     }
 
     async fn read_key(&mut self) -> io::Result<Key> {
         match self.on_key_rx.recv().await {
             Ok(k) => Ok(k),
-            Err(_) => Ok(Key::Eof),
+            Err(_) => Ok(Key::EofOrDelete),
         }
     }
 }
@@ -454,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn test_drive_raw_keys_eof_does_not_terminate_worker() {
+    fn test_drive_raw_keys_eof_or_delete_does_not_terminate_worker() {
         let (on_key_tx, on_key_rx) = async_channel::unbounded();
         let (signals_tx, _signals_rx) = async_channel::unbounded();
         let events = stream::iter([Ok(Event::Key(KeyEvent::new(
@@ -468,7 +468,7 @@ mod tests {
             runtime.block_on(TerminalConsole::raw_key_handler(events, on_key_tx, signals_tx));
         });
 
-        assert_eq!(Key::Eof, on_key_rx.recv_blocking().unwrap());
+        assert_eq!(Key::EofOrDelete, on_key_rx.recv_blocking().unwrap());
 
         on_key_rx.close();
         handle.join().unwrap();

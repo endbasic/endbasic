@@ -301,7 +301,7 @@ impl Console for MockConsole {
                 }
                 Ok(ch)
             }
-            None => Ok(Key::Eof),
+            None => Ok(Key::EofOrDelete),
         }
     }
 
