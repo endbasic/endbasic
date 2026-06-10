@@ -54,6 +54,8 @@ for the time being.**
 *   Fixed various issues in the web and SDL consoles with blanking new lines
     and the whole screen when a non-default color is set.
 
+*   Issue #221: Added support for the delete key in the editor and readline.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**

@@ -39,6 +39,7 @@ fn parse_key_event(ev: KeyEvent) -> Option<Key> {
 
     let key = match ev.code {
         KeyCode::Backspace => Key::Backspace,
+        KeyCode::Delete => Key::Delete,
         KeyCode::End => Key::End,
         KeyCode::Esc => Key::Escape,
         KeyCode::Home => Key::Home,
@@ -443,6 +444,14 @@ mod tests {
     use super::*;
     use futures_util::stream;
     use std::thread;
+
+    #[test]
+    fn test_parse_key_event_delete() {
+        assert_eq!(
+            Some(Key::Delete),
+            parse_key_event(KeyEvent::new(KeyCode::Delete, KeyModifiers::NONE))
+        );
+    }
 
     #[test]
     fn test_drive_raw_keys_eof_does_not_terminate_worker() {

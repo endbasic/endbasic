@@ -111,6 +111,13 @@ impl Default for Editor {
 }
 
 impl Editor {
+    /// Appends the line at `line + 1` to the line at `line`.
+    fn join_next_line_into(&mut self, line: usize) {
+        let next = self.content.remove(line + 1);
+        self.content[line].push_str(&next);
+        self.dirty = true;
+    }
+
     /// Rewrites the status line at the bottom of the `console`, using the previously queried
     /// `console_size`.
     ///
@@ -333,15 +340,30 @@ impl Editor {
                             self.dirty = true;
                         }
                     } else if self.file_pos.line > 0 {
-                        let line = self.content.remove(self.file_pos.line);
-                        let prev = &mut self.content[self.file_pos.line - 1];
-                        self.file_pos.col = prev.len();
-                        prev.push_str(&line);
+                        self.file_pos.col = self.content[self.file_pos.line - 1].len();
+                        self.join_next_line_into(self.file_pos.line - 1);
                         self.file_pos.line -= 1;
                         need_refresh = true;
-                        self.dirty = true;
                     }
                     self.insert_col = self.file_pos.col;
+                }
+
+                Key::Delete => {
+                    if self.file_pos.col < self.content[self.file_pos.line].len() {
+                        let line = &mut self.content[self.file_pos.line];
+                        line.remove(self.file_pos.col);
+                        self.dirty = true;
+                        if self.file_pos.col < line.len() {
+                            need_refresh = true;
+                        } else {
+                            console.hide_cursor()?;
+                            console.clear(ClearType::UntilNewLine)?;
+                            console.show_cursor()?;
+                        }
+                    } else if self.file_pos.line + 1 < self.content.len() {
+                        self.join_next_line_into(self.file_pos.line);
+                        need_refresh = true;
+                    }
                 }
 
                 Key::Char(ch) => {
@@ -1078,6 +1100,84 @@ mod tests {
         ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
 
         run_editor("          aligned", "aligned\n", cb, ob);
+    }
+
+    #[test]
+    fn test_delete_in_middle_of_line() {
+        let mut cb = MockConsole::default();
+        cb.set_size_chars(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["has a typo"], yx(0, 0));
+
+        for i in 0..7u16 {
+            cb.add_input_keys(&[Key::ArrowRight]);
+            ob = ob.quick_refresh(linecol(0, usize::from(i + 1)), yx(0, i + 1));
+        }
+
+        cb.add_input_keys(&[Key::Delete]);
+        ob = ob.set_dirty();
+        ob = ob.refresh(linecol(0, 7), &["has a tpo"], yx(0, 7));
+
+        run_editor("has a typo\n", "has a tpo\n", cb, ob);
+    }
+
+    #[test]
+    fn test_delete_last_character_of_line() {
+        let mut cb = MockConsole::default();
+        cb.set_size_chars(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["sample"], yx(0, 0));
+
+        for i in 0..5u16 {
+            cb.add_input_keys(&[Key::ArrowRight]);
+            ob = ob.quick_refresh(linecol(0, usize::from(i + 1)), yx(0, i + 1));
+        }
+
+        cb.add_input_keys(&[Key::Delete]);
+        ob = ob.set_dirty();
+        ob = ob.add(CapturedOut::HideCursor);
+        ob = ob.add(CapturedOut::Clear(ClearType::UntilNewLine));
+        ob = ob.add(CapturedOut::ShowCursor);
+        ob = ob.quick_refresh(linecol(0, 5), yx(0, 5));
+
+        run_editor("sample\n", "sampl\n", cb, ob);
+    }
+
+    #[test]
+    fn test_delete_joins_with_next_line() {
+        let mut cb = MockConsole::default();
+        cb.set_size_chars(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["first", "second"], yx(0, 0));
+
+        for i in 0..5u16 {
+            cb.add_input_keys(&[Key::ArrowRight]);
+            ob = ob.quick_refresh(linecol(0, usize::from(i + 1)), yx(0, i + 1));
+        }
+
+        cb.add_input_keys(&[Key::Delete]);
+        ob = ob.set_dirty();
+        ob = ob.refresh(linecol(0, 5), &["firstsecond"], yx(0, 5));
+
+        run_editor("first\nsecond\n", "firstsecond\n", cb, ob);
+    }
+
+    #[test]
+    fn test_delete_at_end_of_file_is_ignored() {
+        let mut cb = MockConsole::default();
+        cb.set_size_chars(yx(10, 40));
+        let mut ob = OutputBuilder::new(yx(10, 40));
+        ob = ob.refresh(linecol(0, 0), &["sample"], yx(0, 0));
+
+        for i in 0..6u16 {
+            cb.add_input_keys(&[Key::ArrowRight]);
+            ob = ob.quick_refresh(linecol(0, usize::from(i + 1)), yx(0, i + 1));
+        }
+
+        cb.add_input_keys(&[Key::Delete]);
+        ob = ob.quick_refresh(linecol(0, 6), yx(0, 6));
+
+        run_editor("sample\n", "sample\n", cb, ob);
     }
 
     #[test]
