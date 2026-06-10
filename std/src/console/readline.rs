@@ -22,6 +22,35 @@ use std::io;
 /// Character to print when typing a secure string.
 const SECURE_CHAR: &str = "*";
 
+/// Erases the character at `remove_pos` and redraws the remainder of the line.
+fn erase_at(
+    console: &mut dyn Console,
+    cursor_pos: usize,
+    remove_pos: usize,
+    line: &mut LineBuffer,
+    echo: bool,
+) -> io::Result<()> {
+    debug_assert!(remove_pos < line.len());
+    debug_assert!(remove_pos <= cursor_pos);
+
+    console.hide_cursor()?;
+    let delta = cursor_pos - remove_pos;
+    if delta > 0 {
+        console.move_within_line(-(delta as i16))?;
+    }
+    let tail_len = line.len() - remove_pos - 1;
+    if echo {
+        console.write(&line.end(remove_pos + 1))?;
+    } else {
+        console.write(&SECURE_CHAR.repeat(tail_len))?;
+    }
+    console.write(" ")?;
+    console.move_within_line(-((tail_len + 1) as i16))?;
+    console.show_cursor()?;
+    line.remove(remove_pos);
+    Ok(())
+}
+
 /// Refreshes the current input line to display `line` assuming that the cursor is currently
 /// offset by `pos` characters from the beginning of the input and that the previous line was
 /// `clear_len` characters long.
@@ -155,18 +184,14 @@ async fn read_line_interactive(
 
             Key::Backspace => {
                 if pos > 0 {
-                    console.hide_cursor()?;
-                    console.move_within_line(-1)?;
-                    if echo {
-                        console.write(&line.end(pos))?;
-                    } else {
-                        console.write(&SECURE_CHAR.repeat(line.len() - pos))?;
-                    }
-                    console.write(" ")?;
-                    console.move_within_line(-((line.len() - pos) as i16 + 1))?;
-                    console.show_cursor()?;
-                    line.remove(pos - 1);
+                    erase_at(console, pos, pos - 1, &mut line, echo)?;
                     pos -= 1;
+                }
+            }
+
+            Key::Delete => {
+                if pos < line.len() {
+                    erase_at(console, pos, pos, &mut line, echo)?;
                 }
             }
 
@@ -287,6 +312,7 @@ async fn read_line_raw(console: &mut dyn Console) -> io::Result<String> {
                 }
             }
             Key::Char(ch) => line.push(ch),
+            Key::Delete => (),
             Key::End | Key::Home => (),
             Key::Escape => (),
             Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
@@ -474,6 +500,7 @@ mod tests {
     fn test_read_line_interactive_empty() {
         ReadLineInteractiveTest::default().accept();
         ReadLineInteractiveTest::default().add_key(Key::Backspace).accept();
+        ReadLineInteractiveTest::default().add_key(Key::Delete).accept();
         ReadLineInteractiveTest::default().add_key(Key::ArrowLeft).accept();
         ReadLineInteractiveTest::default().add_key(Key::ArrowRight).accept();
     }
@@ -741,6 +768,70 @@ mod tests {
             .add_output(CapturedOut::ShowCursor)
             // -
             .set_line("has a typo")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_middle_delete() {
+        ReadLineInteractiveTest::default()
+            .add_key_chars("has a typo")
+            .add_output_bytes("has a typo")
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::Delete)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::Write("o".to_string()))
+            .add_output_bytes(" ")
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .add_key_chars("e")
+            .add_output(CapturedOut::HideCursor)
+            .add_output_bytes("e")
+            .add_output(CapturedOut::Write("o".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("has a tyeo")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_utf8_delete_2byte_char() {
+        ReadLineInteractiveTest::default()
+            .add_key_chars("àé")
+            .add_output(CapturedOut::Write("à".to_string()))
+            .add_output(CapturedOut::Write("é".to_string()))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::Delete)
+            .add_output(CapturedOut::HideCursor)
+            .add_output_bytes("")
+            .add_output_bytes(" ")
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("à")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_delete_at_end_is_ignored() {
+        ReadLineInteractiveTest::default()
+            .set_previous("sample")
+            .add_output(CapturedOut::Write("sample".to_string()))
+            .add_output(CapturedOut::SyncNow)
+            // -
+            .add_key(Key::Delete)
+            // -
+            .set_line("sample")
             .accept();
     }
 
@@ -1155,6 +1246,29 @@ mod tests {
             .add_output(CapturedOut::ShowCursor)
             // -
             .set_line("pass123756")
+            .accept();
+
+        ReadLineInteractiveTest::default()
+            .set_echo(false)
+            .set_prompt("> ")
+            .set_previous("pass1234")
+            .add_output(CapturedOut::Write("> ********".to_string()))
+            .add_output(CapturedOut::SyncNow)
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::Delete)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::Write("*".to_string()))
+            .add_output_bytes(" ")
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("pass124")
             .accept();
     }
 

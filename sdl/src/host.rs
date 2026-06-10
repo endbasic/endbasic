@@ -161,6 +161,7 @@ fn parse_event(event: Event) -> Option<Key> {
             Keycode::P if keymod.intersects(ctrl_mods) => Some(Key::ArrowUp),
 
             Keycode::Backspace => Some(Key::Backspace),
+            Keycode::Delete => Some(Key::Delete),
             Keycode::End => Some(Key::End),
             Keycode::Escape => Some(Key::Escape),
             Keycode::Home => Some(Key::Home),
@@ -839,6 +840,7 @@ mod tests {
             parse_event(key_down(Keycode::C, Mod::LCTRLMOD | Mod::NUMMOD))
         );
         assert_eq!(Some(Key::Eof), parse_event(key_down(Keycode::D, Mod::RCTRLMOD | Mod::CAPSMOD)));
+        assert_eq!(Some(Key::Delete), parse_event(key_down(Keycode::Delete, Mod::NOMOD)));
     }
 
     #[test]

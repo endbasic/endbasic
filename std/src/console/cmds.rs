@@ -254,6 +254,7 @@ impl Callable for InKeyFunction {
             Some(Key::Backspace) => "BS".to_owned(),
             Some(Key::CarriageReturn) => "ENTER".to_owned(),
             Some(Key::Char(x)) => format!("{}", x),
+            Some(Key::Delete) => "DEL".to_owned(),
             Some(Key::End) => "END".to_owned(),
             Some(Key::Eof) => "EOF".to_owned(),
             Some(Key::Escape) => "ESC".to_owned(),
