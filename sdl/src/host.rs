@@ -145,14 +145,14 @@ fn parse_event(event: Event) -> Option<Key> {
             // For now, we recognize it here so that closing the window causes the interpreter to
             // exit... but that only works when the interpreter is waiting for input (which means
             // that this also confuses INKEY).
-            Some(Key::Eof)
+            Some(Key::EofOrDelete)
         }
 
         Event::KeyDown { keycode: Some(keycode), keymod, .. } => match keycode {
             Keycode::A if keymod.intersects(ctrl_mods) => Some(Key::Home),
             Keycode::B if keymod.intersects(ctrl_mods) => Some(Key::ArrowLeft),
             Keycode::C if keymod.intersects(ctrl_mods) => Some(Key::Interrupt),
-            Keycode::D if keymod.intersects(ctrl_mods) => Some(Key::Eof),
+            Keycode::D if keymod.intersects(ctrl_mods) => Some(Key::EofOrDelete),
             Keycode::E if keymod.intersects(ctrl_mods) => Some(Key::End),
             Keycode::F if keymod.intersects(ctrl_mods) => Some(Key::ArrowRight),
             Keycode::J if keymod.intersects(ctrl_mods) => Some(Key::NewLine),
@@ -839,7 +839,10 @@ mod tests {
             Some(Key::Interrupt),
             parse_event(key_down(Keycode::C, Mod::LCTRLMOD | Mod::NUMMOD))
         );
-        assert_eq!(Some(Key::Eof), parse_event(key_down(Keycode::D, Mod::RCTRLMOD | Mod::CAPSMOD)));
+        assert_eq!(
+            Some(Key::EofOrDelete),
+            parse_event(key_down(Keycode::D, Mod::RCTRLMOD | Mod::CAPSMOD))
+        );
         assert_eq!(Some(Key::Delete), parse_event(key_down(Keycode::Delete, Mod::NOMOD)));
     }
 

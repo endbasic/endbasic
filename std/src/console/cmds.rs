@@ -256,7 +256,7 @@ impl Callable for InKeyFunction {
             Some(Key::Char(x)) => format!("{}", x),
             Some(Key::Delete) => "DEL".to_owned(),
             Some(Key::End) => "END".to_owned(),
-            Some(Key::Eof) => "EOF".to_owned(),
+            Some(Key::EofOrDelete) => "EOF".to_owned(),
             Some(Key::Escape) => "ESC".to_owned(),
             Some(Key::Home) => "HOME".to_owned(),
             Some(Key::Interrupt) => "INT".to_owned(),
@@ -931,7 +931,11 @@ mod tests {
 
     #[test]
     fn test_input_propagates_eof_as_error() {
-        Tester::default().add_input_keys(&[Key::Eof]).run("INPUT a").expect_err("1:1: EOF").check();
+        Tester::default()
+            .add_input_keys(&[Key::EofOrDelete])
+            .run("INPUT a")
+            .expect_err("1:1: EOF")
+            .check();
     }
 
     #[test]

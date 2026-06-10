@@ -116,7 +116,7 @@ impl<K: InputOps> InputOps for ST7735SInput<K> {
         match self.on_button_rx.try_recv() {
             Ok(k) => Ok(Some(k)),
             Err(TryRecvError::Empty) => self.keyboard.poll_key().await,
-            Err(TryRecvError::Closed) => Ok(Some(Key::Eof)),
+            Err(TryRecvError::Closed) => Ok(Some(Key::EofOrDelete)),
         }
     }
 
@@ -125,7 +125,7 @@ impl<K: InputOps> InputOps for ST7735SInput<K> {
             result = self.on_button_rx.recv() => {
                 match result {
                     Ok(k) => Ok(k),
-                    Err(_) => Ok(Key::Eof),
+                    Err(_) => Ok(Key::EofOrDelete),
                 }
             }
             result = self.keyboard.read_key() => result,

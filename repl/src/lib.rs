@@ -467,7 +467,7 @@ mod tests {
             console.add_input_chars("PRINT");
             block_on(signals_tx.send(Signal::Break)).unwrap();
             console.add_input_chars(" 123");
-            console.add_input_keys(&[Key::NewLine, Key::Eof]);
+            console.add_input_keys(&[Key::NewLine, Key::EofOrDelete]);
         }
         block_on(run_repl_loop(&mut machine, console, program)).unwrap();
         tester.run("").expect_prints([" 123", "End of input by CTRL-D"]).check();
@@ -483,9 +483,9 @@ mod tests {
         {
             let mut console = console.borrow_mut();
             console.add_input_chars("INPUT a\n");
-            console.add_input_keys(&[Key::Eof]);
+            console.add_input_keys(&[Key::EofOrDelete]);
             console.add_input_chars("PRINT 3\n");
-            console.add_input_keys(&[Key::Eof]);
+            console.add_input_keys(&[Key::EofOrDelete]);
         }
         block_on(run_repl_loop(&mut machine, console, program)).unwrap();
         tester.run("").expect_prints(["ERROR: 1:1: EOF", " 3", "End of input by CTRL-D"]).check();

@@ -195,6 +195,12 @@ async fn read_line_interactive(
                 }
             }
 
+            Key::EofOrDelete if !line.is_empty() => {
+                if pos < line.len() {
+                    erase_at(console, pos, pos, &mut line, echo)?;
+                }
+            }
+
             Key::CarriageReturn => {
                 // TODO(jmmv): This is here because the integration tests may be checked out with
                 // CRLF line endings on Windows, which means we'd see two characters to end a line
@@ -247,7 +253,7 @@ async fn read_line_interactive(
                 }
             }
 
-            Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
+            Key::EofOrDelete => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
 
             Key::Escape => {
                 // Intentionally ignored.
@@ -315,7 +321,7 @@ async fn read_line_raw(console: &mut dyn Console) -> io::Result<String> {
             Key::Delete => (),
             Key::End | Key::Home => (),
             Key::Escape => (),
-            Key::Eof => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
+            Key::EofOrDelete => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
             Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
             Key::NewLine => break,
             Key::PageDown | Key::PageUp => (),
@@ -472,25 +478,33 @@ mod tests {
             let mut console = MockConsole::default();
             console.add_input_keys(&self.keys);
             console.set_size_chars(self.size_chars);
-            let line = match self.history.as_mut() {
-                Some(history) => block_on(read_line_interactive(
-                    &mut console,
-                    self.prompt,
-                    self.previous,
-                    Some(history),
-                    self.echo,
-                ))
-                .unwrap(),
-                None => block_on(read_line_interactive(
-                    &mut console,
-                    self.prompt,
-                    self.previous,
-                    None,
-                    self.echo,
-                ))
-                .unwrap(),
-            };
+            let line = block_on(read_line_interactive(
+                &mut console,
+                self.prompt,
+                self.previous,
+                self.history.as_mut(),
+                self.echo,
+            ))
+            .unwrap();
             assert_eq!(self.exp_line, &line);
+            assert_eq!(self.exp_output.as_slice(), console.captured_out());
+            assert_eq!(self.exp_history, self.history);
+        }
+
+        /// Executes the test and expects the given error kind.
+        fn expect_err(mut self, exp_kind: io::ErrorKind) {
+            let mut console = MockConsole::default();
+            console.add_input_keys(&self.keys);
+            console.set_size_chars(self.size_chars);
+            let err = block_on(read_line_interactive(
+                &mut console,
+                self.prompt,
+                self.previous,
+                self.history.as_mut(),
+                self.echo,
+            ))
+            .expect_err("read_line_interactive should fail");
+            assert_eq!(exp_kind, err.kind());
             assert_eq!(self.exp_output.as_slice(), console.captured_out());
             assert_eq!(self.exp_history, self.history);
         }
@@ -501,6 +515,9 @@ mod tests {
         ReadLineInteractiveTest::default().accept();
         ReadLineInteractiveTest::default().add_key(Key::Backspace).accept();
         ReadLineInteractiveTest::default().add_key(Key::Delete).accept();
+        ReadLineInteractiveTest::default()
+            .add_key(Key::EofOrDelete)
+            .expect_err(io::ErrorKind::UnexpectedEof);
         ReadLineInteractiveTest::default().add_key(Key::ArrowLeft).accept();
         ReadLineInteractiveTest::default().add_key(Key::ArrowRight).accept();
     }
@@ -802,6 +819,36 @@ mod tests {
     }
 
     #[test]
+    fn test_read_line_interactive_middle_ctrl_d_deletes() {
+        ReadLineInteractiveTest::default()
+            .add_key_chars("has a typo")
+            .add_output_bytes("has a typo")
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            // -
+            .add_key(Key::EofOrDelete)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::Write("o".to_string()))
+            .add_output_bytes(" ")
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .add_key_chars("e")
+            .add_output(CapturedOut::HideCursor)
+            .add_output_bytes("e")
+            .add_output(CapturedOut::Write("o".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("has a tyeo")
+            .accept();
+    }
+
+    #[test]
     fn test_read_line_interactive_utf8_delete_2byte_char() {
         ReadLineInteractiveTest::default()
             .add_key_chars("àé")
@@ -830,6 +877,19 @@ mod tests {
             .add_output(CapturedOut::SyncNow)
             // -
             .add_key(Key::Delete)
+            // -
+            .set_line("sample")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_ctrl_d_at_end_is_ignored() {
+        ReadLineInteractiveTest::default()
+            .set_previous("sample")
+            .add_output(CapturedOut::Write("sample".to_string()))
+            .add_output(CapturedOut::SyncNow)
+            // -
+            .add_key(Key::EofOrDelete)
             // -
             .set_line("sample")
             .accept();
