@@ -27,7 +27,6 @@ set +ux
 nvm install --lts
 set -ux
 
-rustup target add wasm32-unknown-unknown
 wasm_bindgen_version="$(
     grep -A1 '^name = "wasm-bindgen"$' Cargo.lock \
         | grep '^version' \
@@ -43,8 +42,7 @@ nvm use --lts
 set -ux
 
 cd web
-npm ci --verbose
-npm run-script "build:${node_env}" --verbose
-npm run-script test --verbose
+make NODE_ENV="${node_env}" test
+make NODE_ENV="${node_env}" build-release
 touch dist/.nojekyll
 cd -
