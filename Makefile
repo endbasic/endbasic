@@ -51,9 +51,20 @@ regen-sdl:
 	    RUST_BACKTRACE=1 \
 	    cargo test $(TEST_ARGS) -- --include-ignored
 
-
 .PHONY: test-sdl
 test-sdl:
 	@cd sdl && \
 	    RUST_BACKTRACE=1 \
 	    cargo test $(TEST_ARGS) -- --include-ignored
+
+.PHONY: start-web-debug
+start-web-debug:
+	$(MAKE) -C web start-debug
+
+.PHONY: start-web-release
+start-web-release:
+	$(MAKE) -C web start-release
+
+.PHONY: test-web
+test-web:
+	$(MAKE) -C web test

@@ -3,23 +3,6 @@
     "version": "0.13.99",
     "description": "The EndBASIC programming language - web interface",
     "private": true,
-    "scripts": {
-        "_wasm:build:release": "cargo build --target wasm32-unknown-unknown --release && wasm-bindgen --target bundler --out-dir pkg --out-name index ../target/wasm32-unknown-unknown/release/endbasic_web.wasm && wasm-opt -O3 -o pkg/index_bg.wasm pkg/index_bg.wasm",
-        "_wasm:build:debug": "cargo build --target wasm32-unknown-unknown && wasm-bindgen --target bundler --out-dir pkg --out-name index ../target/wasm32-unknown-unknown/debug/endbasic_web.wasm",
-        "_build:release": "npm run _wasm:build:release && webpack --mode=production",
-        "_build:debug": "npm run _wasm:build:debug && webpack --mode=development",
-        "build:prod": "NODE_ENV=prod npm run _build:release",
-        "build:staging": "NODE_ENV=staging npm run _build:release",
-        "build:local": "NODE_ENV=local npm run _build:debug",
-        "_start:release": "webpack serve --mode=production",
-        "_start:debug": "webpack serve --mode=development",
-        "start:prod": "NODE_ENV=prod npm run _start:release",
-        "start:staging": "NODE_ENV=staging npm run _start:release",
-        "start:local": "NODE_ENV=local npm run _start:debug",
-        "test:wasm": "GECKODRIVER=./node_modules/.bin/geckodriver CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --target wasm32-unknown-unknown",
-        "test": "cargo test && npm run test:wasm",
-        "clean": "rimraf dist pkg"
-    },
     "repository": {
         "type": "git",
         "url": "git+https://github.com/endbasic/endbasic.git"
@@ -43,7 +26,6 @@
         "copy-webpack-plugin": "^14.0.0",
         "geckodriver": "^6.1.0",
         "html-webpack-plugin": "^5.6.3",
-        "rimraf": "^6.0.1",
         "webpack": "^5.96.1",
         "webpack-cli": "^5.1.4",
         "webpack-dev-server": "^5.1.0"
