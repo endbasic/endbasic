@@ -72,6 +72,26 @@ struct FilePos {
     col: usize,
 }
 
+/// Describes how much of the editor view must be repainted.
+///
+/// Order is important!  Later entries in this enum mean that "more" of the viewport must
+/// be refreshed.
+#[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+enum RefreshKind {
+    None,
+    CurrentLine,
+    Full,
+}
+
+impl RefreshKind {
+    /// Upgrades `self` to at least `new_value`.
+    fn upgrade(&mut self, new_value: Self) {
+        if new_value > *self {
+            *self = new_value;
+        }
+    }
+}
+
 /// An interactive console-based text editor.
 ///
 /// The text editor owns the textual contents it is editing.
@@ -192,6 +212,38 @@ impl Editor {
         Ok(())
     }
 
+    /// Refreshes only the line under the cursor, using the previously queried `console_size`.
+    fn refresh_current_line(
+        &self,
+        console: &mut dyn Console,
+        console_size: CharsXY,
+    ) -> io::Result<()> {
+        debug_assert!(self.file_pos.line >= self.viewport_pos.line);
+        debug_assert!(
+            self.file_pos.line < self.viewport_pos.line + usize::from(console_size.y - 1)
+        );
+
+        let row = self.file_pos.line - self.viewport_pos.line;
+        let row = if cfg!(debug_assertions) {
+            u16::try_from(row).expect("Computed y must have fit on screen")
+        } else {
+            row as u16
+        };
+
+        console.set_color(TEXT_COLOR.0, TEXT_COLOR.1)?;
+        console.locate(CharsXY::new(0, row))?;
+        console.clear(ClearType::CurrentLine)?;
+
+        let line = &self.content[self.file_pos.line];
+        if line.len() > self.viewport_pos.col {
+            console.write(&line.range(
+                self.viewport_pos.col,
+                self.viewport_pos.col + usize::from(console_size.x),
+            ))?;
+        }
+        Ok(())
+    }
+
     /// Moves the cursor down by the given number of lines in `nlines` or to the last line if there
     /// are insufficient lines to perform the move.
     fn move_down(&mut self, nlines: usize) {
@@ -226,7 +278,7 @@ impl Editor {
             self.content.push(LineBuffer::default());
         }
 
-        let mut need_refresh = true;
+        let mut refresh = RefreshKind::Full;
         loop {
             // The key handling below only deals with moving the insertion position within the file
             // but does not bother to update the viewport. Adjust it now, if necessary.
@@ -234,22 +286,22 @@ impl Editor {
             let height = usize::from(console_size.y);
             if self.file_pos.line < self.viewport_pos.line {
                 self.viewport_pos.line = self.file_pos.line;
-                need_refresh = true;
+                refresh.upgrade(RefreshKind::Full);
             } else if self.file_pos.line > self.viewport_pos.line + height - 2 {
                 if self.file_pos.line > height - 2 {
                     self.viewport_pos.line = self.file_pos.line - (height - 2);
                 } else {
                     self.viewport_pos.line = 0;
                 }
-                need_refresh = true;
+                refresh.upgrade(RefreshKind::Full);
             }
 
             if self.file_pos.col < self.viewport_pos.col {
                 self.viewport_pos.col = self.file_pos.col;
-                need_refresh = true;
+                refresh.upgrade(RefreshKind::Full);
             } else if self.file_pos.col >= self.viewport_pos.col + width {
                 self.viewport_pos.col = self.file_pos.col - width + 1;
-                need_refresh = true;
+                refresh.upgrade(RefreshKind::Full);
             }
 
             // TODO(jmmv): We must handle the cursor visibility outside of the non-sync block
@@ -257,13 +309,18 @@ impl Editor {
             // when syncing is disabled.  This is suboptimal and should be fixed by decoupling
             // the two properties...
             console.hide_cursor()?;
-            if need_refresh {
-                self.refresh(console, console_size)?;
-                need_refresh = false;
-            } else {
-                self.refresh_status(console, console_size)?;
-                console.set_color(TEXT_COLOR.0, TEXT_COLOR.1)?;
+            match refresh {
+                RefreshKind::Full => self.refresh(console, console_size)?,
+                RefreshKind::CurrentLine => {
+                    self.refresh_status(console, console_size)?;
+                    self.refresh_current_line(console, console_size)?;
+                }
+                RefreshKind::None => {
+                    self.refresh_status(console, console_size)?;
+                    console.set_color(TEXT_COLOR.0, TEXT_COLOR.1)?;
+                }
             }
+            refresh = RefreshKind::None;
             let cursor_pos = {
                 let x = self.file_pos.col - self.viewport_pos.col;
                 let y = self.file_pos.line - self.viewport_pos.line;
@@ -329,8 +386,7 @@ impl Editor {
                                 console.show_cursor()?;
                             }
                         } else {
-                            // TODO(jmmv): Refresh only the affected line.
-                            need_refresh = true;
+                            refresh.upgrade(RefreshKind::CurrentLine);
                         }
                         for _ in 0..nremove {
                             line.remove(self.file_pos.col - 1);
@@ -343,7 +399,7 @@ impl Editor {
                         self.file_pos.col = self.content[self.file_pos.line - 1].len();
                         self.join_next_line_into(self.file_pos.line - 1);
                         self.file_pos.line -= 1;
-                        need_refresh = true;
+                        refresh.upgrade(RefreshKind::Full);
                     }
                     self.insert_col = self.file_pos.col;
                 }
@@ -354,7 +410,7 @@ impl Editor {
                         line.remove(self.file_pos.col);
                         self.dirty = true;
                         if self.file_pos.col < line.len() {
-                            need_refresh = true;
+                            refresh.upgrade(RefreshKind::Full);
                         } else {
                             console.hide_cursor()?;
                             console.clear(ClearType::UntilNewLine)?;
@@ -362,7 +418,7 @@ impl Editor {
                         }
                     } else if self.file_pos.line + 1 < self.content.len() {
                         self.join_next_line_into(self.file_pos.line);
-                        need_refresh = true;
+                        refresh.upgrade(RefreshKind::Full);
                     }
                 }
 
@@ -371,15 +427,14 @@ impl Editor {
 
                     let line = &mut self.content[self.file_pos.line];
                     if self.file_pos.col < line.len() {
-                        // TODO(jmmv): Refresh only the affected line.
-                        need_refresh = true;
+                        refresh.upgrade(RefreshKind::CurrentLine);
                     }
 
                     line.insert(self.file_pos.col, ch);
                     self.file_pos.col += 1;
                     self.insert_col = self.file_pos.col;
 
-                    if cursor_pos.x < console_size.x - 1 && !need_refresh {
+                    if cursor_pos.x < console_size.x - 1 && refresh == RefreshKind::None {
                         console.write(ch.encode_utf8(&mut buf))?;
                     }
 
@@ -413,7 +468,9 @@ impl Editor {
                         self.file_pos.line + 1,
                         LineBuffer::from(indent + &new.into_inner()),
                     );
-                    need_refresh = !appending;
+                    if !appending {
+                        refresh.upgrade(RefreshKind::Full);
+                    }
 
                     self.file_pos.col = indent_len;
                     self.file_pos.line += 1;
@@ -428,8 +485,7 @@ impl Editor {
                 Key::Tab => {
                     let line = &mut self.content[self.file_pos.line];
                     if self.file_pos.col < line.len() {
-                        // TODO(jmmv): Refresh only the affected line.
-                        need_refresh = true;
+                        refresh.upgrade(RefreshKind::CurrentLine);
                     }
 
                     let new_pos = (self.file_pos.col + INDENT_WIDTH) / INDENT_WIDTH * INDENT_WIDTH;
@@ -440,7 +496,7 @@ impl Editor {
                     line.insert_str(self.file_pos.col, &new_text);
                     self.file_pos.col = new_pos;
                     self.insert_col = self.file_pos.col;
-                    if !need_refresh {
+                    if refresh == RefreshKind::None {
                         console.write(&new_text)?;
                     }
                     self.dirty = true;
@@ -582,6 +638,22 @@ mod tests {
             self.output.push(CapturedOut::HideCursor);
             self = self.refresh_status(file_pos);
             self.output.push(CapturedOut::SetColor(TEXT_COLOR.0, TEXT_COLOR.1));
+            self.output.push(CapturedOut::Locate(cursor));
+            self.output.push(CapturedOut::ShowCursor);
+            self.output.push(CapturedOut::SyncNow);
+            self
+        }
+
+        /// Records the console changes needed to refresh only the current line and the status bar.
+        fn refresh_line(mut self, file_pos: FilePos, line: &str, cursor: CharsXY) -> Self {
+            self.output.push(CapturedOut::HideCursor);
+            self = self.refresh_status(file_pos);
+            self.output.push(CapturedOut::SetColor(TEXT_COLOR.0, TEXT_COLOR.1));
+            self.output.push(CapturedOut::Locate(yx(cursor.y, 0)));
+            self.output.push(CapturedOut::Clear(ClearType::CurrentLine));
+            if !line.is_empty() {
+                self.output.push(CapturedOut::Write(line.to_string()));
+            }
             self.output.push(CapturedOut::Locate(cursor));
             self.output.push(CapturedOut::ShowCursor);
             self.output.push(CapturedOut::SyncNow);
@@ -738,16 +810,16 @@ mod tests {
 
         cb.add_input_chars("a");
         ob = ob.set_dirty();
-        ob = ob.refresh(linecol(0, 1), &["aprevious content"], yx(0, 1));
+        ob = ob.refresh_line(linecol(0, 1), "aprevious content", yx(0, 1));
 
         cb.add_input_chars("b");
-        ob = ob.refresh(linecol(0, 2), &["abprevious content"], yx(0, 2));
+        ob = ob.refresh_line(linecol(0, 2), "abprevious content", yx(0, 2));
 
         cb.add_input_chars("c");
-        ob = ob.refresh(linecol(0, 3), &["abcprevious content"], yx(0, 3));
+        ob = ob.refresh_line(linecol(0, 3), "abcprevious content", yx(0, 3));
 
         cb.add_input_chars(" ");
-        ob = ob.refresh(linecol(0, 4), &["abc previous content"], yx(0, 4));
+        ob = ob.refresh_line(linecol(0, 4), "abc previous content", yx(0, 4));
 
         run_editor("previous content", "abc previous content\n", cb, ob);
     }
@@ -772,7 +844,7 @@ mod tests {
         ob = ob.quick_refresh(linecol(0, 2), yx(0, 2));
 
         cb.add_input_chars("d");
-        ob = ob.refresh(linecol(0, 3), &["abdc"], yx(0, 3));
+        ob = ob.refresh_line(linecol(0, 3), "abdc", yx(0, 3));
 
         run_editor("", "abdc\n", cb, ob);
     }
@@ -903,13 +975,13 @@ mod tests {
 
         cb.add_input_chars(".");
         ob = ob.set_dirty();
-        ob = ob.refresh(linecol(0, 1), &[".text"], yx(0, 1));
+        ob = ob.refresh_line(linecol(0, 1), ".text", yx(0, 1));
 
         cb.add_input_keys(&[Key::Home]);
         ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
 
         cb.add_input_chars(",");
-        ob = ob.refresh(linecol(0, 1), &[",.text"], yx(0, 1));
+        ob = ob.refresh_line(linecol(0, 1), ",.text", yx(0, 1));
 
         run_editor("text", ",.text\n", cb, ob);
     }
@@ -941,7 +1013,7 @@ mod tests {
 
         cb.add_input_chars(".");
         ob = ob.set_dirty();
-        ob = ob.refresh(linecol(0, 3), &["  .text"], yx(0, 3));
+        ob = ob.refresh_line(linecol(0, 3), "  .text", yx(0, 3));
 
         run_editor("  text", "  .text\n", cb, ob);
     }
@@ -1025,10 +1097,10 @@ mod tests {
 
         cb.add_input_keys(&[Key::Tab]);
         ob = ob.set_dirty();
-        ob = ob.refresh(linecol(0, 4), &["    ."], yx(0, 4));
+        ob = ob.refresh_line(linecol(0, 4), "    .", yx(0, 4));
 
         cb.add_input_keys(&[Key::Tab]);
-        ob = ob.refresh(linecol(0, 8), &["        ."], yx(0, 8));
+        ob = ob.refresh_line(linecol(0, 8), "        .", yx(0, 8));
 
         run_editor(".", "        .\n", cb, ob);
     }
@@ -1089,13 +1161,13 @@ mod tests {
 
         cb.add_input_keys(&[Key::Backspace]);
         ob = ob.set_dirty();
-        ob = ob.refresh(linecol(0, 8), &["        aligned"], yx(0, 8));
+        ob = ob.refresh_line(linecol(0, 8), "        aligned", yx(0, 8));
 
         cb.add_input_keys(&[Key::Backspace]);
-        ob = ob.refresh(linecol(0, 4), &["    aligned"], yx(0, 4));
+        ob = ob.refresh_line(linecol(0, 4), "    aligned", yx(0, 4));
 
         cb.add_input_keys(&[Key::Backspace]);
-        ob = ob.refresh(linecol(0, 0), &["aligned"], yx(0, 0));
+        ob = ob.refresh_line(linecol(0, 0), "aligned", yx(0, 0));
 
         cb.add_input_keys(&[Key::Backspace]);
         ob = ob.quick_refresh(linecol(0, 0), yx(0, 0));
@@ -1226,7 +1298,7 @@ mod tests {
 
         cb.add_input_keys(&[Key::Char('X')]);
         ob = ob.set_dirty();
-        ob = ob.refresh(linecol(2, 5), &["longer", "a", "longXer", "b"], yx(2, 5));
+        ob = ob.refresh_line(linecol(2, 5), "longXer", yx(2, 5));
 
         cb.add_input_keys(&[Key::ArrowDown]);
         ob = ob.quick_refresh(linecol(3, 1), yx(3, 1));
@@ -1503,37 +1575,17 @@ mod tests {
             ob = ob.quick_refresh(linecol(1, *file_col), yx(1, *cursor_col));
         }
         cb.add_input_keys(&[Key::Char('D')]);
-        ob = ob.refresh(
-            linecol(1, 40),
-            &["", "456789012345678901234567890123456789DABC", ""],
-            yx(1, 37),
-        );
+        ob = ob.refresh_line(linecol(1, 40), "456789012345678901234567890123456789DABC", yx(1, 37));
         cb.add_input_keys(&[Key::Char('E')]);
-        ob = ob.refresh(
-            linecol(1, 41),
-            &["", "456789012345678901234567890123456789DEAB", ""],
-            yx(1, 38),
-        );
+        ob = ob.refresh_line(linecol(1, 41), "456789012345678901234567890123456789DEAB", yx(1, 38));
 
         // Delete a few characters to restore the overflow part of the insertion line.
         cb.add_input_keys(&[Key::Backspace]);
-        ob = ob.refresh(
-            linecol(1, 40),
-            &["", "456789012345678901234567890123456789DABC", ""],
-            yx(1, 37),
-        );
+        ob = ob.refresh_line(linecol(1, 40), "456789012345678901234567890123456789DABC", yx(1, 37));
         cb.add_input_keys(&[Key::Backspace]);
-        ob = ob.refresh(
-            linecol(1, 39),
-            &["", "456789012345678901234567890123456789ABC", ""],
-            yx(1, 36),
-        );
+        ob = ob.refresh_line(linecol(1, 39), "456789012345678901234567890123456789ABC", yx(1, 36));
         cb.add_input_keys(&[Key::Backspace]);
-        ob = ob.refresh(
-            linecol(1, 38),
-            &["", "45678901234567890123456789012345678ABC", ""],
-            yx(1, 35),
-        );
+        ob = ob.refresh_line(linecol(1, 38), "45678901234567890123456789012345678ABC", yx(1, 35));
 
         // Move back to the beginning of the line to see surrounding lines reappear.
         for col in 0u16..35u16 {
