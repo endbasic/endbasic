@@ -1,17 +1,18 @@
 // EndBASIC
 // Copyright 2021 Julio Merino
 //
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License.  You may obtain a copy
-// of the License at:
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-// License for the specific language governing permissions and limitations
-// under the License.
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Interactive line reader.
 
@@ -21,6 +22,19 @@ use std::io;
 
 /// Character to print when typing a secure string.
 const SECURE_CHAR: &str = "*";
+
+/// Adjusts the viewport start to ensure `pos` is visible within `width` columns.
+fn adjust_view(pos: usize, view_start: usize, width: usize) -> usize {
+    if width == 0 {
+        0
+    } else if pos < view_start {
+        pos
+    } else if pos > view_start + width {
+        pos - width
+    } else {
+        view_start
+    }
+}
 
 /// Erases the character at `remove_pos` and redraws the remainder of the line.
 fn erase_at(
@@ -51,27 +65,44 @@ fn erase_at(
     Ok(())
 }
 
-/// Refreshes the current input line to display `line` assuming that the cursor is currently
-/// offset by `pos` characters from the beginning of the input and that the previous line was
-/// `clear_len` characters long.
-fn update_line(
+/// Returns the text to render for the current viewport.
+fn render_line(line: &LineBuffer, view_start: usize, width: usize, echo: bool) -> String {
+    debug_assert!(view_start <= line.len());
+
+    if !echo {
+        SECURE_CHAR.repeat((line.len() - view_start).min(width))
+    } else {
+        line.range(view_start, view_start + width)
+    }
+}
+
+/// Refreshes the current input line to display `text` assuming that the cursor is currently
+/// offset by `old_pos` characters from the beginning of the rendered text, that the previous line
+/// was `clear_len` characters long, and that the cursor should end at `new_pos`.
+fn redraw_line(
     console: &mut dyn Console,
-    pos: usize,
+    old_pos: usize,
     clear_len: usize,
-    line: &LineBuffer,
+    new_pos: usize,
+    text: &str,
 ) -> io::Result<()> {
     console.hide_cursor()?;
-    if pos > 0 {
-        console.move_within_line(-(pos as i16))?;
+    if old_pos > 0 {
+        console.move_within_line(-(old_pos as i16))?;
     }
-    if !line.is_empty() {
-        console.write(&line.to_string())?;
+    if !text.is_empty() {
+        console.write(text)?;
     }
-    let line_len = line.len();
-    if line_len < clear_len {
-        let diff = clear_len - line_len;
+    let text_len = text.chars().count();
+    let written_len = text_len.max(clear_len);
+    if text_len < clear_len {
+        let diff = clear_len - text_len;
         console.write(&" ".repeat(diff))?;
-        console.move_within_line(-(diff as i16))?;
+    }
+    debug_assert!(new_pos <= written_len);
+    let reset = written_len - new_pos;
+    if reset > 0 {
+        console.move_within_line(-(reset as i16))?;
     }
     console.show_cursor()
 }
@@ -94,6 +125,7 @@ async fn read_line_interactive(
     let mut prompt = Cow::from(prompt);
     let mut prompt_len = prompt.len();
     if prompt_len >= console_width {
+        // TODO(jmmv): This slices by bytes and can split non-ASCII prompts.
         if console_width >= 5 {
             prompt = Cow::from(format!("{}...", &prompt[0..console_width - 5]));
         } else {
@@ -103,24 +135,30 @@ async fn read_line_interactive(
     }
 
     let mut line = LineBuffer::from(previous);
-    if !prompt.is_empty() || !line.is_empty() {
-        if echo {
-            console.write(&format!("{}{}", prompt, line))?;
-        } else {
-            console.write(&format!("{}{}", prompt, "*".repeat(line.len())))?;
-        }
-        console.sync_now()?;
-    }
-
     let width = {
         // Assumes that the prompt was printed at column 0.  If that was not the case, line length
         // calculation does not work.
         console_width - prompt_len
     };
+    let input_width = width.saturating_sub(1);
 
     // Insertion position *within* the line, without accounting for the prompt.
     // TODO(zenria): Handle UTF-8 graphemes.
     let mut pos = line.len();
+    let render = |line: &LineBuffer, pos: usize, view_start: usize| {
+        let view_start = adjust_view(pos, view_start, input_width);
+        let rendered = render_line(line, view_start, input_width, echo);
+        let rendered_len = rendered.chars().count();
+        (view_start, rendered, rendered_len)
+    };
+    let mut view_start = if input_width == 0 { 0 } else { pos.saturating_sub(input_width) };
+    let (new_view_start, mut rendered, mut rendered_len) = render(&line, pos, view_start);
+    view_start = new_view_start;
+
+    if !prompt.is_empty() || !rendered.is_empty() {
+        console.write(&format!("{}{}", prompt, rendered))?;
+        console.sync_now()?;
+    }
 
     let mut history_pos = match history.as_mut() {
         Some(history) => {
@@ -138,15 +176,16 @@ async fn read_line_interactive(
                         continue;
                     }
 
-                    let clear_len = line.len();
+                    let old_pos = pos - view_start;
+                    let clear_len = rendered_len;
 
                     history[history_pos] = line.into_inner();
                     history_pos -= 1;
                     line = LineBuffer::from(&history[history_pos]);
-
-                    update_line(console, pos, clear_len, &line)?;
-
                     pos = line.len();
+                    view_start = if input_width == 0 { 0 } else { pos.saturating_sub(input_width) };
+                    (view_start, rendered, rendered_len) = render(&line, pos, view_start);
+                    redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
                 }
             }
 
@@ -156,48 +195,97 @@ async fn read_line_interactive(
                         continue;
                     }
 
-                    let clear_len = line.len();
+                    let old_pos = pos - view_start;
+                    let clear_len = rendered_len;
 
                     history[history_pos] = line.to_string();
                     history_pos += 1;
                     line = LineBuffer::from(&history[history_pos]);
-
-                    update_line(console, pos, clear_len, &line)?;
-
                     pos = line.len();
+                    view_start = if input_width == 0 { 0 } else { pos.saturating_sub(input_width) };
+                    (view_start, rendered, rendered_len) = render(&line, pos, view_start);
+                    redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
                 }
             }
 
             Key::ArrowLeft => {
                 if pos > 0 {
-                    console.move_within_line(-1)?;
+                    let old_pos = pos - view_start;
                     pos -= 1;
+                    let new_view_start = adjust_view(pos, view_start, input_width);
+                    if new_view_start == view_start {
+                        console.move_within_line(-1)?;
+                    } else {
+                        let clear_len = rendered_len;
+                        view_start = new_view_start;
+                        rendered = render_line(&line, view_start, input_width, echo);
+                        rendered_len = rendered.chars().count();
+                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
+                    }
                 }
             }
 
             Key::ArrowRight => {
                 if pos < line.len() {
-                    console.move_within_line(1)?;
+                    let old_pos = pos - view_start;
                     pos += 1;
+                    let new_view_start = adjust_view(pos, view_start, input_width);
+                    if new_view_start == view_start {
+                        console.move_within_line(1)?;
+                    } else {
+                        let clear_len = rendered_len;
+                        view_start = new_view_start;
+                        rendered = render_line(&line, view_start, input_width, echo);
+                        rendered_len = rendered.chars().count();
+                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
+                    }
                 }
             }
 
             Key::Backspace => {
                 if pos > 0 {
-                    erase_at(console, pos, pos - 1, &mut line, echo)?;
-                    pos -= 1;
+                    if view_start == 0 && line.len() <= input_width {
+                        erase_at(console, pos, pos - 1, &mut line, echo)?;
+                        pos -= 1;
+                        rendered_len -= 1;
+                    } else {
+                        let old_pos = pos - view_start;
+                        let clear_len = rendered_len;
+                        line.remove(pos - 1);
+                        pos -= 1;
+                        (view_start, rendered, rendered_len) = render(&line, pos, view_start);
+                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
+                    }
                 }
             }
 
             Key::Delete => {
                 if pos < line.len() {
-                    erase_at(console, pos, pos, &mut line, echo)?;
+                    if view_start == 0 && line.len() <= input_width {
+                        erase_at(console, pos, pos, &mut line, echo)?;
+                        rendered_len -= 1;
+                    } else {
+                        let old_pos = pos - view_start;
+                        let clear_len = rendered_len;
+                        line.remove(pos);
+                        (view_start, rendered, rendered_len) = render(&line, pos, view_start);
+                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
+                    }
                 }
             }
 
             Key::EofOrDelete if !line.is_empty() => {
                 if pos < line.len() {
-                    erase_at(console, pos, pos, &mut line, echo)?;
+                    if view_start == 0 && line.len() <= input_width {
+                        erase_at(console, pos, pos, &mut line, echo)?;
+                        rendered_len -= 1;
+                    } else {
+                        let old_pos = pos - view_start;
+                        let clear_len = rendered_len;
+                        line.remove(pos);
+                        (view_start, rendered, rendered_len) = render(&line, pos, view_start);
+                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
+                    }
                 }
             }
 
@@ -213,43 +301,63 @@ async fn read_line_interactive(
             }
 
             Key::Char(ch) => {
-                let line_len = line.len();
-                debug_assert!(line_len < width);
-                if line_len == width - 1 {
-                    // TODO(jmmv): Implement support for lines that exceed the width of the input
-                    // field (the width of the screen).
+                if input_width == 0 {
                     continue;
                 }
 
-                if pos < line_len {
-                    console.hide_cursor()?;
-                    if echo {
-                        let mut buf = [0u8; 4];
-                        console.write(ch.encode_utf8(&mut buf))?;
-                        console.write(&line.end(pos))?;
+                let line_len = line.len();
+                let new_view_start = adjust_view(pos + 1, view_start, input_width);
+                if new_view_start == view_start && line_len < input_width {
+                    if pos < line_len {
+                        console.hide_cursor()?;
+                        if echo {
+                            let mut buf = [0u8; 4];
+                            console.write(ch.encode_utf8(&mut buf))?;
+                            console.write(&line.end(pos))?;
+                        } else {
+                            console.write(&SECURE_CHAR.repeat(line_len - pos + 1))?;
+                        }
+                        console.move_within_line(-((line_len - pos) as i16))?;
+                        console.show_cursor()?;
+                        line.insert(pos, ch);
                     } else {
-                        console.write(&SECURE_CHAR.repeat(line_len - pos + 1))?;
+                        if echo {
+                            let mut buf = [0u8; 4];
+                            console.write(ch.encode_utf8(&mut buf))?;
+                        } else {
+                            console.write(SECURE_CHAR)?;
+                        }
+                        line.insert(line_len, ch);
                     }
-                    console.move_within_line(-((line_len - pos) as i16))?;
-                    console.show_cursor()?;
-                    line.insert(pos, ch);
+                    pos += 1;
+                    rendered_len += 1;
                 } else {
-                    if echo {
-                        let mut buf = [0u8; 4];
-                        console.write(ch.encode_utf8(&mut buf))?;
-                    } else {
-                        console.write(SECURE_CHAR)?;
-                    }
-                    line.insert(line_len, ch);
+                    let old_pos = pos - view_start;
+                    let clear_len = rendered_len;
+                    line.insert(pos, ch);
+                    pos += 1;
+                    view_start = new_view_start;
+                    rendered = render_line(&line, view_start, input_width, echo);
+                    rendered_len = rendered.chars().count();
+                    redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
                 }
-                pos += 1;
             }
 
             Key::End => {
                 let offset = line.len() - pos;
                 if offset > 0 {
-                    console.move_within_line(offset as i16)?;
+                    let old_pos = pos - view_start;
                     pos += offset;
+                    let new_view_start = adjust_view(pos, view_start, input_width);
+                    if new_view_start == view_start {
+                        console.move_within_line(offset as i16)?;
+                    } else {
+                        let clear_len = rendered_len;
+                        view_start = new_view_start;
+                        rendered = render_line(&line, view_start, input_width, echo);
+                        rendered_len = rendered.chars().count();
+                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
+                    }
                 }
             }
 
@@ -261,8 +369,18 @@ async fn read_line_interactive(
 
             Key::Home => {
                 if pos > 0 {
-                    console.move_within_line(-(pos as i16))?;
+                    let old_pos = pos - view_start;
                     pos = 0;
+                    let new_view_start = adjust_view(pos, view_start, input_width);
+                    if new_view_start == view_start {
+                        console.move_within_line(-(old_pos as i16))?;
+                    } else {
+                        let clear_len = rendered_len;
+                        view_start = new_view_start;
+                        rendered = render_line(&line, view_start, input_width, echo);
+                        rendered_len = rendered.chars().count();
+                        redraw_line(console, old_pos, clear_len, 0, &rendered)?;
+                    }
                 }
             }
 
@@ -554,8 +672,24 @@ mod tests {
             // -
             .add_key_chars("hello")
             .add_output_bytes("h")
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("e".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("l".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("l".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("o".to_string()))
+            .add_output(CapturedOut::ShowCursor)
             // -
-            .set_line("h")
+            .set_line("hello")
             .accept();
     }
 
@@ -569,8 +703,24 @@ mod tests {
             // -
             .add_key_chars("hello")
             .add_output_bytes("h")
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("e".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("l".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("l".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("o".to_string()))
+            .add_output(CapturedOut::ShowCursor)
             // -
-            .set_line("h")
+            .set_line("hello")
             .accept();
     }
 
@@ -582,8 +732,20 @@ mod tests {
             // -
             .add_key_chars("hello")
             .add_output_bytes("he")
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::Write("el".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::Write("ll".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-2))
+            .add_output(CapturedOut::Write("lo".to_string()))
+            .add_output(CapturedOut::ShowCursor)
             // -
-            .set_line("he")
+            .set_line("hello")
             .accept();
     }
 
@@ -597,8 +759,24 @@ mod tests {
             // -
             .add_key_chars("hello")
             .add_output_bytes("h")
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("e".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("l".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("l".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::Write("o".to_string()))
+            .add_output(CapturedOut::ShowCursor)
             // -
-            .set_line("h")
+            .set_line("hello")
             .accept();
     }
 
@@ -984,29 +1162,67 @@ mod tests {
     }
 
     #[test]
-    fn test_read_line_interactive_horizontal_scrolling_not_implemented() {
+    fn test_read_line_interactive_horizontal_scrolling_while_appending() {
         ReadLineInteractiveTest::default()
-            .add_key_chars("1234567890123456789")
+            .add_key_chars("12345678901234")
             .add_output_bytes("12345678901234")
             // -
-            .set_line("12345678901234")
+            .add_key_chars("5")
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-14))
+            .add_output(CapturedOut::Write("23456789012345".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("123456789012345")
             .accept();
+    }
 
+    #[test]
+    fn test_read_line_interactive_horizontal_scrolling_while_navigating() {
         ReadLineInteractiveTest::default()
-            .add_key_chars("1234567890123456789")
-            .add_output_bytes("12345678901234")
+            .set_size_chars(CharsXY::new(6, 5))
+            .set_previous("abcdef")
+            .add_output(CapturedOut::Write("bcdef".to_string()))
+            .add_output(CapturedOut::SyncNow)
             // -
             .add_key(Key::ArrowLeft)
             .add_output(CapturedOut::MoveWithinLine(-1))
-            // -
             .add_key(Key::ArrowLeft)
             .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::Write("abcde".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-5))
+            .add_output(CapturedOut::ShowCursor)
             // -
-            .add_key_chars("these will all be ignored")
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::MoveWithinLine(1))
+            .add_key(Key::ArrowRight)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-5))
+            .add_output(CapturedOut::Write("bcdef".to_string()))
+            .add_output(CapturedOut::ShowCursor)
             // -
-            .set_line("12345678901234")
+            .set_line("abcdef")
             .accept();
+    }
 
+    #[test]
+    fn test_read_line_interactive_horizontal_scrolling_with_prompt_and_previous() {
         ReadLineInteractiveTest::default()
             .set_prompt("12345")
             .set_previous("67890")
@@ -1015,8 +1231,70 @@ mod tests {
             // -
             .add_key_chars("1234567890")
             .add_output_bytes("1234")
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-9))
+            .add_output(CapturedOut::Write("789012345".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-9))
+            .add_output(CapturedOut::Write("890123456".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-9))
+            .add_output(CapturedOut::Write("901234567".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-9))
+            .add_output(CapturedOut::Write("012345678".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-9))
+            .add_output(CapturedOut::Write("123456789".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-9))
+            .add_output(CapturedOut::Write("234567890".to_string()))
+            .add_output(CapturedOut::ShowCursor)
             // -
-            .set_line("678901234")
+            .set_line("678901234567890")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_horizontal_scrolling_secure() {
+        ReadLineInteractiveTest::default()
+            .set_size_chars(CharsXY::new(6, 5))
+            .set_echo(false)
+            .add_key_chars("abcdef")
+            .add_output_bytes("*****")
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-5))
+            .add_output(CapturedOut::Write("*****".to_string()))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("abcdef")
+            .accept();
+    }
+
+    #[test]
+    fn test_read_line_interactive_horizontal_scrolling_delete() {
+        ReadLineInteractiveTest::default()
+            .set_size_chars(CharsXY::new(6, 5))
+            .set_previous("abcdef")
+            .add_output(CapturedOut::Write("bcdef".to_string()))
+            .add_output(CapturedOut::SyncNow)
+            // -
+            .add_key(Key::ArrowLeft)
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_key(Key::Delete)
+            .add_output(CapturedOut::HideCursor)
+            .add_output(CapturedOut::MoveWithinLine(-4))
+            .add_output(CapturedOut::Write("bcde".to_string()))
+            .add_output(CapturedOut::Write(" ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-1))
+            .add_output(CapturedOut::ShowCursor)
+            // -
+            .set_line("abcde")
             .accept();
     }
 
@@ -1087,15 +1365,15 @@ mod tests {
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-("last".len() as i16)))
-            .add_output(CapturedOut::Write("long second line".to_string()))
+            .add_output(CapturedOut::Write(" second line".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-("long second line".len() as i16)))
+            .add_output(CapturedOut::MoveWithinLine(-(" second line".len() as i16)))
             .add_output(CapturedOut::Write("first".to_string()))
-            .add_output(CapturedOut::Write("           ".to_string()))
-            .add_output(CapturedOut::MoveWithinLine(-("           ".len() as i16)))
+            .add_output(CapturedOut::Write("       ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-("       ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowUp)
@@ -1103,15 +1381,15 @@ mod tests {
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
             .add_output(CapturedOut::MoveWithinLine(-("first".len() as i16)))
-            .add_output(CapturedOut::Write("long second line".to_string()))
+            .add_output(CapturedOut::Write(" second line".to_string()))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)
             .add_output(CapturedOut::HideCursor)
-            .add_output(CapturedOut::MoveWithinLine(-("long second line".len() as i16)))
+            .add_output(CapturedOut::MoveWithinLine(-(" second line".len() as i16)))
             .add_output(CapturedOut::Write("last".to_string()))
-            .add_output(CapturedOut::Write("            ".to_string()))
-            .add_output(CapturedOut::MoveWithinLine(-("            ".len() as i16)))
+            .add_output(CapturedOut::Write("        ".to_string()))
+            .add_output(CapturedOut::MoveWithinLine(-("        ".len() as i16)))
             .add_output(CapturedOut::ShowCursor)
             //
             .add_key(Key::ArrowDown)

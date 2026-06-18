@@ -59,6 +59,9 @@ for the time being.**
 *   Fixed Ctrl-D so that it does not produce an EOF (and thus does not exit
     the interpreter) when pressed within a non-empty line.
 
+*   Added support to edit lines longer than the console's width in the REPL
+    and in `INPUT` prompts, instead of rejecting input when the line is full.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**
