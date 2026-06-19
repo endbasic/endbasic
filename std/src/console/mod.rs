@@ -17,6 +17,7 @@
 //! Console representation and manipulation.
 
 use crate::Clearable;
+use crate::sound::{BEEP_TONE, Tone};
 use async_trait::async_trait;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -343,6 +344,16 @@ pub trait Console {
     ///
     /// Returns the previous status of the video syncing flag.
     fn set_sync(&mut self, _enabled: bool) -> io::Result<bool>;
+
+    /// Reproduces the standard canned beep tone.
+    async fn beep(&mut self) -> io::Result<()> {
+        self.play_tone(BEEP_TONE).await
+    }
+
+    /// Reproduces `tone` and returns once playback completes.
+    async fn play_tone(&mut self, _tone: Tone) -> io::Result<()> {
+        Err(io::Error::other("No audio support in this console"))
+    }
 }
 
 /// Trait to run the console's host on the main UI thread (if needed).

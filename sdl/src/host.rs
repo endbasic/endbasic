@@ -32,6 +32,8 @@ use endbasic_std::console::{
     SizeInPixels, rgb_to_ansi_color,
 };
 use endbasic_std::gfx::lcd::fonts::Font;
+use endbasic_std::sound::{NoopAudioOps, Tone, Waveform};
+use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
 use sdl2::pixels::{Color, PixelFormatEnum};
@@ -50,6 +52,9 @@ use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError};
 use std::thread;
 use std::time::Duration;
+
+/// Sample rate to use for tone playback.
+const AUDIO_SAMPLE_RATE: i32 = 44_100;
 
 /// Raises the current app to the front.
 #[cfg(target_os = "macos")]
@@ -230,6 +235,12 @@ struct Context {
 
     /// Current draw color.  Used only to track if we need to update the context.
     draw_color: RGB,
+
+    /// Audio queue for tone playback.
+    ///
+    /// This is lazily initialized because audio support may not be present (as we seen during CI
+    /// runs on Windows).
+    audio_device: Option<AudioQueue<i16>>,
 }
 
 impl Context {
@@ -310,7 +321,26 @@ impl Context {
             size_pixels,
             size_chars,
             draw_color,
+            audio_device: None,
         })
+    }
+
+    /// Obtains the audio queue to use for tone playback.
+    fn get_audio_device(&mut self) -> io::Result<&mut AudioQueue<i16>> {
+        if self.audio_device.is_none() {
+            let audio = self.sdl.audio().map_err(string_error_to_io_error)?;
+            let desired_spec = AudioSpecDesired {
+                freq: Some(AUDIO_SAMPLE_RATE),
+                channels: Some(1),
+                samples: None,
+            };
+            let audio_device = audio
+                .open_queue::<i16, _>(None, &desired_spec)
+                .map_err(string_error_to_io_error)?;
+            self.audio_device = Some(audio_device);
+        }
+
+        Ok(self.audio_device.as_mut().expect("Audio device must have been initialized"))
     }
 
     /// Returns true if the point falls within the canvas bounds.
@@ -319,6 +349,50 @@ impl Context {
             && xy.y >= 0
             && u16::try_from(xy.x).unwrap_or(u16::MAX) < self.size_pixels.width
             && u16::try_from(xy.y).unwrap_or(u16::MAX) < self.size_pixels.height
+    }
+
+    /// Reproduces `tone` using SDL's audio queue.
+    fn play_tone(&mut self, tone: Tone) -> io::Result<()> {
+        if tone.frequency_hz == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Tone frequency must be positive",
+            ));
+        }
+
+        let sample_count = (tone.duration.as_secs_f64() * f64::from(AUDIO_SAMPLE_RATE))
+            .round()
+            .clamp(0.0, usize::MAX as f64) as usize;
+        if sample_count == 0 {
+            return Ok(());
+        }
+
+        let samples = match tone.waveform {
+            Waveform::Square => {
+                let half_period = f64::from(AUDIO_SAMPLE_RATE) / f64::from(tone.frequency_hz) / 2.0;
+                let amplitude = i16::MAX / 4;
+                let mut samples = Vec::with_capacity(sample_count);
+                for i in 0..sample_count {
+                    let sample = if (((i as f64) / half_period).floor() as u64).is_multiple_of(2) {
+                        amplitude
+                    } else {
+                        -amplitude
+                    };
+                    samples.push(sample);
+                }
+                samples
+            }
+        };
+
+        let audio_device = self.get_audio_device()?;
+        audio_device.clear();
+        audio_device.queue_audio(&samples).map_err(string_error_to_io_error)?;
+        audio_device.resume();
+        while audio_device.size() > 0 {
+            thread::sleep(Duration::from_millis(1));
+        }
+        audio_device.pause();
+        Ok(())
     }
 }
 
@@ -490,6 +564,10 @@ impl RasterOps for Context {
 struct SharedContext(Rc<RefCell<Context>>);
 
 impl SharedContext {
+    fn play_tone(&mut self, tone: Tone) -> io::Result<()> {
+        (*self.0).borrow_mut().play_tone(tone)
+    }
+
     fn poll_event(&mut self) -> Option<Event> {
         (*self.0).borrow_mut().event_pump.poll_event()
     }
@@ -626,6 +704,7 @@ pub(crate) enum Request {
     DrawTri(PixelsXY, PixelsXY, PixelsXY),
     DrawTriFilled(PixelsXY, PixelsXY, PixelsXY),
     PeekPixel(PixelsXY),
+    PlayTone(Tone),
     SyncNow,
     SetSync(bool),
 
@@ -686,8 +765,9 @@ pub(crate) fn run(
     let mut ctx = SharedContext(Rc::from(RefCell::from(ctx)));
 
     let input = NoopInputOps {};
-    let mut console = GraphicsConsole::new(input, ctx.clone(), default_fg_color, default_bg_color)
-        .expect("Console initialization must succeed");
+    let mut console =
+        GraphicsConsole::new(input, ctx.clone(), NoopAudioOps, default_fg_color, default_bg_color)
+            .expect("Console initialization must succeed");
 
     response_tx.send(Response::Empty(Ok(()))).expect("Channel must be alive");
 
@@ -736,6 +816,7 @@ pub(crate) fn run(
                         Response::Empty(console.draw_tri_filled(x1y1, x2y2, x3y3))
                     }
                     Request::PeekPixel(xy) => Response::PeekPixel(console.peek_pixel(xy)),
+                    Request::PlayTone(tone) => Response::Empty(ctx.play_tone(tone)),
                     Request::SyncNow => Response::Empty(console.sync_now()),
                     Request::SetSync(enabled) => Response::SetSync(console.set_sync(enabled)),
 

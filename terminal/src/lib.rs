@@ -26,10 +26,12 @@ use endbasic_std::console::graphics::InputOps;
 use endbasic_std::console::{
     CharsXY, ClearType, Console, Key, get_env_var_as_u16, read_key_from_stdin, remove_control_chars,
 };
+use endbasic_std::sound::BEEP_TONE;
 use futures_util::StreamExt;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::io::{self, StdoutLock, Write};
+use std::thread;
 
 /// Converts a crossterm `KeyEvent` given in `ev` for key presses to our own `Key` type.
 fn parse_key_event(ev: KeyEvent) -> Option<Key> {
@@ -436,6 +438,15 @@ impl Console for TerminalConsole {
         let previous = self.sync_enabled;
         self.sync_enabled = enabled;
         Ok(previous)
+    }
+
+    async fn beep(&mut self) -> io::Result<()> {
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        stdout.write_all(b"\x07")?;
+        stdout.flush()?;
+        thread::sleep(BEEP_TONE.duration);
+        Ok(())
     }
 }
 

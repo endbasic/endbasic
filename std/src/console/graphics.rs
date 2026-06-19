@@ -15,6 +15,8 @@
 
 //! Support to implement graphical consoles.
 
+use crate::sound::{AudioOps, Tone};
+
 use super::{
     AnsiColor, CharsXY, ClearType, Console, Key, LineBuffer, PixelsXY, RGB, SizeInPixels,
     ansi_color_to_rgb, drawing, remove_control_chars,
@@ -271,7 +273,7 @@ pub trait InputOps {
 }
 
 /// Implementation of a console that renders to a backing surface.
-pub struct GraphicsConsole<IO, RO>
+pub struct GraphicsConsole<IO, RO, AO>
 where
     RO: RasterOps,
 {
@@ -279,6 +281,9 @@ where
 
     /// Operations to render to the console.
     raster_ops: RO,
+
+    /// Operations to reproduce sound.
+    audio_ops: AO,
 
     /// Size of the console in pixels.
     size_pixels: SizeInPixels,
@@ -325,15 +330,17 @@ where
     sync_enabled: bool,
 }
 
-impl<IO, RO> GraphicsConsole<IO, RO>
+impl<IO, RO, AO> GraphicsConsole<IO, RO, AO>
 where
     IO: InputOps,
     RO: RasterOps,
+    AO: AudioOps,
 {
     /// Initializes a new graphical console.
     pub fn new(
         input_ops: IO,
         raster_ops: RO,
+        audio_ops: AO,
         default_fg_color: Option<u8>,
         default_bg_color: Option<u8>,
     ) -> io::Result<Self> {
@@ -345,6 +352,7 @@ where
         let mut console = Self {
             input_ops,
             raster_ops,
+            audio_ops,
             size_pixels: info.size_pixels,
             glyph_size: info.glyph_size,
             size_chars: info.size_chars,
@@ -480,10 +488,11 @@ where
 }
 
 #[async_trait(?Send)]
-impl<IO, RO> Console for GraphicsConsole<IO, RO>
+impl<IO, RO, AO> Console for GraphicsConsole<IO, RO, AO>
 where
     IO: InputOps,
     RO: RasterOps,
+    AO: AudioOps,
 {
     fn clear(&mut self, how: ClearType) -> io::Result<()> {
         match how {
@@ -643,6 +652,10 @@ where
 
     async fn read_key(&mut self) -> io::Result<Key> {
         self.input_ops.read_key().await
+    }
+
+    async fn play_tone(&mut self, tone: Tone) -> io::Result<()> {
+        self.audio_ops.play_tone(tone).await
     }
 
     fn show_cursor(&mut self) -> io::Result<()> {

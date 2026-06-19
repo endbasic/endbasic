@@ -21,6 +21,7 @@ use async_trait::async_trait;
 use endbasic_std::console::{
     CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels, remove_control_chars,
 };
+use endbasic_std::sound::Tone;
 use std::io;
 use std::sync::mpsc::{Receiver, SyncSender, TryRecvError};
 
@@ -249,6 +250,10 @@ impl Console for SdlConsole {
             Response::SetSync(result) => result,
             _ => panic!("Unexpected response type"),
         }
+    }
+
+    async fn play_tone(&mut self, tone: Tone) -> io::Result<()> {
+        self.call(Request::PlayTone(tone))
     }
 }
 

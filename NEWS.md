@@ -28,6 +28,9 @@ for the time being.**
 
 *   Added `GFX_FILL` to perform a 4-way bucket fill.
 
+*   Issue #124: Added the `BEEP` and `SOUND` commands to reproduce tones on
+    audio-capable consoles.
+
 *   Added the `DEMOS:/BOUNCE.BAS` graphics demo to showcase animated shapes.
 
 *   Added the `INSTR`, `LCASE`, `SPACE`, `TRIM`, `UCASE`, and `VAL`

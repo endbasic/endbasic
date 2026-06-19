@@ -34,6 +34,7 @@ use endbasic_std::console::{
 use endbasic_std::gfx::lcd::fonts::{FONT_5X8, Font, Fonts};
 use endbasic_std::gfx::lcd::{BufferedLcd, Lcd, LcdSize, LcdXY, RGB565Pixel, to_xy_size};
 use endbasic_std::gpio::{Pin, PinMode, Pins};
+use endbasic_std::sound::{NoopAudioOps, Tone};
 use endbasic_std::spi::{SpiBus, SpiMode};
 use std::cell::RefCell;
 use std::io;
@@ -380,7 +381,7 @@ impl<P: Pins, B: SpiBus> Lcd for ST7735SLcd<P, B> {
 pub struct ST7735SConsole<P: Pins + Send, B: SpiBus, K> {
     /// The graphical console itself.  We wrap it in a struct to prevent leaking all auxiliary types
     /// outside of this crate.
-    inner: GraphicsConsole<ST7735SInput<K>, BufferedLcd<ST7735SLcd<P, B>>>,
+    inner: GraphicsConsole<ST7735SInput<K>, BufferedLcd<ST7735SLcd<P, B>>, NoopAudioOps>,
 }
 
 #[async_trait(?Send)]
@@ -509,6 +510,10 @@ impl<P: Pins + Send, B: SpiBus, K: InputOps> Console for ST7735SConsole<P, B, K>
     fn set_sync(&mut self, enabled: bool) -> io::Result<bool> {
         self.inner.set_sync(enabled)
     }
+
+    async fn play_tone(&mut self, tone: Tone) -> io::Result<()> {
+        self.inner.play_tone(tone).await
+    }
 }
 
 /// Console factory for the ST7735S LCD.
@@ -589,7 +594,12 @@ where
         let lcd = ST7735SLcd::new(pins.clone(), new_spi)?;
         let input = ST7735SInput::new(pins, keyboard)?;
         let lcd = BufferedLcd::new(lcd, font);
-        let inner = GraphicsConsole::new(input, lcd, default_fg_color, default_bg_color)?;
+        // TODO(jmmv): Implement audio ops.  The question is... against which backend?
+        // We cannot assume Linux because the EndBOX also uses this console backend and it is
+        // running on NetBSD.  So maybe it's the `rpi` crate that should provide a Linux-backed
+        // implemenation and somehow inject it here.
+        let inner =
+            GraphicsConsole::new(input, lcd, NoopAudioOps, default_fg_color, default_bg_color)?;
         let console = ST7735SConsole { inner };
         Ok(Rc::from(RefCell::from(console)))
     }
