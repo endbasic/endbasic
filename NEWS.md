@@ -33,6 +33,9 @@ for the time being.**
 *   Added the `INSTR`, `LCASE`, `SPACE`, `TRIM`, `UCASE`, and `VAL`
     string functions.
 
+*   Added the `ABS`, `ACOS`, `ASIN`, `EXP`, `FIX`, `LOG`, `ROUND`, and `SGN`
+    numeric functions.
+
 *   Fixed the web frontend so that commands that print long outputs (like
     `HELP` or `DIR`) don't block and print everything at once: the contents
     now appear line by line.

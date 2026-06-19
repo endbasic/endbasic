@@ -235,17 +235,25 @@ Output from HELP "NUMERICAL":
 
 [38;5;11m    Numerical functions
 [39m
+    >> [38;5;14mABS#     [39m    Returns the absolute value of a number.
+    >> [38;5;14mACOS#    [39m    Computes the arc-cosine of a number.
+    >> [38;5;14mASIN#    [39m    Computes the arc-sine of a number.
     >> [38;5;14mATN#     [39m    Computes the arc-tangent of a number.
     >> [38;5;14mCINT%    [39m    Casts the given numeric expression to an integer (with rounding).
     >> [38;5;14mCOS#     [39m    Computes the cosine of an angle.
     >> [38;5;14mDEG      [39m    Sets degrees mode of calculation.
+    >> [38;5;14mEXP#     [39m    Raises Euler's number to the power of a number.
+    >> [38;5;14mFIX%     [39m    Casts the given numeric expression to an integer (towards zero).
     >> [38;5;14mINT%     [39m    Casts the given numeric expression to an integer (with truncation).
+    >> [38;5;14mLOG#     [39m    Computes the natural logarithm of the given number.
     >> [38;5;14mMAX#     [39m    Returns the maximum number out of a set of numbers.
     >> [38;5;14mMIN#     [39m    Returns the minimum number out of a set of numbers.
     >> [38;5;14mPI#      [39m    Returns the Archimedes' constant.
     >> [38;5;14mRAD      [39m    Sets radians mode of calculation.
     >> [38;5;14mRANDOMIZE[39m    Reinitializes the pseudo-random number generator.
     >> [38;5;14mRND#     [39m    Returns a random number in the [0..1] range.
+    >> [38;5;14mROUND#   [39m    Rounds a number to the nearest value.
+    >> [38;5;14mSGN%     [39m    Returns -1, 0, or 1 depending on the sign of a number.
     >> [38;5;14mSIN#     [39m    Computes the sine of an angle.
     >> [38;5;14mSQR#     [39m    Computes the square root of the given number.
     >> [38;5;14mTAN#     [39m    Computes the tangent of an angle.
@@ -1181,6 +1189,21 @@ Output from HELP "UNMOUNT":
 
     Drive names are specified without a colon at the end.
 
+Output from HELP "ABS#":
+
+[38;5;11m    ABS#(expr#)
+[39m
+    Returns the absolute value of a number.
+
+Output from HELP "ACOS#":
+
+[38;5;11m    ACOS#(n#)
+[39m
+    Computes the arc-cosine of a number.
+
+    The resulting angle is measured in degrees or radians depending on the
+    angle mode as selected by the DEG and RAD commands.
+
 Output from HELP "ASC":
 
 [38;5;11m    ASC%(char$)
@@ -1193,6 +1216,15 @@ Output from HELP "ASC":
     ASCII characters in this implementation of BASIC.
 
     See CHR$() for the inverse of this function.
+
+Output from HELP "ASIN#":
+
+[38;5;11m    ASIN#(n#)
+[39m
+    Computes the arc-sine of a number.
+
+    The resulting angle is measured in degrees or radians depending on the
+    angle mode as selected by the DEG and RAD commands.
 
 Output from HELP "ATN":
 
@@ -1240,6 +1272,22 @@ Output from HELP "ERRMSG":
     function returns the string representation of the last captured error.
     If this is called before any error is captured, returns the empty
     string.
+
+Output from HELP "EXP#":
+
+[38;5;11m    EXP#(expr#)
+[39m
+    Raises Euler's number to the power of a number.
+
+Output from HELP "FIX%":
+
+[38;5;11m    FIX%(expr#)
+[39m
+    Casts the given numeric expression to an integer (towards zero).
+
+    When casting a double value to an integer, the double value is first
+    truncated towards zero.  For example, 4.9 becomes 4 and -4.9 becomes
+    -4.
 
 Output from HELP "GFX_HEIGHT":
 
@@ -1319,10 +1367,8 @@ Output from HELP "INT%":
     Casts the given numeric expression to an integer (with truncation).
 
     When casting a double value to an integer, the double value is first
-    truncated to the smallest
-
-    integer that is not larger than the double value.  For example, all of
-    4.4, 4.5 and 4.6 become 4.
+    truncated to the smallest integer that is not larger than the double
+    value.  For example, all of 4.4, 4.5 and 4.6 become 4.
 
 Output from HELP "LBOUND":
 
@@ -1358,6 +1404,12 @@ Output from HELP "LEN":
 [38;5;11m    LEN%(expr$)
 [39m
     Returns the length of the string in expr$.
+
+Output from HELP "LOG#":
+
+[38;5;11m    LOG#(num#)
+[39m
+    Computes the natural logarithm of the given number.
 
 Output from HELP "LTRIM":
 
@@ -1423,11 +1475,27 @@ Output from HELP "RND":
 
     WARNING: These random numbers offer no cryptographic guarantees.
 
+Output from HELP "ROUND#":
+
+[38;5;11m    ROUND#(<expr#> | <expr#, decimals%>)
+[39m
+    Rounds a number to the nearest value.
+
+    If decimals% is omitted, rounds to the nearest integer.  If decimals%
+    is given, rounds to that many digits after the decimal point.  Negative
+    values round digits before the decimal point.
+
 Output from HELP "RTRIM":
 
 [38;5;11m    RTRIM$(expr$)
 [39m
     Returns a copy of a string with trailing whitespace removed.
+
+Output from HELP "SGN%":
+
+[38;5;11m    SGN%(n#)
+[39m
+    Returns -1, 0, or 1 depending on the sign of a number.
 
 Output from HELP "SCRCOLS":
 
