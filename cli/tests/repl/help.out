@@ -289,13 +289,19 @@ Output from HELP "STRING":
 [39m
     >> [38;5;14mASC%  [39m    Returns the UTF character code of the input character.
     >> [38;5;14mCHR$  [39m    Returns the UTF character that corresponds to the given code.
+    >> [38;5;14mINSTR%[39m    Searches for a substring within another string.
+    >> [38;5;14mLCASE$[39m    Returns a copy of a string with all letters converted to lowercase.
     >> [38;5;14mLEFT$ [39m    Returns a given number of characters from the left side of a string.
     >> [38;5;14mLEN%  [39m    Returns the length of the string in expr$.
     >> [38;5;14mLTRIM$[39m    Returns a copy of a string with leading whitespace removed.
     >> [38;5;14mMID$  [39m    Returns a portion of a string.
     >> [38;5;14mRIGHT$[39m    Returns a given number of characters from the right side of a string.
     >> [38;5;14mRTRIM$[39m    Returns a copy of a string with trailing whitespace removed.
+    >> [38;5;14mSPACE$[39m    Returns a string that contains n% space characters.
     >> [38;5;14mSTR$  [39m    Formats a scalar value as a string.
+    >> [38;5;14mTRIM$ [39m    Returns a copy of a string with leading and trailing whitespace removed.
+    >> [38;5;14mUCASE$[39m    Returns a copy of a string with all letters converted to uppercase.
+    >> [38;5;14mVAL#  [39m    Parses a string as a number.
 
     Type HELP followed by the name of a topic for details.
 
@@ -1294,6 +1300,18 @@ Output from HELP "INKEY":
     This non-blocking design lets you to combine the reception of multiple
     evens, such as from GPIO_INPUT?, within the same loop.
 
+Output from HELP "INSTR":
+
+[38;5;11m    INSTR%(<expr$, search$> | <start%, expr$, search$>)
+[39m
+    Searches for a substring within another string.
+
+    Returns the 1-indexed position of search$ within expr$, or 0 if not
+    found.
+
+    If start% is given, the search begins at that 1-indexed character
+    position.
+
 Output from HELP "INT%":
 
 [38;5;11m    INT%(expr#)
@@ -1317,6 +1335,12 @@ Output from HELP "LBOUND":
 
     For one-dimensional arrays, the dimension% is optional.  For
     multi-dimensional arrays, the dimension% is a 1-indexed integer.
+
+Output from HELP "LCASE":
+
+[38;5;11m    LCASE$(expr$)
+[39m
+    Returns a copy of a string with all letters converted to lowercase.
 
 Output from HELP "LEFT":
 
@@ -1430,6 +1454,14 @@ Output from HELP "SIN":
     The input angle% or angle# is measured in degrees or radians depending
     on the angle mode as selected by the DEG and RAD commands.
 
+Output from HELP "SPACE":
+
+[38;5;11m    SPACE$(n%)
+[39m
+    Returns a string that contains n% space characters.
+
+    If n% is 0, returns an empty string.
+
 Output from HELP "SQR":
 
 [38;5;11m    SQR#(num#)
@@ -1462,6 +1494,13 @@ Output from HELP "TAN":
     The input angle% or angle# is measured in degrees or radians depending
     on the angle mode as selected by the DEG and RAD commands.
 
+Output from HELP "TRIM":
+
+[38;5;11m    TRIM$(expr$)
+[39m
+    Returns a copy of a string with leading and trailing whitespace
+    removed.
+
 Output from HELP "UBOUND":
 
 [38;5;11m    UBOUND%(<array> | <array, dimension%>)
@@ -1473,4 +1512,20 @@ Output from HELP "UBOUND":
 
     For one-dimensional arrays, the dimension% is optional.  For
     multi-dimensional arrays, the dimension% is a 1-indexed integer.
+
+Output from HELP "UCASE":
+
+[38;5;11m    UCASE$(expr$)
+[39m
+    Returns a copy of a string with all letters converted to uppercase.
+
+Output from HELP "VAL":
+
+[38;5;11m    VAL#(expr$)
+[39m
+    Parses a string as a number.
+
+    Returns the numeric prefix of expr$.  Leading whitespace is ignored,
+    and if expr$ does not start with a number, this returns 0.  Stops
+    processing (without an error) at the first non-numeric character.
 

@@ -30,6 +30,9 @@ for the time being.**
 
 *   Added the `DEMOS:/BOUNCE.BAS` graphics demo to showcase animated shapes.
 
+*   Added the `INSTR`, `LCASE`, `SPACE`, `TRIM`, `UCASE`, and `VAL`
+    string functions.
+
 *   Fixed the web frontend so that commands that print long outputs (like
     `HELP` or `DIR`) don't block and print everything at once: the contents
     now appear line by line.

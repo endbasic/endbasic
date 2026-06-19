@@ -73,6 +73,63 @@ pub fn parse_integer(s: &str) -> Result<i32, String> {
     }
 }
 
+/// Returns the byte offset of the given character position within `s`.
+fn char_index_to_byte_index(s: &str, char_index: usize) -> usize {
+    s.char_indices().nth(char_index).map(|(i, _)| i).unwrap_or(s.len())
+}
+
+/// Returns the number of characters before the given byte offset within `s`.
+fn byte_index_to_char_index(s: &str, byte_index: usize) -> usize {
+    s[..byte_index].chars().count()
+}
+
+/// Parses the numeric prefix in `s` according to BASIC's `VAL` rules.
+fn parse_numeric_prefix(s: &str) -> f64 {
+    let s = s.trim_start();
+    let bytes = s.as_bytes();
+
+    let mut i = 0;
+    if let Some(b'+' | b'-') = bytes.first().copied() {
+        i += 1;
+    }
+
+    let int_start = i;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    let have_int = i > int_start;
+
+    if i < bytes.len() && bytes[i] == b'.' {
+        i += 1;
+        let frac_start = i;
+        while i < bytes.len() && bytes[i].is_ascii_digit() {
+            i += 1;
+        }
+        if !have_int && i == frac_start {
+            return 0.0;
+        }
+    } else if !have_int {
+        return 0.0;
+    }
+
+    let mut end = i;
+    if i < bytes.len() && matches!(bytes[i], b'e' | b'E') {
+        let mut j = i + 1;
+        if j < bytes.len() && matches!(bytes[j], b'+' | b'-') {
+            j += 1;
+        }
+        let exp_start = j;
+        while j < bytes.len() && bytes[j].is_ascii_digit() {
+            j += 1;
+        }
+        if j > exp_start {
+            end = j;
+        }
+    }
+
+    s[..end].parse().expect("numeric prefix must parse")
+}
+
 /// The `ASC` function.
 pub struct AscFunction {
     metadata: Rc<CallableMetadata>,
@@ -193,6 +250,153 @@ impl Callable for ChrFunction {
                 Err(CallError::Syntax(scope.get_pos(0), format!("Invalid character code {}", code)))
             }
         }
+    }
+}
+
+/// The `INSTR` function.
+pub struct InstrFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl InstrFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("INSTR")
+                .with_return_type(ExprType::Integer)
+                .with_syntax(&[
+                    (
+                        &[
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("expr"),
+                                    vtype: ExprType::Text,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("search"),
+                                    vtype: ExprType::Text,
+                                },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("start"),
+                                    vtype: ExprType::Integer,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("expr"),
+                                    vtype: ExprType::Text,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("search"),
+                                    vtype: ExprType::Text,
+                                },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                ])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Searches for a substring within another string.
+Returns the 1-indexed position of search$ within expr$, or 0 if not found.
+If start% is given, the search begins at that 1-indexed character position.",
+                )
+                .build(),
+        })
+    }
+}
+
+impl Callable for InstrFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert!((2..=3).contains(&scope.nargs()));
+
+        let (start, sarg, searcharg) =
+            if scope.nargs() == 2 { (1, 0, 1) } else { (scope.get_integer(0), 1, 2) };
+        let s = scope.get_string(sarg);
+        let search = scope.get_string(searcharg);
+
+        if start <= 0 {
+            return Err(CallError::Syntax(scope.get_pos(0), "start% must be positive".to_owned()));
+        }
+        let start = (start - 1) as usize;
+
+        let slen = s.chars().count();
+        if start > slen {
+            return scope.return_integer(0);
+        }
+        if search.is_empty() {
+            return scope.return_integer((start + 1) as i32);
+        }
+
+        let start_byte = char_index_to_byte_index(s, start);
+        let position = match s[start_byte..].find(search) {
+            Some(offset) => {
+                let byte_index = start_byte + offset;
+                (byte_index_to_char_index(s, byte_index) + 1) as i32
+            }
+            None => 0,
+        };
+        scope.return_integer(position)
+    }
+}
+
+/// The `LCASE` function.
+pub struct LcaseFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl LcaseFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("LCASE")
+                .with_return_type(ExprType::Text)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: Cow::Borrowed("expr"), vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns a copy of a string with all letters converted to lowercase.",
+                )
+                .build(),
+        })
+    }
+}
+
+impl Callable for LcaseFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let s = scope.get_string(0).to_owned();
+
+        scope.return_string(s.to_lowercase())
     }
 }
 
@@ -537,6 +741,51 @@ impl Callable for RtrimFunction {
     }
 }
 
+/// The `SPACE` function.
+pub struct SpaceFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl SpaceFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("SPACE")
+                .with_return_type(ExprType::Text)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: Cow::Borrowed("n"), vtype: ExprType::Integer },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns a string that contains n% space characters.
+If n% is 0, returns an empty string.",
+                )
+                .build(),
+        })
+    }
+}
+
+impl Callable for SpaceFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let n = scope.get_integer(0);
+
+        if n < 0 {
+            Err(CallError::Syntax(scope.get_pos(0), "n% cannot be negative".to_owned()))
+        } else {
+            scope.return_string(" ".repeat(n as usize))
+        }
+    }
+}
+
 /// The `STR` function.
 pub struct StrFunction {
     metadata: Rc<CallableMetadata>,
@@ -604,17 +853,147 @@ impl Callable for StrFunction {
     }
 }
 
+/// The `TRIM` function.
+pub struct TrimFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl TrimFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("TRIM")
+                .with_return_type(ExprType::Text)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: Cow::Borrowed("expr"), vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns a copy of a string with leading and trailing whitespace removed.",
+                )
+                .build(),
+        })
+    }
+}
+
+impl Callable for TrimFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let s = scope.get_string(0).to_owned();
+
+        scope.return_string(s.trim().to_owned())
+    }
+}
+
+/// The `UCASE` function.
+pub struct UcaseFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl UcaseFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("UCASE")
+                .with_return_type(ExprType::Text)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: Cow::Borrowed("expr"), vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns a copy of a string with all letters converted to uppercase.",
+                )
+                .build(),
+        })
+    }
+}
+
+impl Callable for UcaseFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let s = scope.get_string(0).to_owned();
+
+        scope.return_string(s.to_uppercase())
+    }
+}
+
+/// The `VAL` function.
+pub struct ValFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl ValFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("VAL")
+                .with_return_type(ExprType::Double)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: Cow::Borrowed("expr"), vtype: ExprType::Text },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Parses a string as a number.
+Returns the numeric prefix of expr$.  Leading whitespace is ignored, and if expr$ does not start \
+with a number, this returns 0.  Stops processing (without an error) at the first non-numeric \
+character.",
+                )
+                .build(),
+        })
+    }
+}
+
+impl Callable for ValFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let s = scope.get_string(0);
+
+        let value = parse_numeric_prefix(s);
+        scope.return_double(value)
+    }
+}
+
 /// Adds all symbols provided by this module to the given `machine`.
 pub fn add_all(machine: &mut MachineBuilder) {
     machine.add_callable(AscFunction::new());
     machine.add_callable(ChrFunction::new());
+    machine.add_callable(InstrFunction::new());
+    machine.add_callable(LcaseFunction::new());
     machine.add_callable(LeftFunction::new());
     machine.add_callable(LenFunction::new());
     machine.add_callable(LtrimFunction::new());
     machine.add_callable(MidFunction::new());
     machine.add_callable(RightFunction::new());
     machine.add_callable(RtrimFunction::new());
+    machine.add_callable(SpaceFunction::new());
     machine.add_callable(StrFunction::new());
+    machine.add_callable(TrimFunction::new());
+    machine.add_callable(UcaseFunction::new());
+    machine.add_callable(ValFunction::new());
 }
 
 #[cfg(test)]
@@ -718,6 +1097,51 @@ mod tests {
     fn test_asc_chr_integration() {
         check_expr_ok("a", r#"CHR(ASC("a"))"#);
         check_expr_ok('a' as i32, r#"ASC(CHR(97))"#);
+    }
+
+    #[test]
+    fn test_instr() {
+        check_expr_ok(0, r#"INSTR("", "a")"#);
+        check_expr_ok(1, r#"INSTR("basic", "b")"#);
+        check_expr_ok(3, r#"INSTR("basic", "si")"#);
+        check_expr_ok(0, r#"INSTR("basic", "z")"#);
+        check_expr_ok(4, r#"INSTR(4, "banana", "an")"#);
+        check_expr_ok(2, r#"INSTR("banana", "an")"#);
+        check_expr_ok(2, r#"INSTR("한글테스트", "글")"#);
+        check_expr_ok(3, r#"INSTR(3, "basic", "")"#);
+
+        check_expr_ok_with_vars(
+            3,
+            r#"INSTR(i, s, t)"#,
+            [("i", 2.into()), ("s", "banana".into()), ("t", "na".into())],
+        );
+
+        check_expr_compilation_error(
+            "1:10: INSTR expected <expr$, search$> | <start%, expr$, search$>",
+            r#"INSTR()"#,
+        );
+        check_expr_compilation_error(
+            "1:10: INSTR expected <expr$, search$> | <start%, expr$, search$>",
+            r#"INSTR("a")"#,
+        );
+        check_expr_compilation_error(
+            "1:10: INSTR expected <expr$, search$> | <start%, expr$, search$>",
+            r#"INSTR("a", "b", "c", "d")"#,
+        );
+        check_expr_error("1:16: start% must be positive", r#"INSTR(0, "abc", "a")"#);
+    }
+
+    #[test]
+    fn test_lcase() {
+        check_expr_ok("", r#"LCASE("")"#);
+        check_expr_ok("basic", r#"LCASE("BaSiC")"#);
+        check_expr_ok("anos", r#"LCASE("ANOS")"#);
+
+        check_expr_ok_with_vars("hello", r#"LCASE(s)"#, [("s", "HELLO".into())]);
+
+        check_expr_compilation_error("1:10: LCASE expected expr$", r#"LCASE()"#);
+        check_expr_compilation_error("1:16: Expected STRING but found INTEGER", r#"LCASE(3)"#);
+        check_expr_compilation_error("1:10: LCASE expected expr$", r#"LCASE(" ", 1)"#);
     }
 
     #[test]
@@ -833,6 +1257,20 @@ mod tests {
     }
 
     #[test]
+    fn test_space() {
+        check_expr_ok("", r#"SPACE(0)"#);
+        check_expr_ok("   ", r#"SPACE(3)"#);
+        check_expr_ok("     ", r#"SPACE(4.8)"#);
+
+        check_expr_ok_with_vars("  ", r#"SPACE(i)"#, [("i", 2.into())]);
+
+        check_expr_compilation_error("1:10: SPACE expected n%", r#"SPACE()"#);
+        check_expr_compilation_error("1:16: BOOLEAN is not a number", r#"SPACE(FALSE)"#);
+        check_expr_compilation_error("1:10: SPACE expected n%", r#"SPACE(1, 2)"#);
+        check_expr_error("1:16: n% cannot be negative", r#"SPACE(-1)"#);
+    }
+
+    #[test]
     fn test_str() {
         check_expr_ok("FALSE", r#"STR(FALSE)"#);
         check_expr_ok("TRUE", r#"STR(true)"#);
@@ -860,5 +1298,48 @@ mod tests {
         check_expr_ok("0", r#"LTRIM(STR(0))"#);
         check_expr_ok("-1", r#"LTRIM(STR(-1))"#);
         check_expr_ok("100", r#"LTRIM$(STR$(100))"#);
+    }
+
+    #[test]
+    fn test_trim() {
+        check_expr_ok("", r#"TRIM("")"#);
+        check_expr_ok("", r#"TRIM("  ")"#);
+        check_expr_ok("foo", "TRIM(\"\t foo \t\")");
+
+        check_expr_ok_with_vars("foo", r#"TRIM(s)"#, [("s", " foo ".into())]);
+
+        check_expr_compilation_error("1:10: TRIM expected expr$", r#"TRIM()"#);
+        check_expr_compilation_error("1:15: Expected STRING but found INTEGER", r#"TRIM(3)"#);
+        check_expr_compilation_error("1:10: TRIM expected expr$", r#"TRIM(" ", 1)"#);
+    }
+
+    #[test]
+    fn test_ucase() {
+        check_expr_ok("", r#"UCASE("")"#);
+        check_expr_ok("BASIC", r#"UCASE("BaSiC")"#);
+        check_expr_ok("AOS", r#"UCASE("aos")"#);
+
+        check_expr_ok_with_vars("HELLO", r#"UCASE(s)"#, [("s", "hello".into())]);
+
+        check_expr_compilation_error("1:10: UCASE expected expr$", r#"UCASE()"#);
+        check_expr_compilation_error("1:16: Expected STRING but found INTEGER", r#"UCASE(3)"#);
+        check_expr_compilation_error("1:10: UCASE expected expr$", r#"UCASE(" ", 1)"#);
+    }
+
+    #[test]
+    fn test_val() {
+        check_expr_ok(0.0, r#"VAL("")"#);
+        check_expr_ok(0.0, r#"VAL("foo")"#);
+        check_expr_ok(10.0, r#"VAL("10")"#);
+        check_expr_ok(-21.5, r#"VAL("  -21.5xyz")"#);
+        check_expr_ok(0.01, r#"VAL(".01")"#);
+        check_expr_ok(1200.0, r#"VAL("12e2z")"#);
+        check_expr_ok(12.0, r#"VAL("12e")"#);
+
+        check_expr_ok_with_vars(3.5, r#"VAL(s)"#, [("s", "3.5ms".into())]);
+
+        check_expr_compilation_error("1:10: VAL expected expr$", r#"VAL()"#);
+        check_expr_compilation_error("1:14: Expected STRING but found INTEGER", r#"VAL(3)"#);
+        check_expr_compilation_error("1:10: VAL expected expr$", r#"VAL(" ", 1)"#);
     }
 }
