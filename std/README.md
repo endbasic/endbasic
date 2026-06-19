@@ -43,8 +43,9 @@ not intend to be fully compatible with them.  The library currently contains:
 *   Hardware interaction: `GPIO_CLEAR`, `GPIO_READ`, `GPIO_SETUP`, `GPIO_WRITE`.
 *   File system interaction: `CD`, `COPY`, `DIR`, `KILL`, `MOUNT`, `PWD`, `UNMOUNT`.
 *   Interpreter interaction: `CLEAR`, `ERRMSG`, `HELP`.
-*   Numerics: `ATN`, `CINT`, `COS`, `DEG`, `INT`, `MAX`, `MIN`, `PI`, `RAD`,
-    `RANDOMIZE`, `RND`, `SIN`, `SQR`, `TAN`.
+*   Numerics: `ABS`, `ACOS`, `ASIN`, `ATN`, `CINT`, `COS`, `DEG`, `EXP`,
+    `FIX`, `INT`, `LOG`, `MAX`, `MIN`, `PI`, `RAD`, `RANDOMIZE`, `RND`,
+    `ROUND`, `SGN`, `SIN`, `SQR`, `TAN`.
 *   Program manipulation: `DISASM`, `EDIT`, `LIST`, `LOAD`,`NEW`, `RUN`,
     `SAVE`.
 *   Strings and characters: `ASC`, `CHR`, `INSTR`, `LCASE`, `LEFT`, `LEN`,

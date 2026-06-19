@@ -74,6 +74,14 @@ fn get_angle(scope: &mut Scope<'_>, angle_mode: &AngleMode) -> CallResult<f64> {
     }
 }
 
+/// Converts an angle in radians to the representation described by `angle_mode`.
+fn to_angle(angle: f64, angle_mode: &AngleMode) -> f64 {
+    match angle_mode {
+        AngleMode::Degrees => angle.to_degrees(),
+        AngleMode::Radians => angle,
+    }
+}
+
 /// Tracks the state of the PRNG used by the random number manipulation functions and commands.
 ///
 /// The PRNG implemented here is intentionally simplistic and has no cryptographical guarantees.
@@ -106,6 +114,146 @@ impl Prng {
     fn next(&mut self) -> f64 {
         self.last = self.prng.next_u32();
         self.last()
+    }
+}
+
+/// The `ABS` function.
+pub struct AbsFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl AbsFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("ABS")
+                .with_return_type(ExprType::Double)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("expr"),
+                            vtype: ExprType::Double,
+                        },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description("Returns the absolute value of a number.")
+                .build(),
+        })
+    }
+}
+
+impl Callable for AbsFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let value = scope.get_double(0);
+        scope.return_double(value.abs())
+    }
+}
+
+/// The `ACOS` function.
+pub struct AcosFunction {
+    metadata: Rc<CallableMetadata>,
+    angle_mode: Rc<RefCell<AngleMode>>,
+}
+
+impl AcosFunction {
+    /// Creates a new instance of the function.
+    pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("ACOS")
+                .with_return_type(ExprType::Double)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: Cow::Borrowed("n"), vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Computes the arc-cosine of a number.
+The resulting angle is measured in degrees or radians depending on the angle mode as selected by \
+the DEG and RAD commands.",
+                )
+                .build(),
+            angle_mode,
+        })
+    }
+}
+
+impl Callable for AcosFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let n = scope.get_double(0);
+        if !(-1.0..=1.0).contains(&n) {
+            return Err(CallError::Syntax(
+                scope.get_pos(0),
+                "Cannot take arc-cosine of a number outside of [-1, 1]".to_owned(),
+            ));
+        }
+
+        scope.return_double(to_angle(n.acos(), &self.angle_mode.borrow()))
+    }
+}
+
+/// The `ASIN` function.
+pub struct AsinFunction {
+    metadata: Rc<CallableMetadata>,
+    angle_mode: Rc<RefCell<AngleMode>>,
+}
+
+impl AsinFunction {
+    /// Creates a new instance of the function.
+    pub fn new(angle_mode: Rc<RefCell<AngleMode>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("ASIN")
+                .with_return_type(ExprType::Double)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: Cow::Borrowed("n"), vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Computes the arc-sine of a number.
+The resulting angle is measured in degrees or radians depending on the angle mode as selected by \
+the DEG and RAD commands.",
+                )
+                .build(),
+            angle_mode,
+        })
+    }
+}
+
+impl Callable for AsinFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let n = scope.get_double(0);
+        if !(-1.0..=1.0).contains(&n) {
+            return Err(CallError::Syntax(
+                scope.get_pos(0),
+                "Cannot take arc-sine of a number outside of [-1, 1]".to_owned(),
+            ));
+        }
+
+        scope.return_double(to_angle(n.asin(), &self.angle_mode.borrow()))
     }
 }
 
@@ -149,10 +297,7 @@ impl Callable for AtnFunction {
         debug_assert_eq!(1, scope.nargs());
         let n = scope.get_double(0);
 
-        match *self.angle_mode.borrow() {
-            AngleMode::Degrees => scope.return_double(n.atan().to_degrees()),
-            AngleMode::Radians => scope.return_double(n.atan()),
-        }
+        scope.return_double(to_angle(n.atan(), &self.angle_mode.borrow()))
     }
 }
 
@@ -284,6 +429,100 @@ impl Callable for DegCommand {
     }
 }
 
+/// The `EXP` function.
+pub struct ExpFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl ExpFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("EXP")
+                .with_return_type(ExprType::Double)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("expr"),
+                            vtype: ExprType::Double,
+                        },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description("Raises Euler's number to the power of a number.")
+                .build(),
+        })
+    }
+}
+
+impl Callable for ExpFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let value = scope.get_double(0);
+        let exp = value.exp();
+        if !exp.is_finite() {
+            return Err(CallError::Syntax(
+                scope.get_pos(0),
+                format!("Cannot exponentiate {} due to overflow", value),
+            ));
+        }
+        scope.return_double(exp)
+    }
+}
+
+/// The `FIX` function.
+pub struct FixFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl FixFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("FIX")
+                .with_return_type(ExprType::Integer)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax {
+                            name: Cow::Borrowed("expr"),
+                            vtype: ExprType::Double,
+                        },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Casts the given numeric expression to an integer (towards zero).
+When casting a double value to an integer, the double value is first truncated towards zero.  For \
+example, 4.9 becomes 4 and -4.9 becomes -4.",
+                )
+                .build(),
+        })
+    }
+}
+
+impl Callable for FixFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let value = scope.get_double(0);
+
+        let i = double_to_integer(value.trunc())
+            .map_err(|e| CallError::Syntax(scope.get_pos(0), e.to_string()))?;
+        scope.return_integer(i)
+    }
+}
+
 /// The `INT` function.
 pub struct IntFunction {
     metadata: Rc<CallableMetadata>,
@@ -308,7 +547,7 @@ impl IntFunction {
                 .with_category(CATEGORY)
                 .with_description(
                     "Casts the given numeric expression to an integer (with truncation).
-When casting a double value to an integer, the double value is first truncated to the smallest
+When casting a double value to an integer, the double value is first truncated to the smallest \
 integer that is not larger than the double value.  For example, all of 4.4, 4.5 and 4.6 become 4.",
                 )
                 .build(),
@@ -328,6 +567,50 @@ impl Callable for IntFunction {
         let i = double_to_integer(value.floor())
             .map_err(|e| CallError::Syntax(scope.get_pos(0), e.to_string()))?;
         scope.return_integer(i)
+    }
+}
+
+/// The `LOG` function.
+pub struct LogFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl LogFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("LOG")
+                .with_return_type(ExprType::Double)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: Cow::Borrowed("num"), vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description("Computes the natural logarithm of the given number.")
+                .build(),
+        })
+    }
+}
+
+impl Callable for LogFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let num = scope.get_double(0);
+
+        if num <= 0.0 {
+            return Err(CallError::Syntax(
+                scope.get_pos(0),
+                "Cannot take logarithm of zero or a negative number".to_owned(),
+            ));
+        }
+        scope.return_double(num.ln())
     }
 }
 
@@ -602,6 +885,121 @@ impl Callable for RndFunction {
     }
 }
 
+/// The `ROUND` function.
+pub struct RoundFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl RoundFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("ROUND")
+                .with_return_type(ExprType::Double)
+                .with_syntax(&[
+                    (
+                        &[SingularArgSyntax::RequiredValue(
+                            RequiredValueSyntax {
+                                name: Cow::Borrowed("expr"),
+                                vtype: ExprType::Double,
+                            },
+                            ArgSepSyntax::End,
+                        )],
+                        None,
+                    ),
+                    (
+                        &[
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("expr"),
+                                    vtype: ExprType::Double,
+                                },
+                                ArgSepSyntax::Exactly(ArgSep::Long),
+                            ),
+                            SingularArgSyntax::RequiredValue(
+                                RequiredValueSyntax {
+                                    name: Cow::Borrowed("decimals"),
+                                    vtype: ExprType::Integer,
+                                },
+                                ArgSepSyntax::End,
+                            ),
+                        ],
+                        None,
+                    ),
+                ])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Rounds a number to the nearest value.
+If decimals% is omitted, rounds to the nearest integer.  If decimals% is given, rounds to that \
+many digits after the decimal point.  Negative values round digits before the decimal point.",
+                )
+                .build(),
+        })
+    }
+}
+
+impl Callable for RoundFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        let value = scope.get_double(0);
+        if scope.nargs() == 1 {
+            scope.return_double(value.round())
+        } else {
+            debug_assert_eq!(2, scope.nargs());
+            let decimals = scope.get_integer(1);
+            let factor = 10f64.powi(decimals);
+            scope.return_double((value * factor).round() / factor)
+        }
+    }
+}
+
+/// The `SGN` function.
+pub struct SgnFunction {
+    metadata: Rc<CallableMetadata>,
+}
+
+impl SgnFunction {
+    /// Creates a new instance of the function.
+    pub fn new() -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("SGN")
+                .with_return_type(ExprType::Integer)
+                .with_syntax(&[(
+                    &[SingularArgSyntax::RequiredValue(
+                        RequiredValueSyntax { name: Cow::Borrowed("n"), vtype: ExprType::Double },
+                        ArgSepSyntax::End,
+                    )],
+                    None,
+                )])
+                .with_category(CATEGORY)
+                .with_description("Returns -1, 0, or 1 depending on the sign of a number.")
+                .build(),
+        })
+    }
+}
+
+impl Callable for SgnFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(1, scope.nargs());
+        let n = scope.get_double(0);
+        let sign = if n > 0.0 {
+            1
+        } else if n < 0.0 {
+            -1
+        } else {
+            0
+        };
+        scope.return_integer(sign)
+    }
+}
+
 /// The `SIN` function.
 pub struct SinFunction {
     metadata: Rc<CallableMetadata>,
@@ -741,17 +1139,25 @@ pub fn add_all(machine: &mut MachineBuilder) {
     let angle_mode = Rc::from(RefCell::from(AngleMode::Radians));
     let prng = Rc::from(RefCell::from(Prng::new_from_entryopy()));
     machine.add_clearable(Box::from(ClearableAngleMode { angle_mode: angle_mode.clone() }));
+    machine.add_callable(AbsFunction::new());
+    machine.add_callable(AcosFunction::new(angle_mode.clone()));
+    machine.add_callable(AsinFunction::new(angle_mode.clone()));
     machine.add_callable(AtnFunction::new(angle_mode.clone()));
     machine.add_callable(CintFunction::new());
     machine.add_callable(CosFunction::new(angle_mode.clone()));
     machine.add_callable(DegCommand::new(angle_mode.clone()));
+    machine.add_callable(ExpFunction::new());
+    machine.add_callable(FixFunction::new());
     machine.add_callable(IntFunction::new());
+    machine.add_callable(LogFunction::new());
     machine.add_callable(MaxFunction::new());
     machine.add_callable(MinFunction::new());
     machine.add_callable(PiFunction::new());
     machine.add_callable(RadCommand::new(angle_mode.clone()));
     machine.add_callable(RandomizeCommand::new(prng.clone()));
     machine.add_callable(RndFunction::new(prng));
+    machine.add_callable(RoundFunction::new());
+    machine.add_callable(SgnFunction::new());
     machine.add_callable(SinFunction::new(angle_mode.clone()));
     machine.add_callable(SqrFunction::new());
     machine.add_callable(TanFunction::new(angle_mode));
@@ -760,6 +1166,54 @@ pub fn add_all(machine: &mut MachineBuilder) {
 #[cfg(test)]
 mod tests {
     use crate::testutils::*;
+
+    #[test]
+    fn test_abs() {
+        check_expr_ok(0.0, "ABS(0)");
+        check_expr_ok(3.0, "ABS(3)");
+        check_expr_ok(3.5, "ABS(-3.5)");
+
+        check_expr_ok_with_vars(2.5, "ABS(d)", [("d", (-2.5f64).into())]);
+
+        check_expr_compilation_error("1:10: ABS expected expr#", "ABS()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "ABS(FALSE)");
+        check_expr_compilation_error("1:10: ABS expected expr#", "ABS(3, 4)");
+    }
+
+    #[test]
+    fn test_acos() {
+        check_expr_ok(1f64.acos(), "ACOS(1)");
+        check_expr_ok(0.5f64.acos(), "ACOS(0.5)");
+
+        check_expr_ok_with_vars(0.5f64.acos(), "ACOS(d)", [("d", 0.5f64.into())]);
+
+        let mut t = Tester::default();
+        t.run("DEG: result = ACOS(0.5)").expect_var("result", 0.5f64.acos().to_degrees()).check();
+
+        check_expr_compilation_error("1:10: ACOS expected n#", "ACOS()");
+        check_expr_compilation_error("1:15: BOOLEAN is not a number", "ACOS(FALSE)");
+        check_expr_compilation_error("1:10: ACOS expected n#", "ACOS(3, 4)");
+        check_expr_error(
+            "1:15: Cannot take arc-cosine of a number outside of [-1, 1]",
+            "ACOS(1.1)",
+        );
+    }
+
+    #[test]
+    fn test_asin() {
+        check_expr_ok(0f64.asin(), "ASIN(0)");
+        check_expr_ok(0.5f64.asin(), "ASIN(0.5)");
+
+        check_expr_ok_with_vars(0.5f64.asin(), "ASIN(d)", [("d", 0.5f64.into())]);
+
+        let mut t = Tester::default();
+        t.run("DEG: result = ASIN(0.5)").expect_var("result", 0.5f64.asin().to_degrees()).check();
+
+        check_expr_compilation_error("1:10: ASIN expected n#", "ASIN()");
+        check_expr_compilation_error("1:15: BOOLEAN is not a number", "ASIN(FALSE)");
+        check_expr_compilation_error("1:10: ASIN expected n#", "ASIN(3, 4)");
+        check_expr_error("1:15: Cannot take arc-sine of a number outside of [-1, 1]", "ASIN(-1.1)");
+    }
 
     #[test]
     fn test_atn() {
@@ -831,6 +1285,39 @@ mod tests {
     }
 
     #[test]
+    fn test_exp() {
+        check_expr_ok(0f64.exp(), "EXP(0)");
+        check_expr_ok(1f64.exp(), "EXP(1)");
+        check_expr_ok((-2.5f64).exp(), "EXP(-2.5)");
+
+        check_expr_ok_with_vars(2f64.exp(), "EXP(i)", [("i", 2i32.into())]);
+
+        check_expr_compilation_error("1:10: EXP expected expr#", "EXP()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "EXP(FALSE)");
+        check_expr_compilation_error("1:10: EXP expected expr#", "EXP(3, 4)");
+        check_expr_error("1:14: Cannot exponentiate 1000 due to overflow", "EXP(1000)");
+    }
+
+    #[test]
+    fn test_fix() {
+        check_expr_ok(0, "FIX(0.1)");
+        check_expr_ok(0, "FIX(-0.1)");
+        check_expr_ok(4, "FIX(4.9)");
+        check_expr_ok(-4, "FIX(-4.9)");
+
+        check_expr_ok_with_vars(-4, "FIX(d)", [("d", (-4.9f64).into())]);
+
+        check_expr_compilation_error("1:10: FIX expected expr#", "FIX()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "FIX(FALSE)");
+        check_expr_compilation_error("1:10: FIX expected expr#", "FIX(3.0, 4)");
+
+        check_expr_error(
+            "1:14: Cannot cast -1234567890123456 to integer due to overflow",
+            "FIX(-1234567890123456.0)",
+        );
+    }
+
+    #[test]
     fn test_int() {
         check_expr_ok(0, "INT(0.1)");
         check_expr_ok(-1, "INT(-0.1)");
@@ -847,6 +1334,20 @@ mod tests {
             "1:14: Cannot cast -1234567890123456 to integer due to overflow",
             "INT(-1234567890123456.0)",
         );
+    }
+
+    #[test]
+    fn test_log() {
+        check_expr_ok(1f64.ln(), "LOG(1)");
+        check_expr_ok(10f64.ln(), "LOG(10)");
+
+        check_expr_ok_with_vars(10f64.ln(), "LOG(i)", [("i", 10i32.into())]);
+
+        check_expr_compilation_error("1:10: LOG expected num#", "LOG()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "LOG(FALSE)");
+        check_expr_compilation_error("1:10: LOG expected num#", "LOG(3, 4)");
+        check_expr_error("1:14: Cannot take logarithm of zero or a negative number", "LOG(0)");
+        check_expr_error("1:14: Cannot take logarithm of zero or a negative number", "LOG(-0.1)");
     }
 
     #[test]
@@ -950,6 +1451,40 @@ mod tests {
 
         check_stmt_compilation_err("1:1: RANDOMIZE expected <> | <seed%>", "RANDOMIZE ,");
         check_stmt_compilation_err("1:11: BOOLEAN is not a number", "RANDOMIZE TRUE");
+    }
+
+    #[test]
+    fn test_round() {
+        check_expr_ok(1.0, "ROUND(0.5)");
+        check_expr_ok(-1.0, "ROUND(-0.5)");
+        check_expr_ok(12.35, "ROUND(12.345, 2)");
+        check_expr_ok(12.3, "ROUND(12.345, 1)");
+        check_expr_ok(120.0, "ROUND(123.45, -1)");
+
+        check_expr_ok_with_vars(12.35, "ROUND(d, 2)", [("d", 12.345f64.into())]);
+
+        check_expr_compilation_error(
+            "1:10: ROUND expected <expr#> | <expr#, decimals%>",
+            "ROUND()",
+        );
+        check_expr_compilation_error("1:16: BOOLEAN is not a number", "ROUND(FALSE)");
+        check_expr_compilation_error(
+            "1:10: ROUND expected <expr#> | <expr#, decimals%>",
+            "ROUND(1, 2, 3)",
+        );
+    }
+
+    #[test]
+    fn test_sgn() {
+        check_expr_ok(-1, "SGN(-3)");
+        check_expr_ok(0, "SGN(0)");
+        check_expr_ok(1, "SGN(3.5)");
+
+        check_expr_ok_with_vars(-1, "SGN(d)", [("d", (-1.5f64).into())]);
+
+        check_expr_compilation_error("1:10: SGN expected n#", "SGN()");
+        check_expr_compilation_error("1:14: BOOLEAN is not a number", "SGN(FALSE)");
+        check_expr_compilation_error("1:10: SGN expected n#", "SGN(3, 4)");
     }
 
     #[test]
