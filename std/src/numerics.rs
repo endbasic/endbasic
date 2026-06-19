@@ -851,8 +851,9 @@ impl RndFunction {
                 .with_category(CATEGORY)
                 .with_description(
                     "Returns a random number in the [0..1] range.
-If n% is zero, returns the previously generated random number.  If n% is positive or is not \
-specified, returns a new random number.
+If n% is negative, resets the pseudo-random number generator to a sequence derived from n% and \
+returns its first value.  If n% is zero, returns the previously generated random number.  If n% \
+is positive or is not specified, returns a new random number.
 If you need to generate an integer random number within a specific range, say [0..100], compute it \
 with an expression like CINT%(RND#(1) * 100.0).
 WARNING: These random numbers offer no cryptographic guarantees.",
@@ -878,7 +879,9 @@ impl Callable for RndFunction {
                 Ordering::Equal => scope.return_double(self.prng.borrow_mut().last()),
                 Ordering::Greater => scope.return_double(self.prng.borrow_mut().next()),
                 Ordering::Less => {
-                    Err(CallError::Syntax(scope.get_pos(0), "n% cannot be negative".to_owned()))
+                    let mut prng = self.prng.borrow_mut();
+                    *prng = Prng::new_from_seed(n);
+                    scope.return_double(prng.last())
                 }
             }
         }
@@ -1421,6 +1424,8 @@ mod tests {
         // and we need a way to test that the PRNG was initialized before we call RANDOMIZE.
         check_expr_ok(false, "RND(1) = RND(1)");
         check_expr_ok(false, "RND(1) = RND(10)");
+        check_expr_ok(true, "RND(-1) = RND(-1)");
+        check_expr_ok(false, "RND(-1) = RND(-2)");
         check_expr_ok(true, "RND(0) = RND(0)");
 
         Tester::default()
@@ -1429,17 +1434,26 @@ mod tests {
             .run("result = RND(1)")
             .expect_var("result", 0.7097578208683426)
             .check()
+            .run("result = RND(-1)")
+            .expect_var("result", 0.6150244305876607)
+            .check()
+            .run("result = RND(1)")
+            .expect_var("result", 0.11707478019340774)
+            .check()
+            .run("result = RND(-1)")
+            .expect_var("result", 0.6150244305876607)
+            .check()
             .run("result = RND(1.1)")
-            .expect_var("result", 0.2205558922655312)
+            .expect_var("result", 0.11707478019340774)
             .check()
             .run("result = RND(0)")
-            .expect_var("result", 0.2205558922655312)
+            .expect_var("result", 0.11707478019340774)
             .check()
             .run("result = RND(10)")
-            .expect_var("result", 0.8273883964464507)
+            .expect_var("result", 0.8423819585801992)
             .check()
             .run("RANDOMIZE 10.2")
-            .expect_var("result", 0.8273883964464507)
+            .expect_var("result", 0.8423819585801992)
             .check()
             .run("result = RND(1)")
             .expect_var("result", 0.7097578208683426)
@@ -1447,7 +1461,6 @@ mod tests {
 
         check_expr_compilation_error("1:10: RND expected <> | <n%>", "RND(1, 7)");
         check_expr_compilation_error("1:14: BOOLEAN is not a number", "RND(FALSE)");
-        check_expr_error("1:14: n% cannot be negative", "RND(-1)");
 
         check_stmt_compilation_err("1:1: RANDOMIZE expected <> | <seed%>", "RANDOMIZE ,");
         check_stmt_compilation_err("1:11: BOOLEAN is not a number", "RANDOMIZE TRUE");

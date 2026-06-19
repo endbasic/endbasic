@@ -1466,8 +1466,10 @@ Output from HELP "RND":
 [39m
     Returns a random number in the [0..1] range.
 
-    If n% is zero, returns the previously generated random number.  If n%
-    is positive or is not specified, returns a new random number.
+    If n% is negative, resets the pseudo-random number generator to a
+    sequence derived from n% and returns its first value.  If n% is zero,
+    returns the previously generated random number.  If n% is positive or
+    is not specified, returns a new random number.
 
     If you need to generate an integer random number within a specific
     range, say [0..100], compute it with an expression like CINT%(RND#(1) *

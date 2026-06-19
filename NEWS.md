@@ -36,6 +36,9 @@ for the time being.**
 *   Added the `ABS`, `ACOS`, `ASIN`, `EXP`, `FIX`, `LOG`, `ROUND`, and `SGN`
     numeric functions.
 
+*   Modified `RND` so that it accepts negative numbers to re-seed the random
+    number generator, as other BASIC dialects do.
+
 *   Fixed the web frontend so that commands that print long outputs (like
     `HELP` or `DIR`) don't block and print everything at once: the contents
     now appear line by line.
