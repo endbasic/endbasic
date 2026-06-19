@@ -23,88 +23,412 @@ use std::io;
 /// Character to print when typing a secure string.
 const SECURE_CHAR: &str = "*";
 
-/// Adjusts the viewport start to ensure `pos` is visible within `width` columns.
-fn adjust_view(pos: usize, view_start: usize, width: usize) -> usize {
-    if width == 0 {
-        0
-    } else if pos < view_start {
-        pos
-    } else if pos > view_start + width {
-        pos - width
-    } else {
-        view_start
-    }
+/// Result of dispatching a key press while editing a line.
+enum DispatchResult {
+    Continue,
+    Submit,
 }
 
-/// Erases the character at `remove_pos` and redraws the remainder of the line.
-fn erase_at(
-    console: &mut dyn Console,
-    cursor_pos: usize,
-    remove_pos: usize,
-    line: &mut LineBuffer,
+/// Stateful interactive line editor.
+struct Readline<'a, 'h> {
+    console: &'a mut dyn Console,
+    history: Option<&'h mut Vec<String>>,
     echo: bool,
-) -> io::Result<()> {
-    debug_assert!(remove_pos < line.len());
-    debug_assert!(remove_pos <= cursor_pos);
-
-    console.hide_cursor()?;
-    let delta = cursor_pos - remove_pos;
-    if delta > 0 {
-        console.move_within_line(-(delta as i16))?;
-    }
-    let tail_len = line.len() - remove_pos - 1;
-    if echo {
-        console.write(&line.end(remove_pos + 1))?;
-    } else {
-        console.write(&SECURE_CHAR.repeat(tail_len))?;
-    }
-    console.write(" ")?;
-    console.move_within_line(-((tail_len + 1) as i16))?;
-    console.show_cursor()?;
-    line.remove(remove_pos);
-    Ok(())
+    input_width: usize,
+    line: LineBuffer,
+    pos: usize,
+    view_start: usize,
+    rendered: String,
+    rendered_len: usize,
+    history_pos: usize,
 }
 
-/// Returns the text to render for the current viewport.
-fn render_line(line: &LineBuffer, view_start: usize, width: usize, echo: bool) -> String {
-    debug_assert!(view_start <= line.len());
+impl<'a, 'h> Readline<'a, 'h> {
+    /// Adjusts the viewport start to ensure `pos` remains visible.
+    fn adjust_view(&self, pos: usize, view_start: usize) -> usize {
+        if self.input_width == 0 {
+            0
+        } else if pos < view_start {
+            pos
+        } else if pos > view_start + self.input_width {
+            pos - self.input_width
+        } else {
+            view_start
+        }
+    }
 
-    if !echo {
-        SECURE_CHAR.repeat((line.len() - view_start).min(width))
-    } else {
-        line.range(view_start, view_start + width)
+    /// Returns the cursor offset within the currently-rendered viewport.
+    fn current_pos(&self) -> usize {
+        self.pos - self.view_start
     }
-}
 
-/// Refreshes the current input line to display `text` assuming that the cursor is currently
-/// offset by `old_pos` characters from the beginning of the rendered text, that the previous line
-/// was `clear_len` characters long, and that the cursor should end at `new_pos`.
-fn redraw_line(
-    console: &mut dyn Console,
-    old_pos: usize,
-    clear_len: usize,
-    new_pos: usize,
-    text: &str,
-) -> io::Result<()> {
-    console.hide_cursor()?;
-    if old_pos > 0 {
-        console.move_within_line(-(old_pos as i16))?;
+    /// Returns the text to render for the current viewport.
+    fn render_line(&self, view_start: usize) -> String {
+        debug_assert!(view_start <= self.line.len());
+
+        if !self.echo {
+            SECURE_CHAR.repeat((self.line.len() - view_start).min(self.input_width))
+        } else {
+            self.line.range(view_start, view_start + self.input_width)
+        }
     }
-    if !text.is_empty() {
-        console.write(text)?;
+
+    /// Recomputes the rendered text and its display width.
+    fn sync_rendered(&mut self) {
+        self.rendered = self.render_line(self.view_start);
+        self.rendered_len = self.rendered.chars().count();
     }
-    let text_len = text.chars().count();
-    let written_len = text_len.max(clear_len);
-    if text_len < clear_len {
-        let diff = clear_len - text_len;
-        console.write(&" ".repeat(diff))?;
+
+    /// Moves the viewport so that the end of the line is visible.
+    fn reset_view_to_end(&mut self) {
+        self.view_start =
+            if self.input_width == 0 { 0 } else { self.pos.saturating_sub(self.input_width) };
+        self.sync_rendered();
     }
-    debug_assert!(new_pos <= written_len);
-    let reset = written_len - new_pos;
-    if reset > 0 {
-        console.move_within_line(-(reset as i16))?;
+
+    /// Redraws the rendered viewport and places the cursor at the desired offset.
+    fn redraw_line(&mut self, old_pos: usize, clear_len: usize, new_pos: usize) -> io::Result<()> {
+        self.console.hide_cursor()?;
+        if old_pos > 0 {
+            self.console.move_within_line(-(old_pos as i16))?;
+        }
+        if !self.rendered.is_empty() {
+            self.console.write(&self.rendered)?;
+        }
+        let written_len = self.rendered_len.max(clear_len);
+        if self.rendered_len < clear_len {
+            let diff = clear_len - self.rendered_len;
+            self.console.write(&" ".repeat(diff))?;
+        }
+        debug_assert!(new_pos <= written_len);
+        let reset = written_len - new_pos;
+        if reset > 0 {
+            self.console.move_within_line(-(reset as i16))?;
+        }
+        self.console.show_cursor()
     }
-    console.show_cursor()
+
+    /// Erases a character and redraws the visible tail of the line.
+    fn erase_at(&mut self, cursor_pos: usize, remove_pos: usize) -> io::Result<()> {
+        debug_assert!(remove_pos < self.line.len());
+        debug_assert!(remove_pos <= cursor_pos);
+
+        self.console.hide_cursor()?;
+        let delta = cursor_pos - remove_pos;
+        if delta > 0 {
+            self.console.move_within_line(-(delta as i16))?;
+        }
+        let tail_len = self.line.len() - remove_pos - 1;
+        if self.echo {
+            self.console.write(&self.line.end(remove_pos + 1))?;
+        } else {
+            self.console.write(&SECURE_CHAR.repeat(tail_len))?;
+        }
+        self.console.write(" ")?;
+        self.console.move_within_line(-((tail_len + 1) as i16))?;
+        self.console.show_cursor()?;
+        self.line.remove(remove_pos);
+        Ok(())
+    }
+
+    /// Handles a backspace key press.
+    fn do_backspace(&mut self) -> io::Result<DispatchResult> {
+        if self.pos == 0 {
+            return Ok(DispatchResult::Continue);
+        }
+
+        if self.view_start == 0 && self.line.len() <= self.input_width {
+            self.erase_at(self.pos, self.pos - 1)?;
+            self.pos -= 1;
+            self.sync_rendered();
+        } else {
+            let old_pos = self.current_pos();
+            let clear_len = self.rendered_len;
+            self.line.remove(self.pos - 1);
+            self.pos -= 1;
+            self.view_start = self.adjust_view(self.pos, self.view_start);
+            self.sync_rendered();
+            self.redraw_line(old_pos, clear_len, self.current_pos())?;
+        }
+        Ok(DispatchResult::Continue)
+    }
+
+    /// Handles a carriage return key press.
+    fn do_carriage_return(&mut self) -> io::Result<DispatchResult> {
+        // TODO(jmmv): This is here because the integration tests may be checked out with
+        // CRLF line endings on Windows, which means we'd see two characters to end a line
+        // instead of one.  Not sure if we should do this or if instead we should ensure
+        // the golden data we feed to the tests has single-character line endings.
+        if cfg!(not(target_os = "windows")) {
+            self.console.print("")?;
+            Ok(DispatchResult::Submit)
+        } else {
+            Ok(DispatchResult::Continue)
+        }
+    }
+
+    /// Handles a regular character insertion.
+    fn do_char(&mut self, ch: char) -> io::Result<DispatchResult> {
+        if self.input_width == 0 {
+            return Ok(DispatchResult::Continue);
+        }
+
+        let line_len = self.line.len();
+        let new_view_start = self.adjust_view(self.pos + 1, self.view_start);
+        if new_view_start == self.view_start && line_len < self.input_width {
+            if self.pos < line_len {
+                self.console.hide_cursor()?;
+                if self.echo {
+                    let mut buf = [0u8; 4];
+                    self.console.write(ch.encode_utf8(&mut buf))?;
+                    self.console.write(&self.line.end(self.pos))?;
+                } else {
+                    self.console.write(&SECURE_CHAR.repeat(line_len - self.pos + 1))?;
+                }
+                self.console.move_within_line(-((line_len - self.pos) as i16))?;
+                self.console.show_cursor()?;
+                self.line.insert(self.pos, ch);
+            } else {
+                if self.echo {
+                    let mut buf = [0u8; 4];
+                    self.console.write(ch.encode_utf8(&mut buf))?;
+                } else {
+                    self.console.write(SECURE_CHAR)?;
+                }
+                self.line.insert(line_len, ch);
+            }
+            self.pos += 1;
+            self.sync_rendered();
+        } else {
+            let old_pos = self.current_pos();
+            let clear_len = self.rendered_len;
+            self.line.insert(self.pos, ch);
+            self.pos += 1;
+            self.view_start = new_view_start;
+            self.sync_rendered();
+            self.redraw_line(old_pos, clear_len, self.current_pos())?;
+        }
+        Ok(DispatchResult::Continue)
+    }
+
+    /// Handles deletion of the character under the cursor.
+    fn do_delete(&mut self) -> io::Result<DispatchResult> {
+        if self.pos >= self.line.len() {
+            return Ok(DispatchResult::Continue);
+        }
+
+        if self.view_start == 0 && self.line.len() <= self.input_width {
+            self.erase_at(self.pos, self.pos)?;
+            self.sync_rendered();
+        } else {
+            let old_pos = self.current_pos();
+            let clear_len = self.rendered_len;
+            self.line.remove(self.pos);
+            self.view_start = self.adjust_view(self.pos, self.view_start);
+            self.sync_rendered();
+            self.redraw_line(old_pos, clear_len, self.current_pos())?;
+        }
+        Ok(DispatchResult::Continue)
+    }
+
+    /// Moves the cursor to the end of the line.
+    fn do_end(&mut self) -> io::Result<DispatchResult> {
+        self.do_move_to(self.line.len())
+    }
+
+    /// Treats EOF as delete while text exists, or reports end-of-input otherwise.
+    fn do_eof_or_delete(&mut self) -> io::Result<DispatchResult> {
+        if self.line.is_empty() {
+            Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"))
+        } else {
+            self.do_delete()
+        }
+    }
+
+    /// Moves the cursor to the start of the line.
+    fn do_home(&mut self) -> io::Result<DispatchResult> {
+        self.do_move_to(0)
+    }
+
+    /// Ignores a key press that has no editing effect.
+    fn do_ignore(&mut self) -> io::Result<DispatchResult> {
+        Ok(DispatchResult::Continue)
+    }
+
+    /// Reports an interrupt triggered by the user.
+    fn do_interrupt(&mut self) -> io::Result<DispatchResult> {
+        Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C"))
+    }
+
+    /// Moves the cursor to a new position, scrolling if needed.
+    fn do_move_to(&mut self, new_pos: usize) -> io::Result<DispatchResult> {
+        if new_pos == self.pos {
+            return Ok(DispatchResult::Continue);
+        }
+
+        let old_pos = self.current_pos();
+        let new_view_start = self.adjust_view(new_pos, self.view_start);
+        if new_view_start == self.view_start {
+            let delta = new_pos as i16 - self.pos as i16;
+            self.console.move_within_line(delta)?;
+            self.pos = new_pos;
+        } else {
+            let clear_len = self.rendered_len;
+            self.pos = new_pos;
+            self.view_start = new_view_start;
+            self.sync_rendered();
+            self.redraw_line(old_pos, clear_len, self.current_pos())?;
+        }
+        Ok(DispatchResult::Continue)
+    }
+
+    /// Accepts the current line.
+    fn do_newline(&mut self) -> io::Result<DispatchResult> {
+        self.console.print("")?;
+        Ok(DispatchResult::Submit)
+    }
+
+    /// Navigates through the command history.
+    fn do_up_down(&mut self, delta: isize) -> io::Result<DispatchResult> {
+        let (new_history_pos, new_line) = {
+            let history = match self.history.as_deref_mut() {
+                Some(history) => history,
+                None => return Ok(DispatchResult::Continue),
+            };
+
+            let new_history_pos = if delta < 0 {
+                if self.history_pos == 0 {
+                    return Ok(DispatchResult::Continue);
+                }
+                self.history_pos - 1
+            } else {
+                if self.history_pos == history.len() - 1 {
+                    return Ok(DispatchResult::Continue);
+                }
+                self.history_pos + 1
+            };
+
+            history[self.history_pos] = self.line.to_string();
+            (new_history_pos, history[new_history_pos].clone())
+        };
+
+        let old_pos = self.current_pos();
+        let clear_len = self.rendered_len;
+        self.history_pos = new_history_pos;
+        self.line = LineBuffer::from(&new_line);
+        self.pos = self.line.len();
+        self.reset_view_to_end();
+        self.redraw_line(old_pos, clear_len, self.current_pos())?;
+        Ok(DispatchResult::Continue)
+    }
+
+    /// Finalizes history bookkeeping and returns the edited line.
+    fn finish(mut self) -> String {
+        if let Some(history) = self.history.as_mut() {
+            if self.line.is_empty() {
+                history.pop();
+            } else {
+                let last = history.len() - 1;
+                history[last] = self.line.to_string();
+            }
+        }
+        self.line.into_inner()
+    }
+
+    /// Creates a new interactive line editor and renders its initial state.
+    fn new(
+        console: &'a mut dyn Console,
+        prompt: &str,
+        previous: &str,
+        mut history: Option<&'h mut Vec<String>>,
+        echo: bool,
+    ) -> io::Result<Self> {
+        let console_width = {
+            let console_size = console.size_chars()?;
+            usize::from(console_size.x)
+        };
+
+        let mut prompt = Cow::from(prompt);
+        let mut prompt_len = prompt.len();
+        if prompt_len >= console_width {
+            // TODO(jmmv): This slices by bytes and can split non-ASCII prompts.
+            if console_width >= 5 {
+                prompt = Cow::from(format!("{}...", &prompt[0..console_width - 5]));
+            } else {
+                prompt = Cow::from("");
+            }
+            prompt_len = prompt.len();
+        }
+
+        let input_width = {
+            // Assumes that the prompt was printed at column 0.  If that was not the case, line
+            // length calculation does not work.
+            let width = console_width - prompt_len;
+            width.saturating_sub(1)
+        };
+
+        let line = LineBuffer::from(previous);
+        let pos = line.len();
+        let view_start = if input_width == 0 { 0 } else { pos.saturating_sub(input_width) };
+        let history_pos = match history.as_mut() {
+            Some(history) => {
+                history.push(line.to_string());
+                history.len() - 1
+            }
+            None => 0,
+        };
+
+        let mut readline = Self {
+            console,
+            history,
+            echo,
+            input_width,
+            line,
+            pos,
+            view_start,
+            rendered: String::new(),
+            rendered_len: 0,
+            history_pos,
+        };
+        readline.view_start = readline.adjust_view(readline.pos, readline.view_start);
+        readline.sync_rendered();
+
+        if !prompt.is_empty() || !readline.rendered.is_empty() {
+            readline.console.write(&format!("{}{}", prompt, readline.rendered))?;
+            readline.console.sync_now()?;
+        }
+
+        Ok(readline)
+    }
+
+    /// Runs the interactive key-processing loop until the line is accepted.
+    async fn run(mut self) -> io::Result<String> {
+        loop {
+            let result = match self.console.read_key().await? {
+                Key::ArrowDown => self.do_up_down(1),
+                Key::ArrowLeft => self.do_move_to(self.pos.saturating_sub(1)),
+                Key::ArrowRight => self.do_move_to((self.pos + 1).min(self.line.len())),
+                Key::ArrowUp => self.do_up_down(-1),
+                Key::Backspace => self.do_backspace(),
+                Key::CarriageReturn => self.do_carriage_return(),
+                Key::Char(ch) => self.do_char(ch),
+                Key::Delete => self.do_delete(),
+                Key::End => self.do_end(),
+                Key::EofOrDelete => self.do_eof_or_delete(),
+                Key::Escape => self.do_ignore(),
+                Key::Home => self.do_home(),
+                Key::Interrupt => self.do_interrupt(),
+                Key::NewLine => self.do_newline(),
+                Key::PageDown | Key::PageUp | Key::Tab | Key::Unknown => self.do_ignore(),
+            }?;
+
+            if let DispatchResult::Submit = result {
+                break;
+            }
+        }
+
+        Ok(self.finish())
+    }
 }
 
 /// Reads a line of text interactively from the console, using the given `prompt` and pre-filling
@@ -117,302 +441,7 @@ async fn read_line_interactive(
     mut history: Option<&mut Vec<String>>,
     echo: bool,
 ) -> io::Result<String> {
-    let console_width = {
-        let console_size = console.size_chars()?;
-        usize::from(console_size.x)
-    };
-
-    let mut prompt = Cow::from(prompt);
-    let mut prompt_len = prompt.len();
-    if prompt_len >= console_width {
-        // TODO(jmmv): This slices by bytes and can split non-ASCII prompts.
-        if console_width >= 5 {
-            prompt = Cow::from(format!("{}...", &prompt[0..console_width - 5]));
-        } else {
-            prompt = Cow::from("");
-        }
-        prompt_len = prompt.len();
-    }
-
-    let mut line = LineBuffer::from(previous);
-    let width = {
-        // Assumes that the prompt was printed at column 0.  If that was not the case, line length
-        // calculation does not work.
-        console_width - prompt_len
-    };
-    let input_width = width.saturating_sub(1);
-
-    // Insertion position *within* the line, without accounting for the prompt.
-    // TODO(zenria): Handle UTF-8 graphemes.
-    let mut pos = line.len();
-    let render = |line: &LineBuffer, pos: usize, view_start: usize| {
-        let view_start = adjust_view(pos, view_start, input_width);
-        let rendered = render_line(line, view_start, input_width, echo);
-        let rendered_len = rendered.chars().count();
-        (view_start, rendered, rendered_len)
-    };
-    let mut view_start = if input_width == 0 { 0 } else { pos.saturating_sub(input_width) };
-    let (new_view_start, mut rendered, mut rendered_len) = render(&line, pos, view_start);
-    view_start = new_view_start;
-
-    if !prompt.is_empty() || !rendered.is_empty() {
-        console.write(&format!("{}{}", prompt, rendered))?;
-        console.sync_now()?;
-    }
-
-    let mut history_pos = match history.as_mut() {
-        Some(history) => {
-            history.push(line.to_string());
-            history.len() - 1
-        }
-        None => 0,
-    };
-
-    loop {
-        match console.read_key().await? {
-            Key::ArrowUp => {
-                if let Some(history) = history.as_mut() {
-                    if history_pos == 0 {
-                        continue;
-                    }
-
-                    let old_pos = pos - view_start;
-                    let clear_len = rendered_len;
-
-                    history[history_pos] = line.into_inner();
-                    history_pos -= 1;
-                    line = LineBuffer::from(&history[history_pos]);
-                    pos = line.len();
-                    view_start = if input_width == 0 { 0 } else { pos.saturating_sub(input_width) };
-                    (view_start, rendered, rendered_len) = render(&line, pos, view_start);
-                    redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
-                }
-            }
-
-            Key::ArrowDown => {
-                if let Some(history) = history.as_mut() {
-                    if history_pos == history.len() - 1 {
-                        continue;
-                    }
-
-                    let old_pos = pos - view_start;
-                    let clear_len = rendered_len;
-
-                    history[history_pos] = line.to_string();
-                    history_pos += 1;
-                    line = LineBuffer::from(&history[history_pos]);
-                    pos = line.len();
-                    view_start = if input_width == 0 { 0 } else { pos.saturating_sub(input_width) };
-                    (view_start, rendered, rendered_len) = render(&line, pos, view_start);
-                    redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
-                }
-            }
-
-            Key::ArrowLeft => {
-                if pos > 0 {
-                    let old_pos = pos - view_start;
-                    pos -= 1;
-                    let new_view_start = adjust_view(pos, view_start, input_width);
-                    if new_view_start == view_start {
-                        console.move_within_line(-1)?;
-                    } else {
-                        let clear_len = rendered_len;
-                        view_start = new_view_start;
-                        rendered = render_line(&line, view_start, input_width, echo);
-                        rendered_len = rendered.chars().count();
-                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
-                    }
-                }
-            }
-
-            Key::ArrowRight => {
-                if pos < line.len() {
-                    let old_pos = pos - view_start;
-                    pos += 1;
-                    let new_view_start = adjust_view(pos, view_start, input_width);
-                    if new_view_start == view_start {
-                        console.move_within_line(1)?;
-                    } else {
-                        let clear_len = rendered_len;
-                        view_start = new_view_start;
-                        rendered = render_line(&line, view_start, input_width, echo);
-                        rendered_len = rendered.chars().count();
-                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
-                    }
-                }
-            }
-
-            Key::Backspace => {
-                if pos > 0 {
-                    if view_start == 0 && line.len() <= input_width {
-                        erase_at(console, pos, pos - 1, &mut line, echo)?;
-                        pos -= 1;
-                        rendered_len -= 1;
-                    } else {
-                        let old_pos = pos - view_start;
-                        let clear_len = rendered_len;
-                        line.remove(pos - 1);
-                        pos -= 1;
-                        (view_start, rendered, rendered_len) = render(&line, pos, view_start);
-                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
-                    }
-                }
-            }
-
-            Key::Delete => {
-                if pos < line.len() {
-                    if view_start == 0 && line.len() <= input_width {
-                        erase_at(console, pos, pos, &mut line, echo)?;
-                        rendered_len -= 1;
-                    } else {
-                        let old_pos = pos - view_start;
-                        let clear_len = rendered_len;
-                        line.remove(pos);
-                        (view_start, rendered, rendered_len) = render(&line, pos, view_start);
-                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
-                    }
-                }
-            }
-
-            Key::EofOrDelete if !line.is_empty() => {
-                if pos < line.len() {
-                    if view_start == 0 && line.len() <= input_width {
-                        erase_at(console, pos, pos, &mut line, echo)?;
-                        rendered_len -= 1;
-                    } else {
-                        let old_pos = pos - view_start;
-                        let clear_len = rendered_len;
-                        line.remove(pos);
-                        (view_start, rendered, rendered_len) = render(&line, pos, view_start);
-                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
-                    }
-                }
-            }
-
-            Key::CarriageReturn => {
-                // TODO(jmmv): This is here because the integration tests may be checked out with
-                // CRLF line endings on Windows, which means we'd see two characters to end a line
-                // instead of one.  Not sure if we should do this or if instead we should ensure
-                // the golden data we feed to the tests has single-character line endings.
-                if cfg!(not(target_os = "windows")) {
-                    console.print("")?;
-                    break;
-                }
-            }
-
-            Key::Char(ch) => {
-                if input_width == 0 {
-                    continue;
-                }
-
-                let line_len = line.len();
-                let new_view_start = adjust_view(pos + 1, view_start, input_width);
-                if new_view_start == view_start && line_len < input_width {
-                    if pos < line_len {
-                        console.hide_cursor()?;
-                        if echo {
-                            let mut buf = [0u8; 4];
-                            console.write(ch.encode_utf8(&mut buf))?;
-                            console.write(&line.end(pos))?;
-                        } else {
-                            console.write(&SECURE_CHAR.repeat(line_len - pos + 1))?;
-                        }
-                        console.move_within_line(-((line_len - pos) as i16))?;
-                        console.show_cursor()?;
-                        line.insert(pos, ch);
-                    } else {
-                        if echo {
-                            let mut buf = [0u8; 4];
-                            console.write(ch.encode_utf8(&mut buf))?;
-                        } else {
-                            console.write(SECURE_CHAR)?;
-                        }
-                        line.insert(line_len, ch);
-                    }
-                    pos += 1;
-                    rendered_len += 1;
-                } else {
-                    let old_pos = pos - view_start;
-                    let clear_len = rendered_len;
-                    line.insert(pos, ch);
-                    pos += 1;
-                    view_start = new_view_start;
-                    rendered = render_line(&line, view_start, input_width, echo);
-                    rendered_len = rendered.chars().count();
-                    redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
-                }
-            }
-
-            Key::End => {
-                let offset = line.len() - pos;
-                if offset > 0 {
-                    let old_pos = pos - view_start;
-                    pos += offset;
-                    let new_view_start = adjust_view(pos, view_start, input_width);
-                    if new_view_start == view_start {
-                        console.move_within_line(offset as i16)?;
-                    } else {
-                        let clear_len = rendered_len;
-                        view_start = new_view_start;
-                        rendered = render_line(&line, view_start, input_width, echo);
-                        rendered_len = rendered.chars().count();
-                        redraw_line(console, old_pos, clear_len, pos - view_start, &rendered)?;
-                    }
-                }
-            }
-
-            Key::EofOrDelete => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF")),
-
-            Key::Escape => {
-                // Intentionally ignored.
-            }
-
-            Key::Home => {
-                if pos > 0 {
-                    let old_pos = pos - view_start;
-                    pos = 0;
-                    let new_view_start = adjust_view(pos, view_start, input_width);
-                    if new_view_start == view_start {
-                        console.move_within_line(-(old_pos as i16))?;
-                    } else {
-                        let clear_len = rendered_len;
-                        view_start = new_view_start;
-                        rendered = render_line(&line, view_start, input_width, echo);
-                        rendered_len = rendered.chars().count();
-                        redraw_line(console, old_pos, clear_len, 0, &rendered)?;
-                    }
-                }
-            }
-
-            Key::Interrupt => return Err(io::Error::new(io::ErrorKind::Interrupted, "Ctrl+C")),
-
-            Key::NewLine => {
-                console.print("")?;
-                break;
-            }
-
-            Key::PageDown | Key::PageUp => {
-                // Intentionally ignored.
-            }
-
-            Key::Tab => {
-                // TODO(jmmv): Would be nice to have some form of auto-completion.
-            }
-
-            // TODO(jmmv): Should do something smarter with unknown keys.
-            Key::Unknown => (),
-        }
-    }
-
-    if let Some(history) = history.as_mut() {
-        if line.is_empty() {
-            history.pop();
-        } else {
-            let last = history.len() - 1;
-            history[last] = line.to_string();
-        }
-    }
-    Ok(line.into_inner())
+    Readline::new(console, prompt, previous, history.take(), echo)?.run().await
 }
 
 /// Reads a line of text interactively from the console, which is not expected to be a TTY.
