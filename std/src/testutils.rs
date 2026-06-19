@@ -20,6 +20,7 @@ use crate::console::{
     self, CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels, remove_control_chars,
 };
 use crate::program::Program;
+use crate::sound::Tone;
 use crate::storage::Storage;
 use crate::{Machine, MachineBuilder, Signal, gpio};
 use async_channel::{Receiver, Sender};
@@ -67,6 +68,9 @@ pub enum CapturedOut {
 
     /// Represents a call to `Console::show_cursor`.
     ShowCursor,
+
+    /// Represents a call to `Console::play_tone`.
+    PlayTone(Tone),
 
     /// Represents a call to `Console::write`.
     Write(String),
@@ -423,6 +427,11 @@ impl Console for MockConsole {
         }
         self.captured_out.push(CapturedOut::SetSync(enabled));
         Ok(previous)
+    }
+
+    async fn play_tone(&mut self, tone: Tone) -> io::Result<()> {
+        self.captured_out.push(CapturedOut::PlayTone(tone));
+        Ok(())
     }
 }
 

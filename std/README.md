@@ -33,8 +33,8 @@ EndBASIC's standard library is inspired by other BASIC interpreters but does
 not intend to be fully compatible with them.  The library currently contains:
 
 *   Arrays: `LBOUND`, `UBOUND`.
-*   Console manipulation: `CLS`, `COLOR`, `INKEY`, `INPUT`, `LOCATE`, `PRINT`,
-    `SCRCOLS`, `SCRROWS`.
+*   Console manipulation: `BEEP`, `CLS`, `COLOR`, `INKEY`, `INPUT`, `LOCATE`,
+    `PRINT`, `SCRCOLS`, `SCRROWS`, `SOUND`.
 *   Data manipulation: `READ`, `RESTORE`.
 *   Date and time manipulation: `SLEEP`.
 *   Graphics: `GFX_CIRCLE`, `GFX_CIRCLEF`, `GFX_FILL`, `GFX_HEIGHT`,

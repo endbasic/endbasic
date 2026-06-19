@@ -37,6 +37,8 @@ use web_sys::HtmlCanvasElement;
 #[cfg(test)]
 wasm_bindgen_test_configure!(run_in_browser);
 
+mod audio;
+use audio::WebAudioOps;
 mod canvas;
 use canvas::CanvasRasterOps;
 mod input;
@@ -262,7 +264,7 @@ fn setup_storage(storage: &mut endbasic_std::storage::Storage) {
 #[wasm_bindgen]
 pub struct WebTerminal {
     yielder: WebYielder,
-    console: GraphicsConsole<WebInputOps, CanvasRasterOps>,
+    console: GraphicsConsole<WebInputOps, CanvasRasterOps, WebAudioOps>,
     on_screen_keyboard: OnScreenKeyboard,
     service_url: String,
     signals_chan: (Sender<Signal>, Receiver<Signal>),
@@ -281,8 +283,12 @@ impl WebTerminal {
             Ok(raster_ops) => raster_ops,
             Err(e) => log_and_panic!("Console initialization failed: {}", e),
         };
+        let audio_ops = match WebAudioOps::new() {
+            Ok(audio_ops) => audio_ops,
+            Err(e) => log_and_panic!("Audio initialization failed: {}", e),
+        };
         let input_ops = WebInputOps(input);
-        let console = GraphicsConsole::new(input_ops, raster_ops, None, None).unwrap();
+        let console = GraphicsConsole::new(input_ops, raster_ops, audio_ops, None, None).unwrap();
 
         Self { yielder, console, on_screen_keyboard, service_url, signals_chan }
     }

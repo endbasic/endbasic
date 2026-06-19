@@ -38,6 +38,7 @@ pub mod gpio;
 pub mod help;
 pub mod numerics;
 pub mod program;
+pub mod sound;
 pub mod spi;
 pub mod storage;
 pub mod strings;
@@ -386,6 +387,7 @@ impl MachineBuilder {
         let sleep_fn = self.sleep_fn.take();
         exec::add_scripting(&mut self, sleep_fn);
         numerics::add_all(&mut self);
+        sound::cmds::add_all(&mut self, console.clone());
         strings::add_all(&mut self);
 
         Machine {

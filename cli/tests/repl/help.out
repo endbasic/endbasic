@@ -17,6 +17,7 @@ Output from HELP:
 [39m    >> [38;5;14mInterpreter
 [39m    >> [38;5;14mLanguage reference
 [39m    >> [38;5;14mNumerical functions
+[39m    >> [38;5;14mSound
 [39m    >> [38;5;14mStored program
 [39m    >> [38;5;14mString and character functions
 [39m
@@ -257,6 +258,19 @@ Output from HELP "NUMERICAL":
     >> [38;5;14mSIN#     [39m    Computes the sine of an angle.
     >> [38;5;14mSQR#     [39m    Computes the square root of the given number.
     >> [38;5;14mTAN#     [39m    Computes the tangent of an angle.
+
+    Type HELP followed by the name of a topic for details.
+
+Output from HELP "SOUND":
+
+[38;5;11m    Sound
+[39m
+
+
+    The EndBASIC console supports sound playback.
+
+    >> [38;5;14mBEEP [39m    Reproduces a short audible tone.
+    >> [38;5;14mSOUND[39m    Reproduces a tone with the given pitch and duration.
 
     Type HELP followed by the name of a topic for details.
 
@@ -651,6 +665,16 @@ Output from HELP "WHILE":
             PRINT a
             a = a + 1
         WEND
+
+Output from HELP "BEEP":
+
+[38;5;11m    BEEP
+[39m
+    Reproduces a short audible tone.
+
+    This command plays a square-wave tone at 800 hertz for 0.25 seconds in
+    consoles that support sound.  Otherwise, this falls back to a BEL
+    control code that should match this pitch and duration, but it may not.
 
 Output from HELP "CD":
 
@@ -1180,6 +1204,19 @@ Output from HELP "SLEEP":
     Pauses program execution for the given number of seconds, which can be
     specified either as an integer or as a floating point number for finer
     precision.
+
+Output from HELP "SOUND":
+
+[38;5;11m    Sound
+[39m
+
+
+    The EndBASIC console supports sound playback.
+
+    >> [38;5;14mBEEP [39m    Reproduces a short audible tone.
+    >> [38;5;14mSOUND[39m    Reproduces a tone with the given pitch and duration.
+
+    Type HELP followed by the name of a topic for details.
 
 Output from HELP "UNMOUNT":
 

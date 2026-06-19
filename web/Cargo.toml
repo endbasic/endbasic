@@ -53,6 +53,12 @@ path = "../std"
 [dependencies.web-sys]
 version = "0.3.77"
 features = [
+    "AudioContext",
+    "AudioDestinationNode",
+    "AudioNode",
+    "AudioParam",
+    "AudioScheduledSourceNode",
+    "BaseAudioContext",
     "CanvasRenderingContext2d",
     "ContextAttributes2d",
     "Document",
@@ -66,6 +72,8 @@ features = [
     "MessageChannel",
     "MessageEvent",
     "MessagePort",
+    "OscillatorNode",
+    "OscillatorType",
     "Performance",
     "Storage",
     "TextMetrics",

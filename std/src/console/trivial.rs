@@ -18,9 +18,11 @@
 use crate::console::{
     CharsXY, ClearType, Console, Key, get_env_var_as_u16, read_key_from_stdin, remove_control_chars,
 };
+use crate::sound::BEEP_TONE;
 use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::io::{self, StdoutLock, Write};
+use std::thread;
 
 /// Default number of columns for when `COLUMNS` is not set.
 const DEFAULT_COLUMNS: u16 = 80;
@@ -138,5 +140,14 @@ impl Console for TrivialConsole {
         let previous = self.sync_enabled;
         self.sync_enabled = enabled;
         Ok(previous)
+    }
+
+    async fn beep(&mut self) -> io::Result<()> {
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        stdout.write_all(b"\x07")?;
+        stdout.flush()?;
+        thread::sleep(BEEP_TONE.duration);
+        Ok(())
     }
 }
