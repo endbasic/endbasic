@@ -1,0 +1,9 @@
+
+    EndBASIC X.Y.Z
+    Copyright YYYY-YYYY Julio Merino
+
+    Type HELP for interactive usage information.
+
+Press any key to stop...
+ERROR: 23:9: No audio support in this console
+End of input by CTRL-D
