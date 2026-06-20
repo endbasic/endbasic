@@ -33,6 +33,8 @@ for the time being.**
 *   Added the `INSTR`, `LCASE`, `SPACE`, `TRIM`, `UCASE`, and `VAL`
     string functions.
 
+*   Fixed various UTF-8 handling issues in `LEFT`, `LEN`, `MID`, and `RIGHT`.
+
 *   Added the `ABS`, `ACOS`, `ASIN`, `EXP`, `FIX`, `LOG`, `ROUND`, and `SGN`
     numeric functions.
 

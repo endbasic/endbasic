@@ -83,6 +83,18 @@ fn byte_index_to_char_index(s: &str, byte_index: usize) -> usize {
     s[..byte_index].chars().count()
 }
 
+/// Returns the number of characters in `s`.
+fn char_len(s: &str) -> usize {
+    s.chars().count()
+}
+
+/// Returns the substring of `s` within the given character range.
+fn slice_by_char_range(s: &str, start: usize, end: usize) -> &str {
+    let start = char_index_to_byte_index(s, start);
+    let end = char_index_to_byte_index(s, end);
+    &s[start..end]
+}
+
 /// Parses the numeric prefix in `s` according to BASIC's `VAL` rules.
 fn parse_numeric_prefix(s: &str) -> f64 {
     let s = s.trim_start();
@@ -454,8 +466,8 @@ impl Callable for LeftFunction {
         if n < 0 {
             Err(CallError::Syntax(scope.get_pos(1), "n% cannot be negative".to_owned()))
         } else {
-            let n = min(s.len(), n as usize);
-            scope.return_string(s[..n].to_owned())
+            let n = min(char_len(&s), n as usize);
+            scope.return_string(slice_by_char_range(&s, 0, n).to_owned())
         }
     }
 }
@@ -494,8 +506,8 @@ impl Callable for LenFunction {
         debug_assert_eq!(1, scope.nargs());
         let s = scope.get_string(0);
 
-        let len =
-            i32::try_from(s.len()).map_err(|_| CallError::Eval("String too long".to_owned()))?;
+        let len = i32::try_from(char_len(s))
+            .map_err(|_| CallError::Eval("String too long".to_owned()))?;
         scope.return_integer(len)
     }
 }
@@ -625,7 +637,8 @@ impl Callable for MidFunction {
                 "start% cannot be negative".to_owned(),
             ));
         }
-        let start = min(s.len(), start as usize);
+        let slen = char_len(&s);
+        let start = min(slen, start as usize);
 
         let end = if let Some(length) = lengtharg {
             if length < 0 {
@@ -634,12 +647,12 @@ impl Callable for MidFunction {
                     "length% cannot be negative".to_owned(),
                 ));
             }
-            min(start + (length as usize), s.len())
+            min(start + (length as usize), slen)
         } else {
-            s.len()
+            slen
         };
 
-        scope.return_string(s[start..end].to_owned())
+        scope.return_string(slice_by_char_range(&s, start, end).to_owned())
     }
 }
 
@@ -697,8 +710,9 @@ impl Callable for RightFunction {
         if n < 0 {
             Err(CallError::Syntax(scope.get_pos(1), "n% cannot be negative".to_owned()))
         } else {
-            let n = min(s.len(), n as usize);
-            scope.return_string(s[s.len() - n..].to_owned())
+            let slen = char_len(&s);
+            let n = min(slen, n as usize);
+            scope.return_string(slice_by_char_range(&s, slen - n, slen).to_owned())
         }
     }
 }
@@ -1151,6 +1165,7 @@ mod tests {
         check_expr_ok("abcd", r#"LEFT("abcdef", 4)"#);
         check_expr_ok("abcdef", r#"LEFT("abcdef", 6)"#);
         check_expr_ok("abcdef", r#"LEFT("abcdef", 10)"#);
+        check_expr_ok("한", r#"LEFT("한글", 1)"#);
 
         check_expr_ok_with_vars("abc", r#"LEFT(s, i)"#, [("s", "abcdef".into()), ("i", 3.into())]);
 
@@ -1166,6 +1181,7 @@ mod tests {
         check_expr_ok(0, r#"LEN("")"#);
         check_expr_ok(1, r#"LEN(" ")"#);
         check_expr_ok(5, r#"LEN("abcde")"#);
+        check_expr_ok(2, r#"LEN("한글")"#);
 
         check_expr_ok_with_vars(4, r#"LEN(s)"#, [("s", "1234".into())]);
 
@@ -1200,6 +1216,8 @@ mod tests {
         check_expr_ok("asic", r#"MID("basic", 1, 10)"#);
         check_expr_ok("asic", r#"MID("basic", 1)"#);
         check_expr_ok("", r#"MID("basic", 100, 10)"#);
+        check_expr_ok("글", r#"MID("한글", 1, 1)"#);
+        check_expr_ok("글", r#"MID("한글", 1)"#);
 
         check_expr_ok_with_vars(
             "asic",
@@ -1232,6 +1250,7 @@ mod tests {
         check_expr_ok("cdef", r#"RIGHT("abcdef", 4.2)"#);
         check_expr_ok("abcdef", r#"RIGHT("abcdef", 6)"#);
         check_expr_ok("abcdef", r#"RIGHT("abcdef", 10)"#);
+        check_expr_ok("글", r#"RIGHT("한글", 1)"#);
 
         check_expr_ok_with_vars("def", r#"RIGHT(s, i)"#, [("s", "abcdef".into()), ("i", 3.into())]);
 
