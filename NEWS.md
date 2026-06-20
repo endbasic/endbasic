@@ -31,6 +31,8 @@ for the time being.**
 *   Issue #124: Added the `BEEP` and `SOUND` commands to reproduce tones on
     audio-capable consoles.
 
+*   Added the `DEMOS:/ALARM.BAS` sound demo to showcase tone playback.
+
 *   Added the `DEMOS:/BOUNCE.BAS` graphics demo to showcase animated shapes.
 
 *   Added the `INSTR`, `LCASE`, `SPACE`, `TRIM`, `UCASE`, and `VAL`

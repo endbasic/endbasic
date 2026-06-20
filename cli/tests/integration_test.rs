@@ -371,6 +371,18 @@ fn test_cli_version() {
 }
 
 #[test]
+fn test_example_alarm() {
+    check(
+        bin_path("endbasic"),
+        &["--local-drive=memory://", "--interactive"],
+        0,
+        Behavior::File(src_path("cli/tests/examples/alarm.in")),
+        Behavior::File(src_path("cli/tests/examples/alarm.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_example_bounce() {
     check(
         bin_path("endbasic"),
