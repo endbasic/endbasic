@@ -17,7 +17,7 @@
 //! Web Audio-backed tone playback.
 
 use crate::canvas::js_value_to_io_error;
-use crate::do_sleep;
+use crate::datetime::do_sleep;
 use async_trait::async_trait;
 use endbasic_std::sound::{AudioOps, Tone, Waveform};
 use std::convert::TryFrom;

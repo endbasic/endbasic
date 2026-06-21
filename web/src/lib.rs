@@ -26,7 +26,6 @@ use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::time::Duration;
 use url::Url;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -41,6 +40,8 @@ mod audio;
 use audio::WebAudioOps;
 mod canvas;
 use canvas::CanvasRasterOps;
+mod datetime;
+use datetime::{WebDateTime, current_time_millis};
 mod input;
 use input::{OnScreenKeyboard, WebInput, WebInputOps};
 mod store;
@@ -63,37 +64,6 @@ macro_rules! log_and_panic {
     })
 }
 pub(crate) use log_and_panic;
-
-/// Sleeps for the given period of time in `ms`.
-fn do_sleep<T: 'static>(ms: i32, ret: T) -> Pin<Box<dyn Future<Output = T>>> {
-    assert!(ms >= 0, "Must have been validated by the caller");
-
-    let (timeout_tx, timeout_rx) = async_channel::unbounded();
-    let callback = {
-        Closure::wrap(Box::new(move || timeout_tx.try_send(true).expect("Send must succeed"))
-            as Box<dyn FnMut()>)
-    };
-
-    let window = match web_sys::window() {
-        Some(window) => window,
-        None => log_and_panic!("Failed to get window"),
-    };
-    if let Err(e) = window.set_timeout_with_callback_and_timeout_and_arguments(
-        callback.as_ref().unchecked_ref(),
-        ms,
-        &js_sys::Array::new(),
-    ) {
-        log_and_panic!("Failed to set timeout on window: {:?}", e);
-    }
-
-    Box::pin(async move {
-        let _callback = callback; // Must grab ownership so that the closure remains alive until it is used.
-        if let Err(e) = timeout_rx.recv().await {
-            log_and_panic!("Failed to wait for timeout: {}", e);
-        }
-        ret
-    })
-}
 
 /// Yields execution until the browser is ready to render the next frame.
 fn do_request_animation_frame() -> Pin<Box<dyn Future<Output = ()>>> {
@@ -144,33 +114,6 @@ fn do_message_channel_yield() -> Pin<Box<dyn Future<Output = ()>>> {
         port1.close();
         port2.close();
     })
-}
-
-/// Implementation of a `SleepFn` using `do_sleep`.
-fn js_sleep(d: Duration, yielder: WebYielder) -> Pin<Box<dyn Future<Output = Result<(), String>>>> {
-    let ms = d.as_millis();
-    if ms > i32::MAX as u128 {
-        // The JavaScript setTimeout function only takes i32s so ensure our value fits.  If it
-        // doesn't, you can imagine chaining calls to setTimeout to achieve the desired delay...
-        // but the numbers we are talking about are so big that this doesn't make sense.
-        return Box::pin(async move { Err("Cannot sleep for that long".to_owned()) });
-    }
-    let ms = ms as i32;
-
-    yielder.on_host_yield();
-    do_sleep(ms, Ok(()))
-}
-
-/// Returns the current monotonic time in milliseconds.
-fn current_time_millis() -> f64 {
-    let window = match web_sys::window() {
-        Some(window) => window,
-        None => log_and_panic!("Failed to get window"),
-    };
-    match window.performance() {
-        Some(performance) => performance.now(),
-        None => js_sys::Date::now(),
-    }
 }
 
 /// Type of yielding decision taken by the `WebYielder`.
@@ -329,9 +272,9 @@ impl WebTerminal {
         let console = Rc::from(RefCell::from(self.console));
         let mut builder = endbasic_std::MachineBuilder::default()
             .with_console(console.clone())
+            .with_datetime(Rc::from(WebDateTime::new(yielder.clone())))
             .with_yielder(Rc::from(RefCell::from(self.yielder.clone())))
-            .with_signals_chan(self.signals_chan)
-            .with_sleep_fn(Box::from(move |d| js_sleep(d, yielder.clone())));
+            .with_signals_chan(self.signals_chan);
         let program = Rc::from(RefCell::from(endbasic_repl::editor::Editor::default()));
         let storage = Rc::from(RefCell::from(endbasic_std::storage::Storage::default()));
         setup_storage(&mut storage.borrow_mut());
@@ -426,7 +369,6 @@ pub fn main() -> Result<(), JsValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use js_sys::Date;
     use wasm_bindgen_test::*;
 
     fn new_test_yielder(last_host_yield_ms: f64) -> WebYielder {
@@ -476,25 +418,7 @@ mod tests {
     }
 
     #[wasm_bindgen_test]
-    async fn test_js_sleep_ok() {
-        let yielder = WebYielder::new();
-        let before = Date::now();
-        js_sleep(Duration::from_millis(10), yielder).await.unwrap();
-        let elapsed = Date::now() - before;
-        assert!(10.0 <= elapsed);
-    }
-
-    #[wasm_bindgen_test]
     async fn test_message_channel_yield() {
         do_message_channel_yield().await;
-    }
-
-    #[wasm_bindgen_test]
-    async fn test_js_sleep_too_big() {
-        let yielder = WebYielder::new();
-        assert_eq!(
-            "Cannot sleep for that long",
-            js_sleep(Duration::from_millis(i32::MAX as u64 + 1), yielder).await.unwrap_err()
-        );
     }
 }

@@ -270,8 +270,8 @@ pub struct MachineBuilder {
     callables_metadata: Rc<RefCell<HashMap<SymbolKey, Rc<CallableMetadata>>>>,
     clearables: Vec<Box<dyn Clearable>>,
     console: Option<Rc<RefCell<dyn console::Console>>>,
+    datetime: Option<Rc<dyn datetime::DateTime>>,
     gpio_pins: Option<Rc<RefCell<dyn gpio::Pins>>>,
-    sleep_fn: Option<datetime::SleepFn>,
     actions: Rc<RefCell<Vec<MachineAction>>>,
     yielder: Option<Rc<RefCell<dyn Yielder>>>,
     signals_chan: Option<(Sender<Signal>, Receiver<Signal>)>,
@@ -324,6 +324,12 @@ impl MachineBuilder {
         self
     }
 
+    /// Overrides the default date and time implementation with the given one.
+    pub fn with_datetime(mut self, datetime: Rc<dyn datetime::DateTime>) -> Self {
+        self.datetime = Some(datetime);
+        self
+    }
+
     /// Sets a global variable to an initial value.
     pub fn with_globals(mut self, defs: Vec<GlobalDef>) -> Self {
         self.global_defs.extend(defs);
@@ -333,12 +339,6 @@ impl MachineBuilder {
     /// Overrides the default hardware-based GPIO pins with the given ones.
     pub fn with_gpio_pins(mut self, pins: Rc<RefCell<dyn gpio::Pins>>) -> Self {
         self.gpio_pins = Some(pins);
-        self
-    }
-
-    /// Overrides the default sleep function with the given one.
-    pub fn with_sleep_fn(mut self, sleep_fn: datetime::SleepFn) -> Self {
-        self.sleep_fn = Some(sleep_fn);
         self
     }
 
@@ -362,6 +362,14 @@ impl MachineBuilder {
         self.console.clone().unwrap()
     }
 
+    /// Lazily initializes the `datetime` field with a default value and returns it.
+    pub fn get_datetime(&mut self) -> Rc<dyn datetime::DateTime> {
+        if self.datetime.is_none() {
+            self.datetime = Some(Rc::from(datetime::SystemDateTime));
+        }
+        self.datetime.clone().unwrap()
+    }
+
     /// Lazily initializes the `gpio_pins` field with a default value and returns it.
     fn get_gpio_pins(&mut self) -> Rc<RefCell<dyn gpio::Pins>> {
         if self.gpio_pins.is_none() {
@@ -373,6 +381,7 @@ impl MachineBuilder {
     /// Builds the interpreter.
     pub fn build(mut self) -> Machine {
         let console = self.get_console();
+        let datetime = self.get_datetime();
         let gpio_pins = self.get_gpio_pins();
 
         let signals_chan = match self.signals_chan.take() {
@@ -384,8 +393,7 @@ impl MachineBuilder {
         console::add_all(&mut self, console.clone());
         gfx::add_all(&mut self, console.clone());
         data::add_all(&mut self);
-        let sleep_fn = self.sleep_fn.take();
-        datetime::add_all(&mut self, sleep_fn);
+        datetime::add_all(&mut self, datetime);
         gpio::add_all(&mut self, gpio_pins);
         exec::add_scripting(&mut self);
         numerics::add_all(&mut self);
