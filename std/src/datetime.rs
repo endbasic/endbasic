@@ -21,7 +21,6 @@ use endbasic_core::{
     ArgSepSyntax, CallError, CallResult, Callable, CallableMetadata, CallableMetadataBuilder,
     ExprType, RequiredValueSyntax, Scope, SingularArgSyntax,
 };
-use futures_lite::future::{BoxedLocal, FutureExt};
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::thread;
@@ -32,27 +31,33 @@ use crate::MachineBuilder;
 /// Category description for all symbols provided by this module.
 pub(crate) const CATEGORY: &str = "Date and time";
 
-/// Type of the sleep function used by the `SLEEP` command to actually suspend execution.
-pub type SleepFn = Box<dyn Fn(Duration) -> BoxedLocal<Result<(), String>>>;
+/// Interface to date and time functionality provided by the host.
+#[async_trait(?Send)]
+pub trait DateTime {
+    /// Suspends execution for the given duration.
+    async fn sleep(&self, d: Duration) -> Result<(), String>;
+}
 
-/// An implementation of a `SleepFn` that stops the current thread.
-fn system_sleep(d: Duration) -> BoxedLocal<Result<(), String>> {
-    async move {
+/// Default host-backed implementation of the `DateTime` trait.
+pub struct SystemDateTime;
+
+#[async_trait(?Send)]
+impl DateTime for SystemDateTime {
+    async fn sleep(&self, d: Duration) -> Result<(), String> {
         thread::sleep(d);
         Ok(())
     }
-    .boxed_local()
 }
 
 /// The `SLEEP` command.
 pub struct SleepCommand {
     metadata: Rc<CallableMetadata>,
-    sleep_fn: SleepFn,
+    datetime: Rc<dyn DateTime>,
 }
 
 impl SleepCommand {
     /// Creates a new instance of the command.
-    pub fn new(sleep_fn: SleepFn) -> Rc<Self> {
+    pub fn new(datetime: Rc<dyn DateTime>) -> Rc<Self> {
         Rc::from(Self {
             metadata: CallableMetadataBuilder::new("SLEEP")
                 .with_async(true)
@@ -73,7 +78,7 @@ Pauses program execution for the given number of seconds, which can be specified
 integer or as a floating point number for finer precision.",
                 )
                 .build(),
-            sleep_fn,
+            datetime,
         })
     }
 }
@@ -95,7 +100,8 @@ impl Callable for SleepCommand {
             ));
         }
 
-        (self.sleep_fn)(Duration::from_secs_f64(n))
+        self.datetime
+            .sleep(Duration::from_secs_f64(n))
             .await
             .map_err(|e| CallError::Syntax(scope.get_pos(0), e))
     }
@@ -103,10 +109,9 @@ impl Callable for SleepCommand {
 
 /// Adds all symbols provided by this module to the given `machine`.
 ///
-/// `sleep_fn` is an async function that implements a pause given a `Duration`.  If not provided,
-/// uses the `std::thread::sleep` function.
-pub fn add_all(machine: &mut MachineBuilder, sleep_fn: Option<SleepFn>) {
-    machine.add_callable(SleepCommand::new(sleep_fn.unwrap_or_else(|| Box::from(system_sleep))));
+/// `datetime` provides access to date and time functionality.
+pub fn add_all(machine: &mut MachineBuilder, datetime: Rc<dyn DateTime>) {
+    machine.add_callable(SleepCommand::new(datetime));
 }
 
 #[cfg(test)]
@@ -114,35 +119,47 @@ mod tests {
     use super::*;
     use crate::MachineBuilder;
     use crate::testutils::*;
+    use async_trait::async_trait;
     use futures_lite::future::block_on;
+    use std::rc::Rc;
     use std::time::Instant;
+
+    struct MockDateTime {
+        sleep_fn: Box<dyn Fn(Duration) -> Result<(), String>>,
+    }
+
+    #[async_trait(?Send)]
+    impl DateTime for MockDateTime {
+        async fn sleep(&self, d: Duration) -> Result<(), String> {
+            (self.sleep_fn)(d)
+        }
+    }
 
     #[test]
     fn test_sleep_ok_int() {
-        let sleep_fake = |d: Duration| -> BoxedLocal<Result<(), String>> {
-            async move { Err(format!("Got {} ms", d.as_millis())) }.boxed_local()
-        };
+        let datetime = Rc::from(MockDateTime {
+            sleep_fn: Box::from(|d: Duration| Err(format!("Got {} ms", d.as_millis()))),
+        });
 
-        let mut machine = MachineBuilder::default().with_sleep_fn(Box::from(sleep_fake)).build();
+        let mut machine = MachineBuilder::default().with_datetime(datetime).build();
         machine.compile(&mut "SLEEP 123".as_bytes()).unwrap();
         assert_eq!("1:7: Got 123000 ms", format!("{}", block_on(machine.exec()).unwrap_err()));
     }
 
     #[test]
     fn test_sleep_ok_float() {
-        let sleep_fake = |d: Duration| -> BoxedLocal<Result<(), String>> {
-            async move {
+        let datetime = Rc::from(MockDateTime {
+            sleep_fn: Box::from(|d: Duration| {
                 let ms = d.as_millis();
                 if ms > 123095 && ms < 123105 {
                     Err("Good".to_owned())
                 } else {
                     Err(format!("Bad {}", ms))
                 }
-            }
-            .boxed_local()
-        };
+            }),
+        });
 
-        let mut machine = MachineBuilder::default().with_sleep_fn(Box::from(sleep_fake)).build();
+        let mut machine = MachineBuilder::default().with_datetime(datetime).build();
         machine.compile(&mut "SLEEP 123.1".as_bytes()).unwrap();
         assert_eq!("1:7: Good", format!("{}", block_on(machine.exec()).unwrap_err()));
     }

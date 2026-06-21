@@ -122,14 +122,26 @@ pub fn add_interactive(machine: &mut MachineBuilder) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::datetime::DateTime;
     use crate::testutils::*;
     use crate::{Error, MachineBuilder, Signal, Yielder};
+    use async_trait::async_trait;
     use futures_lite::FutureExt;
-    use futures_lite::future::{BoxedLocal, block_on};
+    use futures_lite::future::block_on;
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::time::Duration;
+
+    struct MockDateTime {
+        on_sleep: Box<dyn Fn(Duration) -> futures_lite::future::BoxedLocal<Result<(), String>>>,
+    }
+
+    #[async_trait(?Send)]
+    impl DateTime for MockDateTime {
+        async fn sleep(&self, d: Duration) -> Result<(), String> {
+            (self.on_sleep)(d).await
+        }
+    }
 
     #[test]
     fn test_clear_ok() {
@@ -188,18 +200,22 @@ mod tests {
     fn test_break_stops_after_upcall() {
         let (tx, rx) = async_channel::unbounded();
         let break_tx = tx.clone();
-        let sleep_fake = move |_d: Duration| -> BoxedLocal<Result<(), String>> {
-            let break_tx = break_tx.clone();
-            async move {
-                break_tx.send(Signal::Break).await.unwrap();
-                Ok(())
-            }
-            .boxed_local()
-        };
+        let datetime = Rc::from(MockDateTime {
+            on_sleep: Box::from(
+                move |_d: Duration| -> futures_lite::future::BoxedLocal<Result<(), String>> {
+                    let break_tx = break_tx.clone();
+                    async move {
+                        break_tx.send(Signal::Break).await.unwrap();
+                        Ok(())
+                    }
+                    .boxed_local()
+                },
+            ),
+        });
 
         let mut machine = MachineBuilder::default()
             .with_signals_chan((tx.clone(), rx))
-            .with_sleep_fn(Box::from(sleep_fake))
+            .with_datetime(datetime)
             .build();
         machine.compile(&mut "DO: SLEEP 0: LOOP".as_bytes()).unwrap();
 
