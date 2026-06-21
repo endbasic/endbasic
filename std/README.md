@@ -12,9 +12,8 @@ higher-level programming constructs and strong typing.
 EndBASIC offers a simplified and restricted environment to learn the foundations
 of programming and focuses on features that can quickly reward the programmer.
 These features include things like a built-in text editor, commands to
-render graphics, and commands to interact with the hardware of a Raspberry
-Pi.  Implementing this kind of features has priority over others such as
-performance or a much richer language.
+render graphics and play sound, and commands to interact with the hardware of a
+Raspberry Pi.
 
 EndBASIC is written in Rust and runs both on the web and locally on a variety of
 operating systems and platforms, including macOS, Windows, and Linux.
@@ -33,8 +32,8 @@ EndBASIC's standard library is inspired by other BASIC interpreters but does
 not intend to be fully compatible with them.  The library currently contains:
 
 *   Arrays: `LBOUND`, `UBOUND`.
-*   Console manipulation: `BEEP`, `CLS`, `COLOR`, `INKEY`, `INPUT`, `LOCATE`,
-    `PRINT`, `SCRCOLS`, `SCRROWS`, `SOUND`.
+*   Console manipulation: `CLS`, `COLOR`, `INKEY`, `INPUT`, `LOCATE`, `PRINT`,
+    `SCRCOLS`, `SCRROWS`.
 *   Data manipulation: `READ`, `RESTORE`.
 *   Date and time manipulation: `SLEEP`.
 *   Graphics: `GFX_CIRCLE`, `GFX_CIRCLEF`, `GFX_FILL`, `GFX_HEIGHT`,
@@ -48,6 +47,7 @@ not intend to be fully compatible with them.  The library currently contains:
     `ROUND`, `SGN`, `SIN`, `SQR`, `TAN`.
 *   Program manipulation: `DISASM`, `EDIT`, `LIST`, `LOAD`,`NEW`, `RUN`,
     `SAVE`.
+*   Sound: `BEEP`, `SOUND`.
 *   Strings and characters: `ASC`, `CHR`, `INSTR`, `LCASE`, `LEFT`, `LEN`,
     `LTRIM`, `MID`, `RIGHT`, `RTRIM`, `SPACE`, `STR`, `TRIM`, `UCASE`, `VAL`.
 
