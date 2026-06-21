@@ -171,40 +171,16 @@ pub fn add_all(machine: &mut MachineBuilder, datetime: Rc<dyn DateTime>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::MachineBuilder;
     use crate::testutils::*;
-    use async_trait::async_trait;
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use futures_lite::future::block_on;
     use std::time::Instant;
-
-    struct MockDateTime {
-        monotonic: RefCell<Vec<Duration>>,
-        sleep_fn: Box<dyn Fn(Duration) -> Result<(), String>>,
-    }
-
-    #[async_trait(?Send)]
-    impl DateTime for MockDateTime {
-        fn monotonic(&self) -> Duration {
-            self.monotonic.borrow_mut().remove(0)
-        }
-
-        async fn sleep(&self, d: Duration) -> Result<(), String> {
-            (self.sleep_fn)(d)
-        }
-    }
 
     #[test]
     fn test_monotonic_ok() {
-        let datetime = Rc::from(MockDateTime {
-            monotonic: RefCell::from(vec![Duration::from_millis(12_345)]),
-            sleep_fn: Box::from(|_d: Duration| Ok(())),
-        });
-
-        Tester::default()
-            .with_datetime(datetime)
-            .run("result = MONOTONIC")
-            .expect_var("result", 12.345)
-            .check();
+        let mut tester = Tester::default();
+        tester.get_datetime().add_monotonic(Duration::from_millis(12_345));
+        tester.run("result = MONOTONIC").expect_var("result", 12.345).check();
     }
 
     #[test]
@@ -214,43 +190,30 @@ mod tests {
 
     #[test]
     fn test_sleep_ok_int() {
-        let datetime = Rc::from(MockDateTime {
-            monotonic: RefCell::from(vec![]),
-            sleep_fn: Box::from(|d: Duration| Err(format!("Got {} ms", d.as_millis()))),
-        });
-
-        Tester::default()
-            .with_datetime(datetime)
-            .run("SLEEP 123")
-            .expect_err("1:7: Got 123000 ms")
-            .check();
+        let mut tester = Tester::default();
+        tester.run("SLEEP 123").check();
+        assert_eq!(vec![Duration::from_secs(123)], tester.get_datetime().sleeps());
     }
 
     #[test]
     fn test_sleep_ok_float() {
-        let datetime = Rc::from(MockDateTime {
-            monotonic: RefCell::from(vec![]),
-            sleep_fn: Box::from(|d: Duration| {
-                let ms = d.as_millis();
-                if ms > 123095 && ms < 123105 {
-                    Err("Good".to_owned())
-                } else {
-                    Err(format!("Bad {}", ms))
-                }
-            }),
-        });
-
-        Tester::default()
-            .with_datetime(datetime)
-            .run("SLEEP 123.1")
-            .expect_err("1:7: Good")
-            .check();
+        let mut tester = Tester::default();
+        tester.run("SLEEP 123.1").check();
+        let sleeps = tester.get_datetime().sleeps();
+        assert_eq!(1, sleeps.len());
+        let ms = sleeps[0].as_millis();
+        assert!(ms > 123095 && ms < 123105, "Bad {}", ms);
     }
 
     #[test]
     fn test_sleep_real() {
         let before = Instant::now();
-        Tester::default().run("SLEEP 0.010").check();
+        let mut machine = MachineBuilder::default().build();
+        machine.compile(&mut "SLEEP 0.010".as_bytes()).unwrap();
+        match block_on(machine.exec()) {
+            Ok(None) => (),
+            r => panic!("Expected Ok(None) but got {:?}", r),
+        }
         assert!(before.elapsed() >= Duration::from_millis(10));
     }
 

@@ -30,13 +30,14 @@ use endbasic_core::{
     Callable, ConstantDatum, ExprType, GetGlobalError, GlobalDef, GlobalDefKind, StopReason,
     SymbolKey,
 };
-use futures_lite::future::block_on;
+use futures_lite::future::{BoxedLocal, FutureExt, block_on};
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::rc::Rc;
 use std::result::Result as StdResult;
 use std::str;
+use std::time::Duration;
 
 type CheckerResult = StdResult<Option<i32>, String>;
 
@@ -450,6 +451,63 @@ pub fn flatten_output(captured_out: Vec<CapturedOut>) -> String {
     flattened
 }
 
+/// Sleep hook for the `MockDateTime`.
+///
+/// This is "odd-looking" compared to other mocks in this file, but we need to support arbitrary
+/// sleep functions because we rely on very specific sleep behavior in many tests and it's hard
+/// to generalize it.
+type SleepFn = Box<dyn Fn(Duration) -> BoxedLocal<Result<(), String>>>;
+
+/// Date and time mock that supplies pre-seeded monotonic timestamps and records sleep requests.
+pub struct MockDateTime {
+    monotonic: RefCell<VecDeque<Duration>>,
+    sleeps: RefCell<Vec<Duration>>,
+    sleep_fn: RefCell<SleepFn>,
+}
+
+impl Default for MockDateTime {
+    fn default() -> Self {
+        Self {
+            monotonic: RefCell::default(),
+            sleeps: RefCell::default(),
+            sleep_fn: RefCell::new(Box::new(|_d: Duration| async move { Ok(()) }.boxed_local())),
+        }
+    }
+}
+
+impl MockDateTime {
+    /// Pre-seeds a future monotonic timestamp to return.
+    pub fn add_monotonic(&self, d: Duration) {
+        self.monotonic.borrow_mut().push_back(d);
+    }
+
+    /// Overrides the sleep implementation with `sleep_fn`.
+    pub fn set_sleep_fn(&self, sleep_fn: SleepFn) {
+        *self.sleep_fn.borrow_mut() = sleep_fn;
+    }
+
+    /// Returns the recorded sleep requests.
+    pub fn sleeps(&self) -> Vec<Duration> {
+        self.sleeps.borrow().clone()
+    }
+}
+
+#[async_trait(?Send)]
+impl DateTime for MockDateTime {
+    fn monotonic(&self) -> Duration {
+        self.monotonic.borrow_mut().pop_front().unwrap_or(Duration::ZERO)
+    }
+
+    async fn sleep(&self, d: Duration) -> Result<(), String> {
+        self.sleeps.borrow_mut().push(d);
+        let future = {
+            let sleep_fn = self.sleep_fn.borrow();
+            (sleep_fn)(d)
+        };
+        future.await
+    }
+}
+
 /// A stored program that exposes golden contents and accepts new content from the console when
 /// edits are requested.
 #[derive(Default)]
@@ -498,7 +556,7 @@ impl Program for RecordedProgram {
 #[derive(Clone)]
 pub struct Tester {
     console: Rc<RefCell<MockConsole>>,
-    datetime: Option<Rc<dyn DateTime>>,
+    datetime: Rc<MockDateTime>,
     storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<RecordedProgram>>,
     callables: Vec<Rc<dyn Callable>>,
@@ -513,6 +571,7 @@ impl Default for Tester {
     fn default() -> Self {
         let (signals_tx, signals_rx) = async_channel::unbounded();
         let console = Rc::from(RefCell::from(MockConsole::new(Some(signals_tx.clone()))));
+        let datetime = Rc::from(MockDateTime::default());
         let program = Rc::from(RefCell::from(RecordedProgram::default()));
         let storage = Rc::from(RefCell::from(Storage::default()));
         let callables = vec![];
@@ -521,7 +580,7 @@ impl Default for Tester {
 
         Self {
             console,
-            datetime: None,
+            datetime,
             storage,
             program,
             callables,
@@ -541,12 +600,10 @@ impl Tester {
         let gpio_pins = Rc::from(RefCell::from(gpio::NoopPins::default()));
         let mut builder = MachineBuilder::default()
             .with_console(self.console.clone())
+            .with_datetime(self.datetime.clone())
             .with_globals(self.global_defs.clone())
             .with_gpio_pins(gpio_pins)
             .with_signals_chan((self.signals_tx.clone(), self.signals_rx.clone()));
-        if let Some(datetime) = self.datetime.clone() {
-            builder = builder.with_datetime(datetime);
-        }
 
         for callable in self.callables.clone() {
             builder.add_callable(callable);
@@ -586,18 +643,20 @@ impl Tester {
         self
     }
 
-    /// Overrides the default date and time implementation with the given one.
-    pub fn with_datetime(mut self, datetime: Rc<dyn DateTime>) -> Self {
-        self.datetime = Some(datetime);
-        self
-    }
-
     /// Gets the mock console from the tester.
     ///
     /// This method should generally not be used.  Its primary utility is to hook
     /// externally-instantiated commands into the testing features.
     pub fn get_console(&self) -> Rc<RefCell<MockConsole>> {
         self.console.clone()
+    }
+
+    /// Gets the mock date and time provider from the tester.
+    ///
+    /// This method should generally not be used.  Its primary utility is to hook
+    /// externally-instantiated commands into the testing features.
+    pub fn get_datetime(&self) -> Rc<MockDateTime> {
+        self.datetime.clone()
     }
 
     /// Gets the recorded program from the tester.
