@@ -1068,8 +1068,9 @@ interpreter.  However, this is a *very* inefficient way of drawing.
 When video syncing is disabled, all console updates are buffered until video syncing is enabled \
 again.  This is perfect to draw complex graphics efficiently.  If this is what you want to do, \
 you should disable syncing first, render a frame, call GFX_SYNC to flush the frame, repeat until \
-you are done, and then enable video syncing again.  Note that the textual cursor is not visible \
-when video syncing is disabled.
+you are done, and then enable video syncing again.  To keep a stable frame rate, use MONOTONIC \
+to measure each frame and SLEEP only for the time left until the next one.  Note that the textual \
+cursor is not visible when video syncing is disabled.
 WARNING: Be aware that if you disable video syncing in the interactive interpreter, you will not \
 be able to see what you are typing any longer until you reenable video syncing.",
                 )

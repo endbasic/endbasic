@@ -32,6 +32,7 @@ END SUB
 
 ' Waits for a key press at the end of a demo screen.
 SUB wait
+    next_poll = MONOTONIC
     PRINT
     COLOR 11
     PRINT "Press ENTER to continue or ESC to exit the demo...";
@@ -40,7 +41,14 @@ SUB wait
         SELECT CASE INKEY
         CASE "ENTER": EXIT DO
         CASE "ESC": GOTO @end
-        CASE ELSE: SLEEP 0.01
+        CASE ELSE
+            next_poll = next_poll + 0.01
+            delay = next_poll - MONOTONIC
+            IF delay > 0 THEN
+                SLEEP delay
+            ELSE
+                next_poll = MONOTONIC
+            END IF
         END SELECT
     LOOP
 END SUB

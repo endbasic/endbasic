@@ -131,7 +131,9 @@ GFX_SYNC FALSE
 configure_canvas
 dots = 0
 filled = TRUE
+frame_delay = 1.0 / 60.0
 mode = 4
+next_frame = MONOTONIC
 reset_dots 100
 
 DO
@@ -233,7 +235,13 @@ DO
     NEXT
 
     GFX_SYNC
-    SLEEP 0.01
+    next_frame = next_frame + frame_delay
+    delay = next_frame - MONOTONIC
+    IF delay > 0 THEN
+        SLEEP delay
+    ELSE
+        next_frame = MONOTONIC
+    END IF
 LOOP
 
 COLOR
