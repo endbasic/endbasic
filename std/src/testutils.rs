@@ -19,6 +19,7 @@
 use crate::console::{
     self, CharsXY, ClearType, Console, Key, PixelsXY, SizeInPixels, remove_control_chars,
 };
+use crate::datetime::DateTime;
 use crate::program::Program;
 use crate::sound::Tone;
 use crate::storage::Storage;
@@ -497,6 +498,7 @@ impl Program for RecordedProgram {
 #[derive(Clone)]
 pub struct Tester {
     console: Rc<RefCell<MockConsole>>,
+    datetime: Option<Rc<dyn DateTime>>,
     storage: Rc<RefCell<Storage>>,
     program: Rc<RefCell<RecordedProgram>>,
     callables: Vec<Rc<dyn Callable>>,
@@ -519,6 +521,7 @@ impl Default for Tester {
 
         Self {
             console,
+            datetime: None,
             storage,
             program,
             callables,
@@ -531,31 +534,30 @@ impl Default for Tester {
 }
 
 impl Tester {
-    fn build_machine(
-        console: Rc<RefCell<MockConsole>>,
-        storage: Rc<RefCell<Storage>>,
-        program: Rc<RefCell<RecordedProgram>>,
-        callables: Vec<Rc<dyn Callable>>,
-        global_defs: Vec<GlobalDef>,
-        interactive: bool,
-        signals_chan: (Sender<Signal>, Receiver<Signal>),
-    ) -> Machine {
+    fn build_machine(&self) -> Machine {
         // Default to the no-op pins that always return errors.  GPIO unit tests use MockPins
         // directly via `make_mock_machine` to validate operation; this Tester wiring is only used
         // for the error-path tests that go through the real (NoopPins) backend.
         let gpio_pins = Rc::from(RefCell::from(gpio::NoopPins::default()));
         let mut builder = MachineBuilder::default()
-            .with_console(console)
-            .with_globals(global_defs)
+            .with_console(self.console.clone())
+            .with_globals(self.global_defs.clone())
             .with_gpio_pins(gpio_pins)
-            .with_signals_chan(signals_chan);
+            .with_signals_chan((self.signals_tx.clone(), self.signals_rx.clone()));
+        if let Some(datetime) = self.datetime.clone() {
+            builder = builder.with_datetime(datetime);
+        }
 
-        for callable in callables {
+        for callable in self.callables.clone() {
             builder.add_callable(callable);
         }
 
-        if interactive {
-            builder.make_interactive().with_program(program).with_storage(storage).build()
+        if self.interactive {
+            builder
+                .make_interactive()
+                .with_program(self.program.clone())
+                .with_storage(self.storage.clone())
+                .build()
         } else {
             builder.build()
         }
@@ -581,6 +583,12 @@ impl Tester {
     /// Adds a bunch of keys as golden input to the console.
     pub fn add_input_keys(self, keys: &[Key]) -> Self {
         self.console.borrow_mut().add_input_keys(keys);
+        self
+    }
+
+    /// Overrides the default date and time implementation with the given one.
+    pub fn with_datetime(mut self, datetime: Rc<dyn DateTime>) -> Self {
+        self.datetime = Some(datetime);
         self
     }
 
@@ -653,30 +661,14 @@ impl Tester {
     /// Runs `script` in the configured machine and returns a `Checker` object to validate
     /// expectations about the execution.
     pub fn run<S: Into<String>>(&mut self, script: S) -> Checker<'_> {
-        let machine = Self::build_machine(
-            self.console.clone(),
-            self.storage.clone(),
-            self.program.clone(),
-            self.callables.clone(),
-            self.global_defs.clone(),
-            self.interactive,
-            (self.signals_tx.clone(), self.signals_rx.clone()),
-        );
+        let machine = self.build_machine();
         let tester = TesterContinuation { tester: self, machine };
         tester.run(script)
     }
 
     /// Creates a continuation from the current tester state without running any code.
     pub fn continue_from_here(&self) -> TesterContinuation<'_> {
-        let machine = Self::build_machine(
-            self.console.clone(),
-            self.storage.clone(),
-            self.program.clone(),
-            self.callables.clone(),
-            self.global_defs.clone(),
-            self.interactive,
-            (self.signals_tx.clone(), self.signals_rx.clone()),
-        );
+        let machine = self.build_machine();
         TesterContinuation { tester: self, machine }
     }
 
@@ -689,15 +681,7 @@ impl Tester {
     /// This is useful when compared to `run` because `Machine::exec` compiles the script as one
     /// unit and thus compilation errors may prevent validating other operations later on.
     pub fn run_n(&mut self, scripts: &[&str]) -> Checker<'_> {
-        let mut machine = Self::build_machine(
-            self.console.clone(),
-            self.storage.clone(),
-            self.program.clone(),
-            self.callables.clone(),
-            self.global_defs.clone(),
-            self.interactive,
-            (self.signals_tx.clone(), self.signals_rx.clone()),
-        );
+        let mut machine = self.build_machine();
         let mut result = Ok(None);
         for script in scripts {
             match machine.compile(&mut script.as_bytes()) {
