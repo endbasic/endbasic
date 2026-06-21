@@ -254,12 +254,13 @@ impl RasterOps for CanvasRasterOps {
         // generic interface may need tweaking.
         //
         // https://stackoverflow.com/questions/8376534/shift-canvas-contents-to-the-left
-        debug_assert_eq!(
-            SizeInPixels::new(
-                self.size_pixels.width,
-                self.size_pixels.height - u16::try_from(self.font.glyph_size.height).unwrap(),
-            ),
-            size
+        debug_assert_eq!(0, x1y1.x);
+        debug_assert_eq!(0, x2y2.x);
+        debug_assert_eq!(self.size_pixels.width, size.width);
+        debug_assert!(x1y1.y >= x2y2.y);
+        debug_assert!(x2y2.y >= 0);
+        debug_assert!(
+            i32::from(x1y1.y) + i32::from(size.height) <= i32::from(self.size_pixels.height)
         );
 
         let saved = self.context.global_composite_operation().map_err(js_value_to_io_error)?;
@@ -390,6 +391,7 @@ mod tests {
     use endbasic_std::gfx::lcd::fonts::FONT_5X8;
     use wasm_bindgen_test::*;
 
+    /// Creates a new test raster ops with the given dimensions.
     fn new_test_raster_ops(width: u32, height: u32) -> CanvasRasterOps {
         let document = web_sys::window().unwrap().document().unwrap();
         let canvas =
@@ -399,10 +401,8 @@ mod tests {
         CanvasRasterOps::new(canvas, &FONT_5X8, WebYielder::new()).unwrap()
     }
 
-    #[wasm_bindgen_test]
-    fn test_move_pixels_clears_exposed_scroll_area() {
-        let mut raster_ops = new_test_raster_ops(5, 24);
-
+    /// Runs a partial "move pixels" test on the given `raster_ops`.
+    fn do_move_pixels_test(mut raster_ops: CanvasRasterOps) {
         raster_ops.set_draw_color((0, 0, 0));
         raster_ops.clear().unwrap();
 
@@ -417,5 +417,15 @@ mod tests {
             Some(AnsiColor::Blue as u8),
             raster_ops.peek_pixel(PixelsXY::new(0, 20)).unwrap()
         );
+    }
+
+    #[wasm_bindgen_test]
+    fn test_move_pixels_clears_exposed_scroll_area() {
+        do_move_pixels_test(new_test_raster_ops(5, 24));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_move_pixels_accepts_partial_bottom_margin() {
+        do_move_pixels_test(new_test_raster_ops(5, 26));
     }
 }
