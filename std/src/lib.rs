@@ -32,6 +32,7 @@ use endbasic_core::{
 pub mod arrays;
 pub mod console;
 pub mod data;
+pub mod datetime;
 pub mod exec;
 pub mod gfx;
 pub mod gpio;
@@ -270,7 +271,7 @@ pub struct MachineBuilder {
     clearables: Vec<Box<dyn Clearable>>,
     console: Option<Rc<RefCell<dyn console::Console>>>,
     gpio_pins: Option<Rc<RefCell<dyn gpio::Pins>>>,
-    sleep_fn: Option<exec::SleepFn>,
+    sleep_fn: Option<datetime::SleepFn>,
     actions: Rc<RefCell<Vec<MachineAction>>>,
     yielder: Option<Rc<RefCell<dyn Yielder>>>,
     signals_chan: Option<(Sender<Signal>, Receiver<Signal>)>,
@@ -336,7 +337,7 @@ impl MachineBuilder {
     }
 
     /// Overrides the default sleep function with the given one.
-    pub fn with_sleep_fn(mut self, sleep_fn: exec::SleepFn) -> Self {
+    pub fn with_sleep_fn(mut self, sleep_fn: datetime::SleepFn) -> Self {
         self.sleep_fn = Some(sleep_fn);
         self
     }
@@ -383,9 +384,10 @@ impl MachineBuilder {
         console::add_all(&mut self, console.clone());
         gfx::add_all(&mut self, console.clone());
         data::add_all(&mut self);
-        gpio::add_all(&mut self, gpio_pins);
         let sleep_fn = self.sleep_fn.take();
-        exec::add_scripting(&mut self, sleep_fn);
+        datetime::add_all(&mut self, sleep_fn);
+        gpio::add_all(&mut self, gpio_pins);
+        exec::add_scripting(&mut self);
         numerics::add_all(&mut self);
         sound::cmds::add_all(&mut self, console.clone());
         strings::add_all(&mut self);

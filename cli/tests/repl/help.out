@@ -11,6 +11,7 @@ Output from HELP:
 [39m    >> [38;5;14mCloud access
 [39m    >> [38;5;14mConsole
 [39m    >> [38;5;14mData management
+[39m    >> [38;5;14mDate and time
 [39m    >> [38;5;14mFile system
 [39m    >> [38;5;14mGraphics
 [39m    >> [38;5;14mHardware interface
@@ -114,6 +115,14 @@ Output from HELP "DATA":
 
     Type HELP followed by the name of a topic for details.
 
+Output from HELP "DATE AND TIME":
+
+[38;5;11m    Date and time
+[39m
+    >> [38;5;14mSLEEP[39m    Suspends program execution.
+
+    Type HELP followed by the name of a topic for details.
+
 Output from HELP "FILE SYSTEM":
 
 [38;5;11m    File system
@@ -208,7 +217,6 @@ Output from HELP "INTERPRETER":
     >> [38;5;14mCLEAR  [39m    Restores initial machine state but keeps the stored program.
     >> [38;5;14mERRMSG$[39m    Returns the last captured error message.
     >> [38;5;14mHELP   [39m    Prints interactive help.
-    >> [38;5;14mSLEEP  [39m    Suspends program execution.
 
     Type HELP followed by the name of a topic for details.
 
