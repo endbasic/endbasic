@@ -122,7 +122,6 @@ pub fn add_interactive(machine: &mut MachineBuilder) {
 
 #[cfg(test)]
 mod tests {
-    use crate::datetime::DateTime;
     use crate::testutils::*;
     use crate::{Error, MachineBuilder, Signal, Yielder};
     use async_trait::async_trait;
@@ -131,21 +130,6 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::time::Duration;
-
-    struct MockDateTime {
-        on_sleep: Box<dyn Fn(Duration) -> futures_lite::future::BoxedLocal<Result<(), String>>>,
-    }
-
-    #[async_trait(?Send)]
-    impl DateTime for MockDateTime {
-        fn monotonic(&self) -> Duration {
-            Duration::ZERO
-        }
-
-        async fn sleep(&self, d: Duration) -> Result<(), String> {
-            (self.on_sleep)(d).await
-        }
-    }
 
     #[test]
     fn test_clear_ok() {
@@ -204,18 +188,17 @@ mod tests {
     fn test_break_stops_after_upcall() {
         let (tx, rx) = async_channel::unbounded();
         let break_tx = tx.clone();
-        let datetime = Rc::from(MockDateTime {
-            on_sleep: Box::from(
-                move |_d: Duration| -> futures_lite::future::BoxedLocal<Result<(), String>> {
-                    let break_tx = break_tx.clone();
-                    async move {
-                        break_tx.send(Signal::Break).await.unwrap();
-                        Ok(())
-                    }
-                    .boxed_local()
-                },
-            ),
-        });
+        let datetime = Rc::from(MockDateTime::default());
+        datetime.set_sleep_fn(Box::new(
+            move |_d: Duration| -> futures_lite::future::BoxedLocal<Result<(), String>> {
+                let break_tx = break_tx.clone();
+                async move {
+                    break_tx.send(Signal::Break).await.unwrap();
+                    Ok(())
+                }
+                .boxed_local()
+            },
+        ));
 
         let mut machine = MachineBuilder::default()
             .with_signals_chan((tx.clone(), rx))

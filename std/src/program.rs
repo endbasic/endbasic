@@ -608,10 +608,8 @@ pub fn add_all(
 mod tests {
     use super::*;
     use crate::console::{CharsXY, Key};
-    use crate::datetime::DateTime;
     use crate::testutils::*;
     use crate::{MachineBuilder, Signal};
-    use async_trait::async_trait;
     use futures_lite::future::{FutureExt, block_on};
     use std::rc::Rc;
     use std::time::Duration;
@@ -620,21 +618,6 @@ mod tests {
         &["n\n", "N\n", "no\n", "NO\n", "false\n", "FALSE\n", "xyz\n", "\n", "1\n"];
 
     const YES_ANSWERS: &[&str] = &["y\n", "yes\n", "Y\n", "YES\n", "true\n", "TRUE\n"];
-
-    struct MockDateTime {
-        on_sleep: Box<dyn Fn(Duration) -> futures_lite::future::BoxedLocal<Result<(), String>>>,
-    }
-
-    #[async_trait(?Send)]
-    impl DateTime for MockDateTime {
-        fn monotonic(&self) -> Duration {
-            Duration::ZERO
-        }
-
-        async fn sleep(&self, d: Duration) -> Result<(), String> {
-            (self.on_sleep)(d).await
-        }
-    }
 
     #[test]
     fn test_disasm_nothing() {
@@ -1021,22 +1004,21 @@ mod tests {
         let signal_sent = Rc::from(RefCell::from(false));
         let sleep_tx = signals_tx.clone();
         let sleep_signal_sent = signal_sent.clone();
-        let datetime = Rc::from(MockDateTime {
-            on_sleep: Box::from(
-                move |_d: Duration| -> futures_lite::future::BoxedLocal<Result<(), String>> {
-                    let sleep_tx = sleep_tx.clone();
-                    let sleep_signal_sent = sleep_signal_sent.clone();
-                    async move {
-                        if !*sleep_signal_sent.borrow() {
-                            *sleep_signal_sent.borrow_mut() = true;
-                            sleep_tx.send(Signal::Break).await.unwrap();
-                        }
-                        Ok(())
+        let datetime = Rc::from(MockDateTime::default());
+        datetime.set_sleep_fn(Box::new(
+            move |_d: Duration| -> futures_lite::future::BoxedLocal<Result<(), String>> {
+                let sleep_tx = sleep_tx.clone();
+                let sleep_signal_sent = sleep_signal_sent.clone();
+                async move {
+                    if !*sleep_signal_sent.borrow() {
+                        *sleep_signal_sent.borrow_mut() = true;
+                        sleep_tx.send(Signal::Break).await.unwrap();
                     }
-                    .boxed_local()
-                },
-            ),
-        });
+                    Ok(())
+                }
+                .boxed_local()
+            },
+        ));
 
         let storage = Rc::from(RefCell::from(Storage::default()));
         let mut machine = MachineBuilder::default()
