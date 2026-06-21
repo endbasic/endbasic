@@ -35,7 +35,7 @@ not intend to be fully compatible with them.  The library currently contains:
 *   Console manipulation: `CLS`, `COLOR`, `INKEY`, `INPUT`, `LOCATE`, `PRINT`,
     `SCRCOLS`, `SCRROWS`.
 *   Data manipulation: `READ`, `RESTORE`.
-*   Date and time manipulation: `SLEEP`.
+*   Date and time manipulation: `MONOTONIC`, `SLEEP`.
 *   Graphics: `GFX_CIRCLE`, `GFX_CIRCLEF`, `GFX_FILL`, `GFX_HEIGHT`,
     `GFX_LINE`, `GFX_PEEK`, `GFX_PIXEL`, `GFX_POLY`, `GFX_POLYF`, `GFX_RECT`,
     `GFX_RECTF`, `GFX_SYNC`, `GFX_TRI`, `GFX_TRIF`, `GFX_WIDTH`.

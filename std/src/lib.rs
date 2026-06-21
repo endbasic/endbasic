@@ -365,7 +365,7 @@ impl MachineBuilder {
     /// Lazily initializes the `datetime` field with a default value and returns it.
     pub fn get_datetime(&mut self) -> Rc<dyn datetime::DateTime> {
         if self.datetime.is_none() {
-            self.datetime = Some(Rc::from(datetime::SystemDateTime));
+            self.datetime = Some(Rc::from(datetime::SystemDateTime::default()));
         }
         self.datetime.clone().unwrap()
     }

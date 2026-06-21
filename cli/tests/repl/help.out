@@ -119,7 +119,8 @@ Output from HELP "DATE AND TIME":
 
 [38;5;11m    Date and time
 [39m
-    >> [38;5;14mSLEEP[39m    Suspends program execution.
+    >> [38;5;14mMONOTONIC#[39m    Returns a monotonic timestamp.
+    >> [38;5;14mSLEEP     [39m    Suspends program execution.
 
     Type HELP followed by the name of a topic for details.
 
@@ -1487,6 +1488,17 @@ Output from HELP "MIN":
 [38;5;11m    MIN#(expr1#[, .., exprN#])
 [39m
     Returns the minimum number out of a set of numbers.
+
+Output from HELP "MONOTONIC#":
+
+[38;5;11m    MONOTONIC#
+[39m
+    Returns a monotonic timestamp.
+
+    The returned value is the number of seconds since an unspecified
+    reference point.  The timestamp is only useful to compute elapsed time
+    by subtraction and is not related to the current date or wall-clock
+    time.
 
 Output from HELP "PI":
 
