@@ -117,10 +117,8 @@ pub fn add_all(machine: &mut MachineBuilder, datetime: Rc<dyn DateTime>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::MachineBuilder;
     use crate::testutils::*;
     use async_trait::async_trait;
-    use futures_lite::future::block_on;
     use std::rc::Rc;
     use std::time::Instant;
 
@@ -141,9 +139,11 @@ mod tests {
             sleep_fn: Box::from(|d: Duration| Err(format!("Got {} ms", d.as_millis()))),
         });
 
-        let mut machine = MachineBuilder::default().with_datetime(datetime).build();
-        machine.compile(&mut "SLEEP 123".as_bytes()).unwrap();
-        assert_eq!("1:7: Got 123000 ms", format!("{}", block_on(machine.exec()).unwrap_err()));
+        Tester::default()
+            .with_datetime(datetime)
+            .run("SLEEP 123")
+            .expect_err("1:7: Got 123000 ms")
+            .check();
     }
 
     #[test]
@@ -159,9 +159,11 @@ mod tests {
             }),
         });
 
-        let mut machine = MachineBuilder::default().with_datetime(datetime).build();
-        machine.compile(&mut "SLEEP 123.1".as_bytes()).unwrap();
-        assert_eq!("1:7: Good", format!("{}", block_on(machine.exec()).unwrap_err()));
+        Tester::default()
+            .with_datetime(datetime)
+            .run("SLEEP 123.1")
+            .expect_err("1:7: Good")
+            .check();
     }
 
     #[test]
