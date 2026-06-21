@@ -46,6 +46,9 @@ for the time being.**
 *   Modified `RND` so that it accepts negative numbers to re-seed the random
     number generator, as other BASIC dialects do.
 
+*   Issue #258: Added the `MONOTONIC` function to query a monotonic timestamp
+    for elapsed-time measurements.
+
 *   Fixed the web frontend so that commands that print long outputs (like
     `HELP` or `DIR`) don't block and print everything at once: the contents
     now appear line by line.

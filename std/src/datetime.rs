@@ -24,7 +24,7 @@ use endbasic_core::{
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::MachineBuilder;
 
@@ -34,18 +34,71 @@ pub(crate) const CATEGORY: &str = "Date and time";
 /// Interface to date and time functionality provided by the host.
 #[async_trait(?Send)]
 pub trait DateTime {
+    /// Returns the current monotonic timestamp.
+    fn monotonic(&self) -> Duration;
+
     /// Suspends execution for the given duration.
     async fn sleep(&self, d: Duration) -> Result<(), String>;
 }
 
 /// Default host-backed implementation of the `DateTime` trait.
-pub struct SystemDateTime;
+pub struct SystemDateTime {
+    epoch: Instant,
+}
+
+impl Default for SystemDateTime {
+    fn default() -> Self {
+        Self { epoch: Instant::now() }
+    }
+}
 
 #[async_trait(?Send)]
 impl DateTime for SystemDateTime {
+    fn monotonic(&self) -> Duration {
+        self.epoch.elapsed()
+    }
+
     async fn sleep(&self, d: Duration) -> Result<(), String> {
         thread::sleep(d);
         Ok(())
+    }
+}
+
+/// The `MONOTONIC` function.
+pub struct MonotonicFunction {
+    metadata: Rc<CallableMetadata>,
+    datetime: Rc<dyn DateTime>,
+}
+
+impl MonotonicFunction {
+    /// Creates a new instance of the function.
+    pub fn new(datetime: Rc<dyn DateTime>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("MONOTONIC")
+                .with_return_type(ExprType::Double)
+                .with_syntax(&[(&[], None)])
+                .with_category(CATEGORY)
+                .with_description(
+                    "Returns a monotonic timestamp.
+The returned value is the number of seconds since an unspecified reference point.  The timestamp \
+is only useful to compute elapsed time by subtraction and is not related to the current date or \
+wall-clock time.",
+                )
+                .build(),
+            datetime,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Callable for MonotonicFunction {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    fn exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(0, scope.nargs());
+        scope.return_double(self.datetime.monotonic().as_secs_f64())
     }
 }
 
@@ -111,6 +164,7 @@ impl Callable for SleepCommand {
 ///
 /// `datetime` provides access to date and time functionality.
 pub fn add_all(machine: &mut MachineBuilder, datetime: Rc<dyn DateTime>) {
+    machine.add_callable(MonotonicFunction::new(datetime.clone()));
     machine.add_callable(SleepCommand::new(datetime));
 }
 
@@ -119,23 +173,49 @@ mod tests {
     use super::*;
     use crate::testutils::*;
     use async_trait::async_trait;
+    use std::cell::RefCell;
     use std::rc::Rc;
     use std::time::Instant;
 
     struct MockDateTime {
+        monotonic: RefCell<Vec<Duration>>,
         sleep_fn: Box<dyn Fn(Duration) -> Result<(), String>>,
     }
 
     #[async_trait(?Send)]
     impl DateTime for MockDateTime {
+        fn monotonic(&self) -> Duration {
+            self.monotonic.borrow_mut().remove(0)
+        }
+
         async fn sleep(&self, d: Duration) -> Result<(), String> {
             (self.sleep_fn)(d)
         }
     }
 
     #[test]
+    fn test_monotonic_ok() {
+        let datetime = Rc::from(MockDateTime {
+            monotonic: RefCell::from(vec![Duration::from_millis(12_345)]),
+            sleep_fn: Box::from(|_d: Duration| Ok(())),
+        });
+
+        Tester::default()
+            .with_datetime(datetime)
+            .run("result = MONOTONIC")
+            .expect_var("result", 12.345)
+            .check();
+    }
+
+    #[test]
+    fn test_monotonic_errors() {
+        check_expr_compilation_error("1:10: MONOTONIC expected no arguments", "MONOTONIC()");
+    }
+
+    #[test]
     fn test_sleep_ok_int() {
         let datetime = Rc::from(MockDateTime {
+            monotonic: RefCell::from(vec![]),
             sleep_fn: Box::from(|d: Duration| Err(format!("Got {} ms", d.as_millis()))),
         });
 
@@ -149,6 +229,7 @@ mod tests {
     #[test]
     fn test_sleep_ok_float() {
         let datetime = Rc::from(MockDateTime {
+            monotonic: RefCell::from(vec![]),
             sleep_fn: Box::from(|d: Duration| {
                 let ms = d.as_millis();
                 if ms > 123095 && ms < 123105 {

@@ -627,6 +627,10 @@ mod tests {
 
     #[async_trait(?Send)]
     impl DateTime for MockDateTime {
+        fn monotonic(&self) -> Duration {
+            Duration::ZERO
+        }
+
         async fn sleep(&self, d: Duration) -> Result<(), String> {
             (self.on_sleep)(d).await
         }

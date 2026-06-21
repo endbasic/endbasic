@@ -81,6 +81,10 @@ impl WebDateTime {
 
 #[async_trait(?Send)]
 impl endbasic_std::datetime::DateTime for WebDateTime {
+    fn monotonic(&self) -> Duration {
+        Duration::from_secs_f64(current_time_millis() / 1000.0)
+    }
+
     async fn sleep(&self, d: Duration) -> Result<(), String> {
         let ms = d.as_millis();
         if ms > i32::MAX as u128 {
