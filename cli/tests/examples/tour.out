@@ -207,425 +207,442 @@ you know, to keep me motivated in writing stuff and building this project:
 0040:   RETURN                          ; 31:1
 ;; BANNER (END)
 
-0041:   JUMP        75                  ; 34:5
+0041:   JUMP        92                  ; 34:5
 
 ;; WAIT (BEGIN)
-0042:   LOADI       R64, 0              ; 35:5
-0043:   UPCALL      3, R64              ; 35:5, PRINT
-0044:   LOADI       R64, 11             ; 36:11
-0045:   UPCALL      2, R64              ; 36:5, COLOR
-0046:   LOADI       R65, 3              ; 37:11
-0047:   LOADI       R64, 275            ; 37:11
-0048:   LOADI       R66, 0              ; 37:64
-0049:   UPCALL      3, R64              ; 37:5, PRINT
-0050:   LOADI       R64, 1              ; 38:14
-0051:   UPCALL      1, R64              ; 38:5, GFX_SYNC
-0052:   UPCALLA     5, R64              ; 40:21, INKEY
-0053:   MOVE        R65, R64            ; 41:14
-0054:   LOADI       R66, 4              ; 41:14
-0055:   CMPEQS      R67, R65, R66       ; 41:14
-0056:   JMPF        R67, 58             ; 41:14
-0057:   JUMP        67                  ; 41:14
-0058:   JUMP        59                  ; 44:9
-0059:   MOVE        R65, R64            ; 42:14
-0060:   LOADI       R66, 5              ; 42:14
-0061:   CMPEQS      R67, R65, R66       ; 42:14
-0062:   JMPF        R67, 64             ; 42:14
-0063:   JUMP        69                  ; 42:14
-0064:   JUMP        65                  ; 44:9
-0065:   JUMP        71                  ; 44:9
-0066:   JUMP        73                  ; 44:9
-0067:   JUMP        74                  ; 41:23
-0068:   JUMP        73                  ; 44:9
-0069:   JUMP        451                 ; 42:26
-0070:   JUMP        73                  ; 44:9
-0071:   LOADC       R64, 6              ; 43:26, 0.01
-0072:   UPCALLA     6, R64              ; 43:20, SLEEP
-0073:   JUMP        52                  ; 0:0
-0074:   RETURN                          ; 46:1
+0042:   UPCALL      5, R64              ; 35:17, MONOTONIC
+0043:   LOADI       R65, 0              ; 36:5
+0044:   UPCALL      3, R65              ; 36:5, PRINT
+0045:   LOADI       R65, 11             ; 37:11
+0046:   UPCALL      2, R65              ; 37:5, COLOR
+0047:   LOADI       R66, 3              ; 38:11
+0048:   LOADI       R65, 275            ; 38:11
+0049:   LOADI       R67, 0              ; 38:64
+0050:   UPCALL      3, R65              ; 38:5, PRINT
+0051:   LOADI       R65, 1              ; 39:14
+0052:   UPCALL      1, R65              ; 39:5, GFX_SYNC
+0053:   UPCALLA     6, R65              ; 41:21, INKEY
+0054:   MOVE        R66, R65            ; 42:14
+0055:   LOADI       R67, 4              ; 42:14
+0056:   CMPEQS      R68, R66, R67       ; 42:14
+0057:   JMPF        R68, 59             ; 42:14
+0058:   JUMP        68                  ; 42:14
+0059:   JUMP        60                  ; 52:9
+0060:   MOVE        R66, R65            ; 43:14
+0061:   LOADI       R67, 5              ; 43:14
+0062:   CMPEQS      R68, R66, R67       ; 43:14
+0063:   JMPF        R68, 65             ; 43:14
+0064:   JUMP        70                  ; 43:14
+0065:   JUMP        66                  ; 52:9
+0066:   JUMP        72                  ; 52:9
+0067:   JUMP        90                  ; 52:9
+0068:   JUMP        91                  ; 42:23
+0069:   JUMP        90                  ; 52:9
+0070:   JUMP        468                 ; 43:26
+0071:   JUMP        90                  ; 52:9
+0072:   MOVE        R65, R64            ; 45:25
+0073:   LOADC       R66, 6              ; 45:37, 0.01
+0074:   ADDD        R65, R65, R66       ; 45:35
+0075:   MOVE        R64, R65            ; 45:13
+0076:   MOVE        R65, R64            ; 46:21
+0077:   UPCALL      5, R66              ; 46:33, MONOTONIC
+0078:   SUBD        R65, R65, R66       ; 46:31
+0079:   MOVE        R66, R65            ; 47:16
+0080:   LOADI       R67, 0              ; 47:24
+0081:   ITOD        R67                 ; 47:24
+0082:   CMPGTD      R66, R66, R67       ; 47:22
+0083:   JMPF        R66, 87             ; 47:16
+0084:   MOVE        R66, R65            ; 48:23
+0085:   UPCALLA     7, R66              ; 48:17, SLEEP
+0086:   JUMP        90                  ; 47:16
+0087:   LOADI       R66, 1              ; 49:13
+0088:   JMPF        R66, 90             ; 49:13
+0089:   UPCALL      5, R64              ; 50:29, MONOTONIC
+0090:   JUMP        53                  ; 0:0
+0091:   RETURN                          ; 54:1
 ;; WAIT (END)
 
-0075:   LOADI       R64, 7              ; 48:8
-0076:   CALL        R64, 1              ; 48:1, BANNER
-0077:   LOADI       R65, 8              ; 49:7
-0078:   LOADI       R64, 259            ; 49:7
-0079:   UPCALL      3, R64              ; 49:1, PRINT
-0080:   LOADI       R64, 0              ; 50:1
-0081:   UPCALL      3, R64              ; 50:1, PRINT
-0082:   LOADI       R65, 9              ; 51:7
-0083:   LOADI       R64, 259            ; 51:7
-0084:   UPCALL      3, R64              ; 51:1, PRINT
-0085:   LOADI       R65, 10             ; 52:7
-0086:   LOADI       R64, 259            ; 52:7
-0087:   UPCALL      3, R64              ; 52:1, PRINT
-0088:   LOADI       R65, 11             ; 53:7
-0089:   LOADI       R64, 259            ; 53:7
-0090:   UPCALL      3, R64              ; 53:1, PRINT
-0091:   LOADI       R65, 12             ; 54:7
-0092:   LOADI       R64, 259            ; 54:7
-0093:   UPCALL      3, R64              ; 54:1, PRINT
-0094:   LOADI       R64, 0              ; 55:1
-0095:   UPCALL      3, R64              ; 55:1, PRINT
-0096:   LOADI       R65, 13             ; 56:7
-0097:   LOADI       R64, 259            ; 56:7
-0098:   UPCALL      3, R64              ; 56:1, PRINT
-0099:   LOADI       R65, 14             ; 57:7
-0100:   LOADI       R64, 259            ; 57:7
-0101:   UPCALL      3, R64              ; 57:1, PRINT
-0102:   LOADI       R65, 15             ; 58:7
-0103:   LOADI       R64, 259            ; 58:7
-0104:   UPCALL      3, R64              ; 58:1, PRINT
-0105:   LOADI       R64, 0              ; 59:1
-0106:   UPCALL      3, R64              ; 59:1, PRINT
-0107:   LOADI       R65, 16             ; 60:7
-0108:   LOADI       R64, 259            ; 60:7
-0109:   UPCALL      3, R64              ; 60:1, PRINT
-0110:   LOADI       R65, 17             ; 61:7
-0111:   LOADI       R64, 259            ; 61:7
-0112:   UPCALL      3, R64              ; 61:1, PRINT
-0113:   LOADI       R65, 18             ; 62:7
-0114:   LOADI       R64, 259            ; 62:7
-0115:   UPCALL      3, R64              ; 62:1, PRINT
-0116:   LOADI       R65, 19             ; 63:7
-0117:   LOADI       R64, 259            ; 63:7
-0118:   UPCALL      3, R64              ; 63:1, PRINT
-0119:   LOADI       R64, 0              ; 64:1
-0120:   UPCALL      3, R64              ; 64:1, PRINT
-0121:   LOADI       R64, 9              ; 65:7
-0122:   UPCALL      2, R64              ; 65:1, COLOR
-0123:   LOADI       R65, 20             ; 66:7
-0124:   LOADI       R64, 259            ; 66:7
-0125:   UPCALL      3, R64              ; 66:1, PRINT
-0126:   LOADI       R65, 21             ; 67:7
-0127:   LOADI       R64, 259            ; 67:7
-0128:   UPCALL      3, R64              ; 67:1, PRINT
-0129:   UPCALL      2, R64              ; 68:1, COLOR
-0130:   LOADI       R64, 0              ; 69:1
-0131:   UPCALL      3, R64              ; 69:1, PRINT
-0132:   LOADI       R65, 22             ; 70:7
-0133:   LOADI       R64, 259            ; 70:7
-0134:   UPCALL      3, R64              ; 70:1, PRINT
-0135:   CALL        R64, 42             ; 71:1, WAIT
-0136:   LOADI       R64, 23             ; 73:8
-0137:   CALL        R64, 1              ; 73:1, BANNER
-0138:   LOADI       R65, 24             ; 74:7
-0139:   LOADI       R64, 259            ; 74:7
-0140:   UPCALL      3, R64              ; 74:1, PRINT
-0141:   LOADI       R65, 25             ; 75:7
-0142:   LOADI       R64, 259            ; 75:7
-0143:   UPCALL      3, R64              ; 75:1, PRINT
-0144:   LOADI       R64, 0              ; 76:1
-0145:   UPCALL      3, R64              ; 76:1, PRINT
-0146:   LOADI       R65, 26             ; 77:7
-0147:   LOADI       R64, 259            ; 77:7
+0092:   LOADI       R64, 7              ; 56:8
+0093:   CALL        R64, 1              ; 56:1, BANNER
+0094:   LOADI       R65, 8              ; 57:7
+0095:   LOADI       R64, 259            ; 57:7
+0096:   UPCALL      3, R64              ; 57:1, PRINT
+0097:   LOADI       R64, 0              ; 58:1
+0098:   UPCALL      3, R64              ; 58:1, PRINT
+0099:   LOADI       R65, 9              ; 59:7
+0100:   LOADI       R64, 259            ; 59:7
+0101:   UPCALL      3, R64              ; 59:1, PRINT
+0102:   LOADI       R65, 10             ; 60:7
+0103:   LOADI       R64, 259            ; 60:7
+0104:   UPCALL      3, R64              ; 60:1, PRINT
+0105:   LOADI       R65, 11             ; 61:7
+0106:   LOADI       R64, 259            ; 61:7
+0107:   UPCALL      3, R64              ; 61:1, PRINT
+0108:   LOADI       R65, 12             ; 62:7
+0109:   LOADI       R64, 259            ; 62:7
+0110:   UPCALL      3, R64              ; 62:1, PRINT
+0111:   LOADI       R64, 0              ; 63:1
+0112:   UPCALL      3, R64              ; 63:1, PRINT
+0113:   LOADI       R65, 13             ; 64:7
+0114:   LOADI       R64, 259            ; 64:7
+0115:   UPCALL      3, R64              ; 64:1, PRINT
+0116:   LOADI       R65, 14             ; 65:7
+0117:   LOADI       R64, 259            ; 65:7
+0118:   UPCALL      3, R64              ; 65:1, PRINT
+0119:   LOADI       R65, 15             ; 66:7
+0120:   LOADI       R64, 259            ; 66:7
+0121:   UPCALL      3, R64              ; 66:1, PRINT
+0122:   LOADI       R64, 0              ; 67:1
+0123:   UPCALL      3, R64              ; 67:1, PRINT
+0124:   LOADI       R65, 16             ; 68:7
+0125:   LOADI       R64, 259            ; 68:7
+0126:   UPCALL      3, R64              ; 68:1, PRINT
+0127:   LOADI       R65, 17             ; 69:7
+0128:   LOADI       R64, 259            ; 69:7
+0129:   UPCALL      3, R64              ; 69:1, PRINT
+0130:   LOADI       R65, 18             ; 70:7
+0131:   LOADI       R64, 259            ; 70:7
+0132:   UPCALL      3, R64              ; 70:1, PRINT
+0133:   LOADI       R65, 19             ; 71:7
+0134:   LOADI       R64, 259            ; 71:7
+0135:   UPCALL      3, R64              ; 71:1, PRINT
+0136:   LOADI       R64, 0              ; 72:1
+0137:   UPCALL      3, R64              ; 72:1, PRINT
+0138:   LOADI       R64, 9              ; 73:7
+0139:   UPCALL      2, R64              ; 73:1, COLOR
+0140:   LOADI       R65, 20             ; 74:7
+0141:   LOADI       R64, 259            ; 74:7
+0142:   UPCALL      3, R64              ; 74:1, PRINT
+0143:   LOADI       R65, 21             ; 75:7
+0144:   LOADI       R64, 259            ; 75:7
+0145:   UPCALL      3, R64              ; 75:1, PRINT
+0146:   UPCALL      2, R64              ; 76:1, COLOR
+0147:   LOADI       R64, 0              ; 77:1
 0148:   UPCALL      3, R64              ; 77:1, PRINT
-0149:   LOADI       R65, 27             ; 78:7
+0149:   LOADI       R65, 22             ; 78:7
 0150:   LOADI       R64, 259            ; 78:7
 0151:   UPCALL      3, R64              ; 78:1, PRINT
-0152:   LOADI       R64, 0              ; 79:1
-0153:   UPCALL      3, R64              ; 79:1, PRINT
-0154:   LOADI       R65, 28             ; 80:7
-0155:   LOADI       R64, 259            ; 80:7
-0156:   UPCALL      3, R64              ; 80:1, PRINT
-0157:   LOADI       R64, 0              ; 81:1
-0158:   UPCALL      3, R64              ; 81:1, PRINT
-0159:   LOADI       R65, 29             ; 82:7
-0160:   LOADI       R64, 259            ; 82:7
-0161:   UPCALL      3, R64              ; 82:1, PRINT
-0162:   LOADI       R65, 30             ; 83:7
-0163:   LOADI       R64, 259            ; 83:7
-0164:   UPCALL      3, R64              ; 83:1, PRINT
-0165:   LOADI       R65, 31             ; 84:7
-0166:   LOADI       R64, 259            ; 84:7
-0167:   UPCALL      3, R64              ; 84:1, PRINT
-0168:   LOADI       R64, 0              ; 85:1
-0169:   UPCALL      3, R64              ; 85:1, PRINT
-0170:   LOADI       R65, 32             ; 86:7
-0171:   LOADI       R64, 259            ; 86:7
-0172:   UPCALL      3, R64              ; 86:1, PRINT
-0173:   CALL        R64, 42             ; 87:1, WAIT
-0174:   LOADI       R64, 33             ; 89:8
-0175:   CALL        R64, 1              ; 89:1, BANNER
-0176:   LOADI       R65, 34             ; 90:7
+0152:   CALL        R64, 42             ; 79:1, WAIT
+0153:   LOADI       R64, 23             ; 81:8
+0154:   CALL        R64, 1              ; 81:1, BANNER
+0155:   LOADI       R65, 24             ; 82:7
+0156:   LOADI       R64, 259            ; 82:7
+0157:   UPCALL      3, R64              ; 82:1, PRINT
+0158:   LOADI       R65, 25             ; 83:7
+0159:   LOADI       R64, 259            ; 83:7
+0160:   UPCALL      3, R64              ; 83:1, PRINT
+0161:   LOADI       R64, 0              ; 84:1
+0162:   UPCALL      3, R64              ; 84:1, PRINT
+0163:   LOADI       R65, 26             ; 85:7
+0164:   LOADI       R64, 259            ; 85:7
+0165:   UPCALL      3, R64              ; 85:1, PRINT
+0166:   LOADI       R65, 27             ; 86:7
+0167:   LOADI       R64, 259            ; 86:7
+0168:   UPCALL      3, R64              ; 86:1, PRINT
+0169:   LOADI       R64, 0              ; 87:1
+0170:   UPCALL      3, R64              ; 87:1, PRINT
+0171:   LOADI       R65, 28             ; 88:7
+0172:   LOADI       R64, 259            ; 88:7
+0173:   UPCALL      3, R64              ; 88:1, PRINT
+0174:   LOADI       R64, 0              ; 89:1
+0175:   UPCALL      3, R64              ; 89:1, PRINT
+0176:   LOADI       R65, 29             ; 90:7
 0177:   LOADI       R64, 259            ; 90:7
 0178:   UPCALL      3, R64              ; 90:1, PRINT
-0179:   LOADI       R65, 35             ; 91:7
+0179:   LOADI       R65, 30             ; 91:7
 0180:   LOADI       R64, 259            ; 91:7
 0181:   UPCALL      3, R64              ; 91:1, PRINT
-0182:   LOADI       R65, 36             ; 92:7
+0182:   LOADI       R65, 31             ; 92:7
 0183:   LOADI       R64, 259            ; 92:7
 0184:   UPCALL      3, R64              ; 92:1, PRINT
 0185:   LOADI       R64, 0              ; 93:1
 0186:   UPCALL      3, R64              ; 93:1, PRINT
-0187:   LOADI       R65, 37             ; 94:7
+0187:   LOADI       R65, 32             ; 94:7
 0188:   LOADI       R64, 259            ; 94:7
 0189:   UPCALL      3, R64              ; 94:1, PRINT
-0190:   LOADI       R65, 38             ; 95:7
-0191:   LOADI       R64, 259            ; 95:7
-0192:   UPCALL      3, R64              ; 95:1, PRINT
-0193:   LOADI       R65, 39             ; 96:7
-0194:   LOADI       R64, 259            ; 96:7
-0195:   UPCALL      3, R64              ; 96:1, PRINT
-0196:   LOADI       R65, 40             ; 97:7
-0197:   LOADI       R64, 259            ; 97:7
-0198:   UPCALL      3, R64              ; 97:1, PRINT
-0199:   LOADI       R65, 41             ; 98:7
-0200:   LOADI       R64, 259            ; 98:7
-0201:   UPCALL      3, R64              ; 98:1, PRINT
-0202:   LOADI       R65, 42             ; 99:7
-0203:   LOADI       R64, 259            ; 99:7
-0204:   UPCALL      3, R64              ; 99:1, PRINT
-0205:   LOADI       R64, 0              ; 100:1
-0206:   UPCALL      3, R64              ; 100:1, PRINT
-0207:   LOADI       R65, 43             ; 101:7
-0208:   LOADI       R64, 259            ; 101:7
-0209:   UPCALL      3, R64              ; 101:1, PRINT
-0210:   LOADI       R65, 44             ; 102:7
-0211:   LOADI       R64, 259            ; 102:7
-0212:   UPCALL      3, R64              ; 102:1, PRINT
-0213:   LOADI       R65, 45             ; 103:7
-0214:   LOADI       R64, 259            ; 103:7
-0215:   UPCALL      3, R64              ; 103:1, PRINT
-0216:   LOADI       R65, 46             ; 104:7
-0217:   LOADI       R64, 259            ; 104:7
-0218:   UPCALL      3, R64              ; 104:1, PRINT
-0219:   LOADI       R64, 0              ; 105:1
-0220:   UPCALL      3, R64              ; 105:1, PRINT
-0221:   LOADI       R65, 47             ; 106:7
-0222:   LOADI       R64, 259            ; 106:7
-0223:   UPCALL      3, R64              ; 106:1, PRINT
-0224:   LOADI       R65, 48             ; 107:7
-0225:   LOADI       R64, 259            ; 107:7
-0226:   UPCALL      3, R64              ; 107:1, PRINT
-0227:   CALL        R64, 42             ; 108:1, WAIT
-0228:   LOADI       R64, 49             ; 110:8
-0229:   CALL        R64, 1              ; 110:1, BANNER
-0230:   LOADI       R65, 50             ; 111:7
+0190:   CALL        R64, 42             ; 95:1, WAIT
+0191:   LOADI       R64, 33             ; 97:8
+0192:   CALL        R64, 1              ; 97:1, BANNER
+0193:   LOADI       R65, 34             ; 98:7
+0194:   LOADI       R64, 259            ; 98:7
+0195:   UPCALL      3, R64              ; 98:1, PRINT
+0196:   LOADI       R65, 35             ; 99:7
+0197:   LOADI       R64, 259            ; 99:7
+0198:   UPCALL      3, R64              ; 99:1, PRINT
+0199:   LOADI       R65, 36             ; 100:7
+0200:   LOADI       R64, 259            ; 100:7
+0201:   UPCALL      3, R64              ; 100:1, PRINT
+0202:   LOADI       R64, 0              ; 101:1
+0203:   UPCALL      3, R64              ; 101:1, PRINT
+0204:   LOADI       R65, 37             ; 102:7
+0205:   LOADI       R64, 259            ; 102:7
+0206:   UPCALL      3, R64              ; 102:1, PRINT
+0207:   LOADI       R65, 38             ; 103:7
+0208:   LOADI       R64, 259            ; 103:7
+0209:   UPCALL      3, R64              ; 103:1, PRINT
+0210:   LOADI       R65, 39             ; 104:7
+0211:   LOADI       R64, 259            ; 104:7
+0212:   UPCALL      3, R64              ; 104:1, PRINT
+0213:   LOADI       R65, 40             ; 105:7
+0214:   LOADI       R64, 259            ; 105:7
+0215:   UPCALL      3, R64              ; 105:1, PRINT
+0216:   LOADI       R65, 41             ; 106:7
+0217:   LOADI       R64, 259            ; 106:7
+0218:   UPCALL      3, R64              ; 106:1, PRINT
+0219:   LOADI       R65, 42             ; 107:7
+0220:   LOADI       R64, 259            ; 107:7
+0221:   UPCALL      3, R64              ; 107:1, PRINT
+0222:   LOADI       R64, 0              ; 108:1
+0223:   UPCALL      3, R64              ; 108:1, PRINT
+0224:   LOADI       R65, 43             ; 109:7
+0225:   LOADI       R64, 259            ; 109:7
+0226:   UPCALL      3, R64              ; 109:1, PRINT
+0227:   LOADI       R65, 44             ; 110:7
+0228:   LOADI       R64, 259            ; 110:7
+0229:   UPCALL      3, R64              ; 110:1, PRINT
+0230:   LOADI       R65, 45             ; 111:7
 0231:   LOADI       R64, 259            ; 111:7
 0232:   UPCALL      3, R64              ; 111:1, PRINT
-0233:   LOADI       R65, 51             ; 112:7
+0233:   LOADI       R65, 46             ; 112:7
 0234:   LOADI       R64, 259            ; 112:7
 0235:   UPCALL      3, R64              ; 112:1, PRINT
-0236:   LOADI       R65, 52             ; 113:7
-0237:   LOADI       R64, 259            ; 113:7
-0238:   UPCALL      3, R64              ; 113:1, PRINT
-0239:   LOADI       R64, 0              ; 114:1
+0236:   LOADI       R64, 0              ; 113:1
+0237:   UPCALL      3, R64              ; 113:1, PRINT
+0238:   LOADI       R65, 47             ; 114:7
+0239:   LOADI       R64, 259            ; 114:7
 0240:   UPCALL      3, R64              ; 114:1, PRINT
-0241:   LOADI       R65, 53             ; 115:7
+0241:   LOADI       R65, 48             ; 115:7
 0242:   LOADI       R64, 259            ; 115:7
 0243:   UPCALL      3, R64              ; 115:1, PRINT
-0244:   LOADI       R65, 54             ; 116:7
-0245:   LOADI       R64, 259            ; 116:7
-0246:   UPCALL      3, R64              ; 116:1, PRINT
-0247:   LOADI       R65, 55             ; 117:7
-0248:   LOADI       R64, 259            ; 117:7
-0249:   UPCALL      3, R64              ; 117:1, PRINT
-0250:   LOADI       R65, 56             ; 118:7
-0251:   LOADI       R64, 259            ; 118:7
-0252:   UPCALL      3, R64              ; 118:1, PRINT
-0253:   LOADI       R65, 57             ; 119:7
-0254:   LOADI       R64, 259            ; 119:7
-0255:   UPCALL      3, R64              ; 119:1, PRINT
-0256:   LOADI       R64, 0              ; 120:1
-0257:   UPCALL      3, R64              ; 120:1, PRINT
-0258:   LOADI       R65, 58             ; 121:7
-0259:   LOADI       R64, 259            ; 121:7
-0260:   UPCALL      3, R64              ; 121:1, PRINT
-0261:   LOADI       R65, 59             ; 122:7
-0262:   LOADI       R64, 259            ; 122:7
-0263:   UPCALL      3, R64              ; 122:1, PRINT
-0264:   LOADI       R65, 60             ; 123:7
-0265:   LOADI       R64, 259            ; 123:7
-0266:   UPCALL      3, R64              ; 123:1, PRINT
-0267:   LOADI       R65, 61             ; 124:7
-0268:   LOADI       R64, 259            ; 124:7
-0269:   UPCALL      3, R64              ; 124:1, PRINT
-0270:   LOADI       R65, 62             ; 125:7
-0271:   LOADI       R64, 259            ; 125:7
-0272:   UPCALL      3, R64              ; 125:1, PRINT
-0273:   LOADI       R64, 0              ; 126:1
-0274:   UPCALL      3, R64              ; 126:1, PRINT
-0275:   LOADI       R65, 63             ; 127:7
-0276:   LOADI       R64, 259            ; 127:7
-0277:   UPCALL      3, R64              ; 127:1, PRINT
-0278:   LOADI       R65, 64             ; 128:7
-0279:   LOADI       R64, 259            ; 128:7
-0280:   UPCALL      3, R64              ; 128:1, PRINT
-0281:   LOADI       R64, 0              ; 129:1
-0282:   UPCALL      3, R64              ; 129:1, PRINT
-0283:   LOADI       R65, 65             ; 130:7
-0284:   LOADI       R64, 259            ; 130:7
-0285:   UPCALL      3, R64              ; 130:1, PRINT
-0286:   LOADI       R65, 66             ; 131:7
-0287:   LOADI       R64, 259            ; 131:7
-0288:   UPCALL      3, R64              ; 131:1, PRINT
-0289:   LOADI       R65, 67             ; 132:7
-0290:   LOADI       R64, 259            ; 132:7
-0291:   UPCALL      3, R64              ; 132:1, PRINT
-0292:   CALL        R64, 42             ; 133:1, WAIT
-0293:   LOADI       R64, 68             ; 135:8
-0294:   CALL        R64, 1              ; 135:1, BANNER
-0295:   LOADI       R65, 69             ; 136:7
+0244:   CALL        R64, 42             ; 116:1, WAIT
+0245:   LOADI       R64, 49             ; 118:8
+0246:   CALL        R64, 1              ; 118:1, BANNER
+0247:   LOADI       R65, 50             ; 119:7
+0248:   LOADI       R64, 259            ; 119:7
+0249:   UPCALL      3, R64              ; 119:1, PRINT
+0250:   LOADI       R65, 51             ; 120:7
+0251:   LOADI       R64, 259            ; 120:7
+0252:   UPCALL      3, R64              ; 120:1, PRINT
+0253:   LOADI       R65, 52             ; 121:7
+0254:   LOADI       R64, 259            ; 121:7
+0255:   UPCALL      3, R64              ; 121:1, PRINT
+0256:   LOADI       R64, 0              ; 122:1
+0257:   UPCALL      3, R64              ; 122:1, PRINT
+0258:   LOADI       R65, 53             ; 123:7
+0259:   LOADI       R64, 259            ; 123:7
+0260:   UPCALL      3, R64              ; 123:1, PRINT
+0261:   LOADI       R65, 54             ; 124:7
+0262:   LOADI       R64, 259            ; 124:7
+0263:   UPCALL      3, R64              ; 124:1, PRINT
+0264:   LOADI       R65, 55             ; 125:7
+0265:   LOADI       R64, 259            ; 125:7
+0266:   UPCALL      3, R64              ; 125:1, PRINT
+0267:   LOADI       R65, 56             ; 126:7
+0268:   LOADI       R64, 259            ; 126:7
+0269:   UPCALL      3, R64              ; 126:1, PRINT
+0270:   LOADI       R65, 57             ; 127:7
+0271:   LOADI       R64, 259            ; 127:7
+0272:   UPCALL      3, R64              ; 127:1, PRINT
+0273:   LOADI       R64, 0              ; 128:1
+0274:   UPCALL      3, R64              ; 128:1, PRINT
+0275:   LOADI       R65, 58             ; 129:7
+0276:   LOADI       R64, 259            ; 129:7
+0277:   UPCALL      3, R64              ; 129:1, PRINT
+0278:   LOADI       R65, 59             ; 130:7
+0279:   LOADI       R64, 259            ; 130:7
+0280:   UPCALL      3, R64              ; 130:1, PRINT
+0281:   LOADI       R65, 60             ; 131:7
+0282:   LOADI       R64, 259            ; 131:7
+0283:   UPCALL      3, R64              ; 131:1, PRINT
+0284:   LOADI       R65, 61             ; 132:7
+0285:   LOADI       R64, 259            ; 132:7
+0286:   UPCALL      3, R64              ; 132:1, PRINT
+0287:   LOADI       R65, 62             ; 133:7
+0288:   LOADI       R64, 259            ; 133:7
+0289:   UPCALL      3, R64              ; 133:1, PRINT
+0290:   LOADI       R64, 0              ; 134:1
+0291:   UPCALL      3, R64              ; 134:1, PRINT
+0292:   LOADI       R65, 63             ; 135:7
+0293:   LOADI       R64, 259            ; 135:7
+0294:   UPCALL      3, R64              ; 135:1, PRINT
+0295:   LOADI       R65, 64             ; 136:7
 0296:   LOADI       R64, 259            ; 136:7
 0297:   UPCALL      3, R64              ; 136:1, PRINT
-0298:   LOADI       R65, 70             ; 137:7
-0299:   LOADI       R64, 259            ; 137:7
-0300:   UPCALL      3, R64              ; 137:1, PRINT
-0301:   LOADI       R65, 71             ; 138:7
-0302:   LOADI       R64, 259            ; 138:7
-0303:   UPCALL      3, R64              ; 138:1, PRINT
-0304:   LOADI       R64, 0              ; 139:1
+0298:   LOADI       R64, 0              ; 137:1
+0299:   UPCALL      3, R64              ; 137:1, PRINT
+0300:   LOADI       R65, 65             ; 138:7
+0301:   LOADI       R64, 259            ; 138:7
+0302:   UPCALL      3, R64              ; 138:1, PRINT
+0303:   LOADI       R65, 66             ; 139:7
+0304:   LOADI       R64, 259            ; 139:7
 0305:   UPCALL      3, R64              ; 139:1, PRINT
-0306:   LOADI       R65, 72             ; 140:7
+0306:   LOADI       R65, 67             ; 140:7
 0307:   LOADI       R64, 259            ; 140:7
 0308:   UPCALL      3, R64              ; 140:1, PRINT
-0309:   LOADI       R65, 73             ; 141:7
-0310:   LOADI       R64, 259            ; 141:7
-0311:   UPCALL      3, R64              ; 141:1, PRINT
-0312:   LOADI       R64, 0              ; 142:1
-0313:   UPCALL      3, R64              ; 142:1, PRINT
-0314:   LOADI       R64, 0              ; 143:10
-0315:   MOVE        R65, R64            ; 143:5
-0316:   LOADI       R66, 7              ; 143:15
-0317:   CMPLEI      R65, R65, R66       ; 143:12
-0318:   JMPF        R65, 336            ; 143:5
-0319:   LOADI       R65, 4              ; 144:12
-0320:   LOADI       R66, 11             ; 144:15
-0321:   MOVE        R67, R64            ; 144:20
-0322:   ADDI        R66, R66, R67       ; 144:18
-0323:   UPCALL      7, R65              ; 144:5, LOCATE
-0324:   MOVE        R65, R64            ; 145:11
-0325:   UPCALL      2, R65              ; 145:5, COLOR
-0326:   LOADI       R66, 74             ; 146:11
-0327:   LOADI       R65, 275            ; 146:11
-0328:   MOVE        R68, R64            ; 146:28
-0329:   LOADI       R67, 258            ; 146:28
-0330:   UPCALL      3, R65              ; 146:5, PRINT
-0331:   MOVE        R65, R64            ; 143:5
-0332:   LOADI       R66, 1              ; 143:1
-0333:   ADDI        R65, R65, R66       ; 143:12
-0334:   MOVE        R64, R65            ; 143:5
-0335:   JUMP        315                 ; 143:5
-0336:   LOADI       R64, 8              ; 148:10
-0337:   MOVE        R65, R64            ; 148:5
-0338:   LOADI       R66, 15             ; 148:15
-0339:   CMPLEI      R65, R65, R66       ; 148:12
-0340:   JMPF        R65, 360            ; 148:5
-0341:   LOADI       R65, 23             ; 149:12
-0342:   LOADI       R66, 11             ; 149:16
-0343:   MOVE        R67, R64            ; 149:21
-0344:   ADDI        R66, R66, R67       ; 149:19
-0345:   LOADI       R67, 8              ; 149:26
-0346:   SUBI        R66, R66, R67       ; 149:24
-0347:   UPCALL      7, R65              ; 149:5, LOCATE
-0348:   MOVE        R65, R64            ; 150:11
-0349:   UPCALL      2, R65              ; 150:5, COLOR
-0350:   LOADI       R66, 74             ; 151:11
-0351:   LOADI       R65, 275            ; 151:11
-0352:   MOVE        R68, R64            ; 151:28
-0353:   LOADI       R67, 258            ; 151:28
-0354:   UPCALL      3, R65              ; 151:5, PRINT
-0355:   MOVE        R65, R64            ; 148:5
-0356:   LOADI       R66, 1              ; 148:1
-0357:   ADDI        R65, R65, R66       ; 148:12
-0358:   MOVE        R64, R65            ; 148:5
-0359:   JUMP        337                 ; 148:5
-0360:   UPCALL      2, R65              ; 153:1, COLOR
-0361:   CALL        R65, 42             ; 154:1, WAIT
-0362:   LOADI       R65, 75             ; 156:8
-0363:   CALL        R65, 1              ; 156:1, BANNER
-0364:   LOADI       R66, 76             ; 157:7
-0365:   LOADI       R65, 259            ; 157:7
-0366:   UPCALL      3, R65              ; 157:1, PRINT
-0367:   LOADI       R66, 77             ; 158:7
-0368:   LOADI       R65, 259            ; 158:7
-0369:   UPCALL      3, R65              ; 158:1, PRINT
-0370:   LOADI       R66, 78             ; 159:7
-0371:   LOADI       R65, 259            ; 159:7
-0372:   UPCALL      3, R65              ; 159:1, PRINT
-0373:   LOADI       R65, 0              ; 160:1
-0374:   UPCALL      3, R65              ; 160:1, PRINT
-0375:   LOADI       R66, 79             ; 161:7
-0376:   LOADI       R65, 259            ; 161:7
-0377:   UPCALL      3, R65              ; 161:1, PRINT
-0378:   LOADI       R66, 80             ; 162:7
-0379:   LOADI       R65, 259            ; 162:7
-0380:   UPCALL      3, R65              ; 162:1, PRINT
-0381:   CALL        R65, 42             ; 163:1, WAIT
-0382:   LOADI       R65, 81             ; 165:8
-0383:   CALL        R65, 1              ; 165:1, BANNER
-0384:   LOADI       R66, 82             ; 166:7
+0309:   CALL        R64, 42             ; 141:1, WAIT
+0310:   LOADI       R64, 68             ; 143:8
+0311:   CALL        R64, 1              ; 143:1, BANNER
+0312:   LOADI       R65, 69             ; 144:7
+0313:   LOADI       R64, 259            ; 144:7
+0314:   UPCALL      3, R64              ; 144:1, PRINT
+0315:   LOADI       R65, 70             ; 145:7
+0316:   LOADI       R64, 259            ; 145:7
+0317:   UPCALL      3, R64              ; 145:1, PRINT
+0318:   LOADI       R65, 71             ; 146:7
+0319:   LOADI       R64, 259            ; 146:7
+0320:   UPCALL      3, R64              ; 146:1, PRINT
+0321:   LOADI       R64, 0              ; 147:1
+0322:   UPCALL      3, R64              ; 147:1, PRINT
+0323:   LOADI       R65, 72             ; 148:7
+0324:   LOADI       R64, 259            ; 148:7
+0325:   UPCALL      3, R64              ; 148:1, PRINT
+0326:   LOADI       R65, 73             ; 149:7
+0327:   LOADI       R64, 259            ; 149:7
+0328:   UPCALL      3, R64              ; 149:1, PRINT
+0329:   LOADI       R64, 0              ; 150:1
+0330:   UPCALL      3, R64              ; 150:1, PRINT
+0331:   LOADI       R64, 0              ; 151:10
+0332:   MOVE        R65, R64            ; 151:5
+0333:   LOADI       R66, 7              ; 151:15
+0334:   CMPLEI      R65, R65, R66       ; 151:12
+0335:   JMPF        R65, 353            ; 151:5
+0336:   LOADI       R65, 4              ; 152:12
+0337:   LOADI       R66, 11             ; 152:15
+0338:   MOVE        R67, R64            ; 152:20
+0339:   ADDI        R66, R66, R67       ; 152:18
+0340:   UPCALL      8, R65              ; 152:5, LOCATE
+0341:   MOVE        R65, R64            ; 153:11
+0342:   UPCALL      2, R65              ; 153:5, COLOR
+0343:   LOADI       R66, 74             ; 154:11
+0344:   LOADI       R65, 275            ; 154:11
+0345:   MOVE        R68, R64            ; 154:28
+0346:   LOADI       R67, 258            ; 154:28
+0347:   UPCALL      3, R65              ; 154:5, PRINT
+0348:   MOVE        R65, R64            ; 151:5
+0349:   LOADI       R66, 1              ; 151:1
+0350:   ADDI        R65, R65, R66       ; 151:12
+0351:   MOVE        R64, R65            ; 151:5
+0352:   JUMP        332                 ; 151:5
+0353:   LOADI       R64, 8              ; 156:10
+0354:   MOVE        R65, R64            ; 156:5
+0355:   LOADI       R66, 15             ; 156:15
+0356:   CMPLEI      R65, R65, R66       ; 156:12
+0357:   JMPF        R65, 377            ; 156:5
+0358:   LOADI       R65, 23             ; 157:12
+0359:   LOADI       R66, 11             ; 157:16
+0360:   MOVE        R67, R64            ; 157:21
+0361:   ADDI        R66, R66, R67       ; 157:19
+0362:   LOADI       R67, 8              ; 157:26
+0363:   SUBI        R66, R66, R67       ; 157:24
+0364:   UPCALL      8, R65              ; 157:5, LOCATE
+0365:   MOVE        R65, R64            ; 158:11
+0366:   UPCALL      2, R65              ; 158:5, COLOR
+0367:   LOADI       R66, 74             ; 159:11
+0368:   LOADI       R65, 275            ; 159:11
+0369:   MOVE        R68, R64            ; 159:28
+0370:   LOADI       R67, 258            ; 159:28
+0371:   UPCALL      3, R65              ; 159:5, PRINT
+0372:   MOVE        R65, R64            ; 156:5
+0373:   LOADI       R66, 1              ; 156:1
+0374:   ADDI        R65, R65, R66       ; 156:12
+0375:   MOVE        R64, R65            ; 156:5
+0376:   JUMP        354                 ; 156:5
+0377:   UPCALL      2, R65              ; 161:1, COLOR
+0378:   CALL        R65, 42             ; 162:1, WAIT
+0379:   LOADI       R65, 75             ; 164:8
+0380:   CALL        R65, 1              ; 164:1, BANNER
+0381:   LOADI       R66, 76             ; 165:7
+0382:   LOADI       R65, 259            ; 165:7
+0383:   UPCALL      3, R65              ; 165:1, PRINT
+0384:   LOADI       R66, 77             ; 166:7
 0385:   LOADI       R65, 259            ; 166:7
 0386:   UPCALL      3, R65              ; 166:1, PRINT
-0387:   LOADI       R66, 83             ; 167:7
+0387:   LOADI       R66, 78             ; 167:7
 0388:   LOADI       R65, 259            ; 167:7
 0389:   UPCALL      3, R65              ; 167:1, PRINT
-0390:   LOADI       R66, 84             ; 168:7
-0391:   LOADI       R65, 259            ; 168:7
-0392:   UPCALL      3, R65              ; 168:1, PRINT
-0393:   LOADI       R66, 85             ; 169:7
-0394:   LOADI       R65, 259            ; 169:7
-0395:   UPCALL      3, R65              ; 169:1, PRINT
-0396:   LOADI       R65, 0              ; 170:1
+0390:   LOADI       R65, 0              ; 168:1
+0391:   UPCALL      3, R65              ; 168:1, PRINT
+0392:   LOADI       R66, 79             ; 169:7
+0393:   LOADI       R65, 259            ; 169:7
+0394:   UPCALL      3, R65              ; 169:1, PRINT
+0395:   LOADI       R66, 80             ; 170:7
+0396:   LOADI       R65, 259            ; 170:7
 0397:   UPCALL      3, R65              ; 170:1, PRINT
-0398:   LOADI       R65, 1              ; 171:7
-0399:   UPCALL      2, R65              ; 171:1, COLOR
-0400:   LOADI       R66, 86             ; 172:7
-0401:   LOADI       R65, 259            ; 172:7
-0402:   UPCALL      3, R65              ; 172:1, PRINT
-0403:   LOADI       R66, 87             ; 173:7
-0404:   LOADI       R65, 259            ; 173:7
-0405:   UPCALL      3, R65              ; 173:1, PRINT
-0406:   UPCALL      2, R65              ; 174:1, COLOR
-0407:   LOADI       R65, 0              ; 175:1
-0408:   UPCALL      3, R65              ; 175:1, PRINT
-0409:   LOADI       R66, 88             ; 176:7
-0410:   LOADI       R65, 259            ; 176:7
-0411:   UPCALL      3, R65              ; 176:1, PRINT
-0412:   LOADI       R66, 89             ; 177:7
-0413:   LOADI       R65, 259            ; 177:7
-0414:   UPCALL      3, R65              ; 177:1, PRINT
-0415:   LOADI       R65, 12             ; 178:7
-0416:   UPCALL      2, R65              ; 178:1, COLOR
-0417:   LOADI       R65, 0              ; 179:1
-0418:   UPCALL      3, R65              ; 179:1, PRINT
-0419:   LOADI       R66, 90             ; 180:7
-0420:   LOADI       R65, 259            ; 180:7
-0421:   UPCALL      3, R65              ; 180:1, PRINT
-0422:   LOADI       R65, 0              ; 181:1
-0423:   UPCALL      3, R65              ; 181:1, PRINT
-0424:   UPCALL      2, R65              ; 182:1, COLOR
-0425:   LOADI       R66, 91             ; 183:7
-0426:   LOADI       R65, 259            ; 183:7
-0427:   UPCALL      3, R65              ; 183:1, PRINT
-0428:   LOADI       R66, 92             ; 184:7
-0429:   LOADI       R65, 259            ; 184:7
-0430:   UPCALL      3, R65              ; 184:1, PRINT
-0431:   LOADI       R65, 12             ; 185:7
-0432:   UPCALL      2, R65              ; 185:1, COLOR
-0433:   LOADI       R65, 0              ; 186:1
-0434:   UPCALL      3, R65              ; 186:1, PRINT
-0435:   LOADI       R66, 93             ; 187:7
-0436:   LOADI       R65, 259            ; 187:7
-0437:   UPCALL      3, R65              ; 187:1, PRINT
-0438:   LOADI       R65, 0              ; 188:1
-0439:   UPCALL      3, R65              ; 188:1, PRINT
-0440:   UPCALL      2, R65              ; 189:1, COLOR
-0441:   LOADI       R66, 94             ; 190:7
-0442:   LOADI       R65, 259            ; 190:7
-0443:   UPCALL      3, R65              ; 190:1, PRINT
-0444:   LOADI       R65, 0              ; 191:1
-0445:   UPCALL      3, R65              ; 191:1, PRINT
-0446:   LOADI       R65, 10             ; 192:7
-0447:   UPCALL      2, R65              ; 192:1, COLOR
-0448:   LOADI       R66, 95             ; 193:7
-0449:   LOADI       R65, 259            ; 193:7
-0450:   UPCALL      3, R65              ; 193:1, PRINT
-0451:   LOADI       R65, 1              ; 196:10
-0452:   UPCALL      1, R65              ; 196:1, GFX_SYNC
-0453:   UPCALL      2, R65              ; 197:1, COLOR
-0454:   LOADI       R65, 0              ; 198:1
-0455:   UPCALL      3, R65              ; 198:1, PRINT
-0456:   EOF                             ; 0:0
+0398:   CALL        R65, 42             ; 171:1, WAIT
+0399:   LOADI       R65, 81             ; 173:8
+0400:   CALL        R65, 1              ; 173:1, BANNER
+0401:   LOADI       R66, 82             ; 174:7
+0402:   LOADI       R65, 259            ; 174:7
+0403:   UPCALL      3, R65              ; 174:1, PRINT
+0404:   LOADI       R66, 83             ; 175:7
+0405:   LOADI       R65, 259            ; 175:7
+0406:   UPCALL      3, R65              ; 175:1, PRINT
+0407:   LOADI       R66, 84             ; 176:7
+0408:   LOADI       R65, 259            ; 176:7
+0409:   UPCALL      3, R65              ; 176:1, PRINT
+0410:   LOADI       R66, 85             ; 177:7
+0411:   LOADI       R65, 259            ; 177:7
+0412:   UPCALL      3, R65              ; 177:1, PRINT
+0413:   LOADI       R65, 0              ; 178:1
+0414:   UPCALL      3, R65              ; 178:1, PRINT
+0415:   LOADI       R65, 1              ; 179:7
+0416:   UPCALL      2, R65              ; 179:1, COLOR
+0417:   LOADI       R66, 86             ; 180:7
+0418:   LOADI       R65, 259            ; 180:7
+0419:   UPCALL      3, R65              ; 180:1, PRINT
+0420:   LOADI       R66, 87             ; 181:7
+0421:   LOADI       R65, 259            ; 181:7
+0422:   UPCALL      3, R65              ; 181:1, PRINT
+0423:   UPCALL      2, R65              ; 182:1, COLOR
+0424:   LOADI       R65, 0              ; 183:1
+0425:   UPCALL      3, R65              ; 183:1, PRINT
+0426:   LOADI       R66, 88             ; 184:7
+0427:   LOADI       R65, 259            ; 184:7
+0428:   UPCALL      3, R65              ; 184:1, PRINT
+0429:   LOADI       R66, 89             ; 185:7
+0430:   LOADI       R65, 259            ; 185:7
+0431:   UPCALL      3, R65              ; 185:1, PRINT
+0432:   LOADI       R65, 12             ; 186:7
+0433:   UPCALL      2, R65              ; 186:1, COLOR
+0434:   LOADI       R65, 0              ; 187:1
+0435:   UPCALL      3, R65              ; 187:1, PRINT
+0436:   LOADI       R66, 90             ; 188:7
+0437:   LOADI       R65, 259            ; 188:7
+0438:   UPCALL      3, R65              ; 188:1, PRINT
+0439:   LOADI       R65, 0              ; 189:1
+0440:   UPCALL      3, R65              ; 189:1, PRINT
+0441:   UPCALL      2, R65              ; 190:1, COLOR
+0442:   LOADI       R66, 91             ; 191:7
+0443:   LOADI       R65, 259            ; 191:7
+0444:   UPCALL      3, R65              ; 191:1, PRINT
+0445:   LOADI       R66, 92             ; 192:7
+0446:   LOADI       R65, 259            ; 192:7
+0447:   UPCALL      3, R65              ; 192:1, PRINT
+0448:   LOADI       R65, 12             ; 193:7
+0449:   UPCALL      2, R65              ; 193:1, COLOR
+0450:   LOADI       R65, 0              ; 194:1
+0451:   UPCALL      3, R65              ; 194:1, PRINT
+0452:   LOADI       R66, 93             ; 195:7
+0453:   LOADI       R65, 259            ; 195:7
+0454:   UPCALL      3, R65              ; 195:1, PRINT
+0455:   LOADI       R65, 0              ; 196:1
+0456:   UPCALL      3, R65              ; 196:1, PRINT
+0457:   UPCALL      2, R65              ; 197:1, COLOR
+0458:   LOADI       R66, 94             ; 198:7
+0459:   LOADI       R65, 259            ; 198:7
+0460:   UPCALL      3, R65              ; 198:1, PRINT
+0461:   LOADI       R65, 0              ; 199:1
+0462:   UPCALL      3, R65              ; 199:1, PRINT
+0463:   LOADI       R65, 10             ; 200:7
+0464:   UPCALL      2, R65              ; 200:1, COLOR
+0465:   LOADI       R66, 95             ; 201:7
+0466:   LOADI       R65, 259            ; 201:7
+0467:   UPCALL      3, R65              ; 201:1, PRINT
+0468:   LOADI       R65, 1              ; 204:10
+0469:   UPCALL      1, R65              ; 204:1, GFX_SYNC
+0470:   UPCALL      2, R65              ; 205:1, COLOR
+0471:   LOADI       R65, 0              ; 206:1
+0472:   UPCALL      3, R65              ; 206:1, PRINT
+0473:   EOF                             ; 0:0
 
 End of input by CTRL-D
