@@ -178,6 +178,14 @@ impl Console for SdlConsole {
         }
     }
 
+    fn glyph_size(&self) -> io::Result<SizeInPixels> {
+        self.request_tx.send(Request::GlyphSize).expect("Channel must be alive");
+        match self.response_rx.recv().expect("Channel must be alive") {
+            Response::GlyphSize(size) => Ok(size),
+            _ => panic!("Unexpected response type"),
+        }
+    }
+
     fn write(&mut self, text: &str) -> io::Result<()> {
         let text = remove_control_chars(text);
         self.call(Request::Write(text))
