@@ -690,6 +690,7 @@ pub(crate) enum Request {
     Print(String),
     ShowCursor,
     SizeChars,
+    GlyphSize,
     SizePixels,
     Write(String),
     BucketFill(PixelsXY),
@@ -720,6 +721,7 @@ pub(crate) enum Response {
     Empty(io::Result<()>),
     PeekPixel(io::Result<Option<u8>>),
     SizeChars(CharsXY),
+    GlyphSize(SizeInPixels),
     SizePixels(SizeInPixels),
     SetSync(io::Result<bool>),
 }
@@ -789,6 +791,7 @@ pub(crate) fn run(
                     Request::MoveWithinLine(off) => Response::Empty(console.move_within_line(off)),
                     Request::Print(text) => Response::Empty(console.print(&text)),
                     Request::ShowCursor => Response::Empty(console.show_cursor()),
+                    Request::GlyphSize => Response::GlyphSize(info.glyph_size),
                     Request::SizeChars => Response::SizeChars(info.size_chars),
                     Request::SizePixels => Response::SizePixels(info.size_pixels),
                     Request::Write(text) => Response::Empty(console.write(&text)),

@@ -446,6 +446,10 @@ impl<P: Pins + Send, B: SpiBus, K: InputOps> Console for ST7735SConsole<P, B, K>
         self.inner.size_pixels()
     }
 
+    fn glyph_size(&self) -> io::Result<SizeInPixels> {
+        self.inner.glyph_size()
+    }
+
     fn write(&mut self, text: &str) -> io::Result<()> {
         self.inner.write(text)
     }

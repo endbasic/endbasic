@@ -259,6 +259,11 @@ pub trait Console {
         Err(io::Error::other("No graphics support in this console"))
     }
 
+    /// Queries the size of a single glyph in the graphical console.
+    fn glyph_size(&self) -> io::Result<SizeInPixels> {
+        Err(io::Error::other("No graphics support in this console"))
+    }
+
     /// Writes the text into the console at the position of the cursor.
     ///
     fn write(&mut self, text: &str) -> io::Result<()>;

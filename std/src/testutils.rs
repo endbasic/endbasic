@@ -131,6 +131,9 @@ pub struct MockConsole {
     /// The size of the mock graphical console.
     size_pixels: Option<SizeInPixels>,
 
+    /// The size of a glyph in the mock graphical console.
+    glyph_size: Option<SizeInPixels>,
+
     /// Whether the console is interactive or not.
     interactive: bool,
 
@@ -155,6 +158,7 @@ impl MockConsole {
             captured_out: vec![],
             size_chars: CharsXY::new(u16::MAX, u16::MAX),
             size_pixels: None,
+            glyph_size: None,
             interactive: false,
             peek_pixels: HashMap::default(),
             signals_tx,
@@ -201,6 +205,11 @@ impl MockConsole {
     /// Sets the size of the mock graphical console.
     pub fn set_size_pixels(&mut self, size: SizeInPixels) {
         self.size_pixels = Some(size);
+    }
+
+    /// Sets the size of a glyph in the mock graphical console.
+    pub fn set_glyph_size(&mut self, size: SizeInPixels) {
+        self.glyph_size = Some(size);
     }
 
     /// Sets whether the mock console is interactive or not.
@@ -324,6 +333,13 @@ impl Console for MockConsole {
         match self.size_pixels {
             Some(size) => Ok(size),
             None => Err(io::Error::other("Graphical console size not yet set")),
+        }
+    }
+
+    fn glyph_size(&self) -> io::Result<SizeInPixels> {
+        match self.glyph_size {
+            Some(size) => Ok(size),
+            None => Err(io::Error::other("Glyph size not yet set")),
         }
     }
 

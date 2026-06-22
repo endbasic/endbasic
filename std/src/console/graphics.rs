@@ -677,6 +677,10 @@ where
         Ok(self.size_pixels)
     }
 
+    fn glyph_size(&self) -> io::Result<SizeInPixels> {
+        Ok(self.glyph_size)
+    }
+
     fn write(&mut self, text: &str) -> io::Result<()> {
         let text = remove_control_chars(text);
 
