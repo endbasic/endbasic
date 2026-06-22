@@ -29,3 +29,8 @@ path = "../std"
 [dev-dependencies]
 async-channel = "2.2"
 futures-lite = "2.2"
+
+[dev-dependencies.endbasic-sdl]
+version = "0.13.99" # ENDBASIC-VERSION
+path = "../sdl"
+features = ["testutils"]

@@ -85,7 +85,7 @@ pub async fn run_repl_loop(
         .with_program(program.clone())
         .with_storage(storage.clone())
         .build();
-    endbasic_repl::print_welcome(console.clone())?;
+    endbasic_repl::print_welcome(&mut *console.borrow_mut())?;
     endbasic_repl::try_load_autoexec(&mut machine, console.clone(), storage).await?;
     Ok(endbasic_repl::run_repl_loop(&mut machine, console, program).await?)
 }

@@ -20,6 +20,9 @@ for the time being.**
 *   Added the `vga8x16` font and used it as default for the sdl and web
     graphics backend.
 
+*   Added a logo to the welcome banner in graphical consoles to demonstrate,
+    right away, that graphics are possible.
+
 *   Added `GFX_TRI` and `GFX_TRIF` to draw outlined and filled triangles.
 
 *   Added `GFX_POLY` and `GFX_POLYF` to draw outlined and filled polygons.

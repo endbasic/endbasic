@@ -16,7 +16,7 @@
 
 //! Interactive interpreter for the EndBASIC language.
 
-use endbasic_std::console::{self, Console, is_narrow, refill_and_print};
+use endbasic_std::console::{self, Console, PixelsXY, is_narrow, refill_and_print};
 use endbasic_std::program::{BREAK_MSG, Program, continue_if_modified};
 use endbasic_std::storage::Storage;
 use endbasic_std::{Error as StdError, Machine};
@@ -26,19 +26,55 @@ use std::rc::Rc;
 
 pub mod demos;
 pub mod editor;
+mod logo;
+
+/// Prints the EndBASIC welcome message to a wide console, with optional extra indentation to
+/// leave space for the logo.
+fn print_wide_welcome(console: &mut dyn Console, extra_indent: &str) -> io::Result<()> {
+    console.print("")?;
+    console.print(&format!("    {}EndBASIC {}", extra_indent, env!("CARGO_PKG_VERSION")))?;
+    console.print(&format!("    {}Copyright 2020-2026 Julio Merino", extra_indent))?;
+    console.print("")?;
+    console.print("    Type HELP for interactive usage information.")
+}
+
+/// Prints the EndBASIC welcome message to a graphical console.
+fn print_graphical_welcome(console: &mut dyn Console) -> io::Result<()> {
+    let glyph_size = console.glyph_size()?;
+
+    let previous_sync = console.set_sync(false)?;
+    let result = (|| {
+        print_wide_welcome(console, "     ")?;
+
+        let x1 = i32::from(glyph_size.width) * 4;
+        let x2 = i32::from(glyph_size.width) * 8;
+        let y1 = i32::from(glyph_size.height) / 2;
+        let y2 = i32::from(glyph_size.height) * 7 / 2;
+        logo::draw_logo(
+            console,
+            PixelsXY::new(x1 as i16, y1 as i16),
+            Some(PixelsXY::new(x2 as i16, y2 as i16)),
+        )?;
+
+        Ok(())
+    })();
+    console.set_sync(previous_sync)?;
+    result
+}
+
+/// Checks if the given `console` has graphics support.
+fn has_graphics(console: &dyn Console) -> bool {
+    console.size_pixels().is_ok() && console.glyph_size().is_ok()
+}
 
 /// Prints the EndBASIC welcome message to the given console.
-pub fn print_welcome(console: Rc<RefCell<dyn Console>>) -> io::Result<()> {
-    let mut console = console.borrow_mut();
-
+pub fn print_welcome(console: &mut dyn Console) -> io::Result<()> {
     if is_narrow(&*console) {
         console.print(&format!("EndBASIC {}", env!("CARGO_PKG_VERSION")))?;
+    } else if has_graphics(&*console) {
+        print_graphical_welcome(&mut *console)?;
     } else {
-        console.print("")?;
-        console.print(&format!("    EndBASIC {}", env!("CARGO_PKG_VERSION")))?;
-        console.print("    Copyright 2020-2026 Julio Merino")?;
-        console.print("")?;
-        console.print("    Type HELP for interactive usage information.")?;
+        print_wide_welcome(console, "")?;
     }
     console.print("")?;
 
@@ -247,12 +283,13 @@ pub async fn run_repl_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use endbasic_sdl::testutils::SdlTest;
     use endbasic_std::Signal;
     use endbasic_std::console::{CharsXY, Key};
+    use endbasic_std::gfx::lcd::fonts::{FONT_5X8, FONT_16X16};
     use endbasic_std::storage::{Drive, DriveFactory, InMemoryDrive};
     use endbasic_std::testutils::*;
     use futures_lite::future::block_on;
-    use std::convert::TryFrom;
 
     /// Runs `print_welcome` against a console that is `console_width` in height and returns
     /// whether the narrow welcome message was printed or not, and the maximum width of all
@@ -260,7 +297,7 @@ mod tests {
     fn check_is_narrow_welcome(console_width: u16) -> (bool, usize) {
         let console = Rc::from(RefCell::from(MockConsole::default()));
         console.borrow_mut().set_size_chars(CharsXY::new(console_width, 1));
-        print_welcome(console.clone()).unwrap();
+        print_welcome(&mut *console.borrow_mut()).unwrap();
 
         let mut console = console.borrow_mut();
         let mut found = false;
@@ -297,6 +334,30 @@ mod tests {
         for i in 0..max_length {
             assert!(check_is_narrow_welcome(u16::try_from(i).unwrap()).0, "Long message found");
         }
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_print_welcome_draw_logo_default() {
+        let mut test = SdlTest::default();
+        print_welcome(test.console()).unwrap();
+        test.verify("repl/src", "welcome-banner-default");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_print_welcome_draw_logo_tiny() {
+        let mut test = SdlTest::new(800, 600, &FONT_5X8);
+        print_welcome(test.console()).unwrap();
+        test.verify("repl/src", "welcome-banner-tiny");
+    }
+
+    #[test]
+    #[ignore = "Requires a graphical environment"]
+    fn test_print_welcome_draw_logo_big() {
+        let mut test = SdlTest::new(800, 600, &FONT_16X16);
+        print_welcome(test.console()).unwrap();
+        test.verify("repl/src", "welcome-banner-big");
     }
 
     #[test]
