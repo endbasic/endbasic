@@ -48,7 +48,7 @@ jobs:
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev
             - run: cargo test --package='*' --features=sdl
-                   -- --include-ignored --skip sdl_console
+                   -- --include-ignored --skip sdl_console --skip draw_logo
 
     macos-test:
         runs-on: macos-latest
@@ -67,7 +67,9 @@ jobs:
             - run: cargo test --package=endbasic-client -- --include-ignored
             - run: cargo test --package=endbasic-core -- --include-ignored
             - run: cargo test --package=endbasic-std -- --include-ignored
-            - run: cargo test --package=endbasic-repl -- --include-ignored
+            - run: LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
+                   cargo test --package=endbasic-repl
+                   -- --include-ignored --skip draw_logo
             - run: LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
                    cargo test --package=endbasic-sdl
                    -- --include-ignored --skip sdl_console

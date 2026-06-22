@@ -295,7 +295,7 @@ impl WebTerminal {
             .with_storage(storage.clone())
             .build();
 
-        endbasic_repl::print_welcome(console.clone())?;
+        endbasic_repl::print_welcome(&mut *console.borrow_mut())?;
 
         let mut auto_run = None;
         for (name, value) in location.query_pairs() {
