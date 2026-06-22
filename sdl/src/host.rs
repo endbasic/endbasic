@@ -46,7 +46,7 @@ use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::fmt::{self, Write};
 use std::io;
-#[cfg(test)]
+#[cfg(any(test, feature = "testutils"))]
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError};
@@ -572,13 +572,13 @@ impl SharedContext {
         (*self.0).borrow_mut().event_pump.poll_event()
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testutils"))]
     fn push_event(&mut self, ev: Event) -> io::Result<()> {
         let event_ss = (*self.0).borrow().sdl.event().map_err(string_error_to_io_error)?;
         event_ss.push_event(ev).map_err(string_error_to_io_error)
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testutils"))]
     fn save_bmp(&self, path: &Path) -> io::Result<()> {
         let ctx = (*self.0).borrow_mut();
         let surface = ctx.window.surface(&ctx.event_pump).map_err(string_error_to_io_error)?;
@@ -709,9 +709,9 @@ pub(crate) enum Request {
     SyncNow,
     SetSync(bool),
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testutils"))]
     PushEvent(Event),
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testutils"))]
     SaveBmp(PathBuf),
 }
 
@@ -823,10 +823,10 @@ pub(crate) fn run(
                     Request::SyncNow => Response::Empty(console.sync_now()),
                     Request::SetSync(enabled) => Response::SetSync(console.set_sync(enabled)),
 
-                    #[cfg(test)]
+                    #[cfg(any(test, feature = "testutils"))]
                     Request::PushEvent(ev) => Response::Empty(ctx.push_event(ev)),
 
-                    #[cfg(test)]
+                    #[cfg(any(test, feature = "testutils"))]
                     Request::SaveBmp(path) => Response::Empty(ctx.save_bmp(&path)),
                 };
 

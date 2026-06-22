@@ -28,6 +28,8 @@ use std::sync::mpsc::{self, Receiver, SyncSender};
 
 mod console;
 use console::SdlConsole;
+#[cfg(feature = "testutils")]
+pub use console::testutils;
 
 mod host;
 use host::SdlConsoleHost;
