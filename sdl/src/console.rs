@@ -29,7 +29,7 @@ use std::sync::mpsc::{Receiver, SyncSender, TryRecvError};
 ///
 /// This is only the "client" part of the console, which implements the `Console` trait and
 /// delegates all operations to a backing thread implemented by the `host` module.
-pub(crate) struct SdlConsole {
+pub struct SdlConsole {
     request_tx: SyncSender<Request>,
     response_rx: Receiver<Response>,
     on_key_rx: Receiver<Key>,
@@ -265,14 +265,15 @@ impl Console for SdlConsole {
     }
 }
 
-#[cfg(test)]
-mod testutils {
+/// Utilities to interact with a test SDL console and validate output.
+#[cfg(any(test, feature = "testutils"))]
+pub mod testutils {
     use super::*;
     use crate::new_console_pair;
     use async_channel::{Receiver, TryRecvError};
     use endbasic_std::Signal;
     use endbasic_std::console::{ConsoleHost, Resolution};
-    use endbasic_std::gfx::lcd::fonts::FONT_VGA8X16;
+    use endbasic_std::gfx::lcd::fonts::{FONT_VGA8X16, Font};
     use flate2::Compression;
     use flate2::read::GzDecoder;
     use flate2::write::GzEncoder;
@@ -319,7 +320,7 @@ mod testutils {
 
     /// Context for tests that validate the SDL console.
     #[must_use]
-    pub(crate) struct SdlTest {
+    pub struct SdlTest {
         /// The SDL console under test.
         console: Option<SdlConsole>,
 
@@ -334,19 +335,27 @@ mod testutils {
         _lock: MutexGuard<'static, ()>,
     }
 
-    impl SdlTest {
+    impl Default for SdlTest {
         /// Creates a new test context and ensures no other test is running at the same time.
-        pub(crate) fn new() -> Self {
+        fn default() -> Self {
+            Self::new(800, 600, &FONT_VGA8X16)
+        }
+    }
+
+    impl SdlTest {
+        /// Creates a new test context with specified properties and ensures no other test is
+        /// running at the same time.
+        pub fn new(width: u32, height: u32, font: &'static Font) -> Self {
             let lock = TEST_LOCK.lock().unwrap();
             let signals_chan = async_channel::unbounded();
             let (host, factory) = new_console_pair(
                 Resolution::Windowed((
-                    NonZeroU32::new(800).unwrap(),
-                    NonZeroU32::new(600).unwrap(),
+                    NonZeroU32::new(width).unwrap(),
+                    NonZeroU32::new(height).unwrap(),
                 )),
                 None,
                 None,
-                &FONT_VGA8X16,
+                font,
                 signals_chan.0,
             );
             let host = thread::spawn(move || Box::new(host).run());
@@ -360,17 +369,17 @@ mod testutils {
         }
 
         /// Obtains access to the SDL console.
-        pub(crate) fn console(&mut self) -> &mut SdlConsole {
+        pub fn console(&mut self) -> &mut SdlConsole {
             self.console.as_mut().expect("Console must always be present")
         }
 
         /// Obtains shared access to the SDL console.
-        pub(crate) fn console_ref(&self) -> &SdlConsole {
+        pub fn console_ref(&self) -> &SdlConsole {
             self.console.as_ref().expect("Console must always be present")
         }
 
         /// Synchronously waits for the reception of just one signal.
-        pub(crate) fn wait_one_signal(&self) -> Signal {
+        pub fn wait_one_signal(&self) -> Signal {
             let signal = block_on(self.signals_rx.recv()).unwrap();
 
             match self.signals_rx.try_recv() {
@@ -383,14 +392,14 @@ mod testutils {
         }
 
         /// Injects an SDL event into the console.
-        pub(crate) fn push_event(&self, ev: Event) {
+        pub fn push_event(&self, ev: Event) {
             self.console_ref().call(Request::PushEvent(ev)).unwrap()
         }
 
         /// Verifies that the current state of the console matches a golden imagine.  `bmp_basename`
         /// indicates the name of the BMP image to use, without an extension.
-        pub(crate) fn verify(self, bmp_basename: &'static str) {
-            let golden_bmp_gz = src_path("sdl/src").join(format!("{}.bmp.gz", bmp_basename));
+        pub fn verify(self, bmp_reldir: &'static str, bmp_basename: &'static str) {
+            let golden_bmp_gz = src_path(bmp_reldir).join(format!("{}.bmp.gz", bmp_basename));
             let dir = tempfile::tempdir().unwrap();
             let actual_bmp = dir.path().join(format!("{}.bmp", bmp_basename));
 
@@ -497,14 +506,14 @@ mod tests {
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_empty() {
-        let test = SdlTest::new();
-        test.verify("sdl-empty");
+        let test = SdlTest::default();
+        test.verify("sdl/src", "sdl-empty");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_colors() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().print("Default colors").unwrap();
         test.console().print("").unwrap();
@@ -518,17 +527,17 @@ mod tests {
         test.console().print("").unwrap();
         test.console().print("Back to default colors").unwrap();
 
-        test.verify("sdl-colors");
+        test.verify("sdl/src", "sdl-colors");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_scroll_and_wrap() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().set_color(None, Some(4)).unwrap();
 
-        let mut long_line = String::new();
+        let mut long_line = String::default();
         for i in 0..128 {
             long_line.push((b'a' + (i % 26)) as char);
         }
@@ -543,13 +552,13 @@ mod tests {
         test.console().print(&long_line).unwrap();
         test.console().print("End").unwrap();
 
-        test.verify("sdl-scroll-and-wrap");
+        test.verify("sdl/src", "sdl-scroll-and-wrap");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_scroll_uses_only_the_text_viewport() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
         let size = test.console().size_chars().unwrap();
 
         test.console().hide_cursor().unwrap();
@@ -557,13 +566,13 @@ mod tests {
         test.console().set_color(Some(11), Some(4)).unwrap();
         test.console().print("").unwrap();
 
-        test.verify("sdl-scroll-text-viewport");
+        test.verify("sdl/src", "sdl-scroll-text-viewport");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_clear() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().print("Before clearing the console").unwrap();
         test.console().set_color(None, Some(4)).unwrap();
@@ -590,13 +599,13 @@ mod tests {
         test.console().move_within_line(-2).unwrap();
         test.console().show_cursor().unwrap();
 
-        test.verify("sdl-clear");
+        test.verify("sdl/src", "sdl-clear");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_move_cursor() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().write("Move cursor over parts of this text").unwrap();
         for _ in 0..15 {
@@ -606,50 +615,50 @@ mod tests {
             test.console().move_within_line(1).unwrap();
         }
 
-        test.verify("sdl-move-cursor");
+        test.verify("sdl/src", "sdl-move-cursor");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_hide_cursor() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().hide_cursor().unwrap();
         test.console().hide_cursor().unwrap();
         test.console().write("Cursor hidden").unwrap();
 
-        test.verify("sdl-hide-cursor");
+        test.verify("sdl/src", "sdl-hide-cursor");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_enter_alt() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().print("Before entering the alternate console").unwrap();
         test.console().enter_alt().unwrap();
         test.console().print("After entering the alternate console").unwrap();
 
-        test.verify("sdl-enter-alt");
+        test.verify("sdl/src", "sdl-enter-alt");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_leave_alt() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().print("Before entering the alternate console").unwrap();
         test.console().enter_alt().unwrap();
         test.console().print("After entering the alternate console").unwrap();
         test.console().leave_alt().unwrap();
 
-        test.verify("sdl-leave-alt");
+        test.verify("sdl/src", "sdl-leave-alt");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_alt_colors() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().set_color(Some(13), Some(5)).unwrap();
 
@@ -664,7 +673,7 @@ mod tests {
         test.console().print("After leaving the alternate console").unwrap();
         assert_eq!((Some(13), Some(5)), test.console().color());
 
-        test.verify("sdl-alt-colors");
+        test.verify("sdl/src", "sdl-alt-colors");
     }
 
     /// Synthesizes an `Event::KeyDown` event for a single key press.
@@ -682,7 +691,7 @@ mod tests {
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_poll_key() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         /// Ensure the console doesn't return a key press for a brief period of time.
         ///
@@ -745,13 +754,13 @@ mod tests {
         assert_eq!(Signal::Break, test.wait_one_signal());
         assert_poll_is_none(test.console());
 
-        test.verify("sdl-empty");
+        test.verify("sdl/src", "sdl-empty");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_read_key() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.push_event(Event::Quit { timestamp: 0 });
         assert_eq!(Key::EofOrDelete, block_on(test.console().read_key()).unwrap());
@@ -779,13 +788,13 @@ mod tests {
         // TODO(jmmv): We aren't testing textual input because push_event doesn't support injecting
         // Event::TextInput events.
 
-        test.verify("sdl-empty");
+        test.verify("sdl/src", "sdl-empty");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_draw() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
         let console = test.console();
 
         fn xy(x: i16, y: i16) -> PixelsXY {
@@ -897,13 +906,13 @@ mod tests {
         console.locate(CharsXY { x: 4, y: 22 }).unwrap();
         console.write("Done!").unwrap();
 
-        test.verify("sdl-draw");
+        test.verify("sdl/src", "sdl-draw");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_draw_zero_sized_shapes() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
         let console = test.console();
 
         fn xy(x: i16, y: i16) -> PixelsXY {
@@ -921,13 +930,13 @@ mod tests {
         console.draw_poly(&[xy(90, 10), xy(90, 10), xy(90, 10), xy(90, 10)]).unwrap();
         console.draw_poly_filled(&[xy(100, 10), xy(100, 10), xy(100, 10), xy(100, 10)]).unwrap();
 
-        test.verify("sdl-empty");
+        test.verify("sdl/src", "sdl-empty");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_draw_one_sized_rectangles() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
         let console = test.console();
 
         fn xy(x: i16, y: i16) -> PixelsXY {
@@ -940,13 +949,13 @@ mod tests {
         console.draw_rect_filled(xy(30, 30), xy(30, 35)).unwrap();
         console.draw_rect_filled(xy(40, 40), xy(45, 40)).unwrap();
 
-        test.verify("sdl-draw-one-sized-rectangles");
+        test.verify("sdl/src", "sdl-draw-one-sized-rectangles");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_peek_pixel_exact_match() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().hide_cursor().unwrap();
         test.console().set_color(Some(15), None).unwrap();
@@ -958,7 +967,7 @@ mod tests {
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_peek_pixel_out_of_bounds() {
-        let test = SdlTest::new();
+        let test = SdlTest::default();
 
         assert_eq!(None, test.console_ref().peek_pixel(PixelsXY::new(-1, 0)).unwrap());
         assert_eq!(None, test.console_ref().peek_pixel(PixelsXY::new(0, -1)).unwrap());
@@ -977,18 +986,18 @@ mod tests {
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_show_cursor() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().show_cursor().unwrap();
         test.console().show_cursor().unwrap();
 
-        test.verify("sdl-empty");
+        test.verify("sdl/src", "sdl-empty");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_sync() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         test.console().print("Before disabling sync").unwrap();
         test.console().set_sync(false).unwrap();
@@ -996,13 +1005,13 @@ mod tests {
         test.console().sync_now().unwrap();
         test.console().print("With sync disabled").unwrap();
 
-        test.verify("sdl-sync");
+        test.verify("sdl/src", "sdl-sync");
     }
 
     #[test]
     #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_write_positions() {
-        let mut test = SdlTest::new();
+        let mut test = SdlTest::default();
 
         let cols = test.console().size_chars().unwrap().x;
         for c in 0..cols {
@@ -1014,6 +1023,6 @@ mod tests {
             test.console().write("bc").unwrap();
         }
 
-        test.verify("sdl-write-positions");
+        test.verify("sdl/src", "sdl-write-positions");
     }
 }
