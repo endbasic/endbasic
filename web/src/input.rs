@@ -27,12 +27,11 @@ use wasm_bindgen::prelude::*;
 use web_sys::{InputEvent, KeyboardEvent};
 
 /// Converts an HTML input event into our own `Key` representation.
-fn on_input_event_into_key(dom_event: InputEvent) -> Key {
-    let chars = match dom_event.data() {
-        Some(data) => data.chars().collect::<Vec<char>>(),
+fn on_input_event_into_keys(dom_event: InputEvent) -> Vec<Key> {
+    match dom_event.data() {
+        Some(data) => data.chars().map(Key::Char).collect(),
         None => vec![],
-    };
-    if chars.len() == 1 { Key::Char(chars[0]) } else { Key::Unknown }
+    }
 }
 
 /// Converts an HTML keyboard event into our own `Key` representation.
@@ -91,7 +90,9 @@ impl OnScreenKeyboard {
     /// Pushes a new captured `dom_event` input event into the input.
     pub fn inject_input_event(&self, dom_event: InputEvent) {
         // TODO(jmmv): Add an on-screen button to send CTRL+C events.
-        self.safe_try_send(on_input_event_into_key(dom_event))
+        for key in on_input_event_into_keys(dom_event) {
+            self.safe_try_send(key);
+        }
     }
 
     /// Pushes a new captured `dom_event` keyboard event into the input.

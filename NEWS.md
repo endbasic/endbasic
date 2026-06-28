@@ -86,6 +86,8 @@ for the time being.**
 
 *   Issue #139: Added support for shebangs and property lines in scripts.
 
+*   Minor fixes to text input on Android.
+
 ## Changes in version 0.13.0
 
 **Released on 2026-05-29.**
