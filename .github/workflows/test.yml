@@ -47,8 +47,7 @@ jobs:
             - uses: mozilla-actions/sccache-action@v0.0.10
             - run: sudo apt update
             - run: sudo apt install libsdl2-dev
-            - run: cargo test --package='*' --features=sdl
-                   -- --include-ignored --skip sdl_console --skip draw_logo
+            - run: cargo test --package='*' --features=sdl -- --include-ignored
 
     macos-test:
         runs-on: macos-latest

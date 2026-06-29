@@ -275,7 +275,6 @@ impl Context {
                 window
             }
         }
-        .opengl()
         .build()
         .map_err(window_build_error_to_io_error)?;
 
