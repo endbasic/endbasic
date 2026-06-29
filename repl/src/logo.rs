@@ -130,7 +130,6 @@ mod tests {
     use endbasic_sdl::testutils::SdlTest;
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_draw_logo_origin_and_unscaled() {
         let mut test = SdlTest::default();
         test.console().hide_cursor().unwrap();
@@ -139,7 +138,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_draw_logo_transported_and_scaled() {
         let mut test = SdlTest::default();
         test.console().hide_cursor().unwrap();

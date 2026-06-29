@@ -284,6 +284,7 @@ pub mod testutils {
     use sdl2::rwops::RWops;
     use sdl2::surface::Surface;
     use std::env;
+    use std::ffi::OsString;
     use std::fs::File;
     use std::io::{self, BufReader, Read};
     use std::num::NonZeroU32;
@@ -291,11 +292,58 @@ pub mod testutils {
     use std::sync::{Mutex, MutexGuard};
     use std::thread::{self, JoinHandle};
 
+    /// Per-test global state setter and tracker.
+    #[derive(Default)]
+    struct TestLockState {
+        previous_sdl_videodriver: Option<OsString>,
+        previous_sdl_render_driver: Option<OsString>,
+    }
+
+    impl TestLockState {
+        /// Initializes per-test global state.
+        #[allow(unsafe_code)]
+        fn set() -> Self {
+            let previous_sdl_videodriver = env::var_os("SDL_VIDEODRIVER");
+            let previous_sdl_render_driver = env::var_os("SDL_RENDER_DRIVER");
+            // The global `TEST_LOCK` guarantees that no other SDL test mutates the process
+            // environment while these values are temporarily overridden.
+            unsafe {
+                // On Windows, the SDL2 library that we use doesn't have offscreen support
+                // and, on macOS, offscreen fails to initialize as it needs OpenGL to be
+                // present.  So... for now, only do the nice thing on Linux.
+                if cfg!(target_os = "linux") {
+                    env::set_var("SDL_VIDEODRIVER", "offscreen");
+                    env::set_var("SDL_RENDER_DRIVER", "software");
+                }
+            }
+            Self { previous_sdl_videodriver, previous_sdl_render_driver }
+        }
+    }
+
+    impl Drop for TestLockState {
+        #[allow(unsafe_code)]
+        fn drop(&mut self) {
+            // The global `TEST_LOCK` guarantees that no other SDL test mutates the process
+            // environment while these values are temporarily restored.
+            unsafe {
+                match &self.previous_sdl_render_driver {
+                    None => env::remove_var("SDL_RENDER_DRIVER"),
+                    Some(v) => env::set_var("SDL_RENDER_DRIVER", v),
+                }
+
+                match &self.previous_sdl_videodriver {
+                    None => env::remove_var("SDL_VIDEODRIVER"),
+                    Some(v) => env::set_var("SDL_VIDEODRIVER", v),
+                }
+            }
+        }
+    }
+
     /// Global lock to ensure we only instantiate a single `SdlConsole` at once.
     ///
     /// We could instead wrap a global `SdlConsole` with the mutex, but then the tests would
     /// sharing possibly-stale state in the presence of bugs.
-    static TEST_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+    static TEST_LOCK: Lazy<Mutex<Option<TestLockState>>> = Lazy::new(|| Mutex::new(None));
 
     /// Computes the path to the directory where this test's binary lives.
     fn self_dir() -> PathBuf {
@@ -332,7 +380,9 @@ pub mod testutils {
 
         /// Guard to ensure there is a single `SdlConsole` alive at any given time. This must come
         /// after `host` because the host must stop before releasing the lock.
-        _lock: MutexGuard<'static, ()>,
+        ///
+        /// The lock also carries any state that needs to be restored before releasing the lock.
+        lock: MutexGuard<'static, Option<TestLockState>>,
     }
 
     impl Default for SdlTest {
@@ -346,7 +396,10 @@ pub mod testutils {
         /// Creates a new test context with specified properties and ensures no other test is
         /// running at the same time.
         pub fn new(width: u32, height: u32, font: &'static Font) -> Self {
-            let lock = TEST_LOCK.lock().unwrap();
+            let mut lock = TEST_LOCK.lock().unwrap();
+            assert!(lock.is_none(), "Global state must not yet be set");
+            *lock = Some(TestLockState::set());
+
             let signals_chan = async_channel::unbounded();
             let (host, factory) = new_console_pair(
                 Resolution::Windowed((
@@ -359,13 +412,19 @@ pub mod testutils {
                 signals_chan.0,
             );
             let host = thread::spawn(move || Box::new(host).run());
-            let console = factory.build_console().unwrap();
-            Self {
-                _lock: lock,
-                console: Some(console),
-                host: Some(host),
-                signals_rx: signals_chan.1,
-            }
+            let console = match factory.build_console() {
+                Ok(console) => console,
+                Err(e) => {
+                    let result = host.join().expect("Thread should not have panicked");
+                    assert!(
+                        result.is_err(),
+                        "Host should fail if console creation failed (error was: {e})"
+                    );
+                    drop(lock);
+                    panic!("Failed to build SDL console: {e}");
+                }
+            };
+            Self { console: Some(console), host: Some(host), signals_rx: signals_chan.1, lock }
         }
 
         /// Obtains access to the SDL console.
@@ -466,6 +525,7 @@ pub mod testutils {
             drop(self.console.take().expect("Console must always be present"));
             let host = self.host.take().expect("Host must always be present");
             host.join().expect("Thread should not have panicked").expect("Host should not fail");
+            let _ = self.lock.take();
         }
     }
 }
@@ -483,14 +543,12 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_empty() {
         let test = SdlTest::default();
         test.verify("sdl/src", "sdl-empty");
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_colors() {
         let mut test = SdlTest::default();
 
@@ -510,7 +568,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_scroll_and_wrap() {
         let mut test = SdlTest::default();
 
@@ -535,7 +592,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_scroll_uses_only_the_text_viewport() {
         let mut test = SdlTest::default();
         let size = test.console().size_chars().unwrap();
@@ -549,7 +605,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_clear() {
         let mut test = SdlTest::default();
 
@@ -582,7 +637,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_move_cursor() {
         let mut test = SdlTest::default();
 
@@ -598,7 +652,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_hide_cursor() {
         let mut test = SdlTest::default();
 
@@ -610,7 +663,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_enter_alt() {
         let mut test = SdlTest::default();
 
@@ -622,7 +674,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_leave_alt() {
         let mut test = SdlTest::default();
 
@@ -635,7 +686,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_alt_colors() {
         let mut test = SdlTest::default();
 
@@ -668,7 +718,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_poll_key() {
         let mut test = SdlTest::default();
 
@@ -737,7 +786,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_read_key() {
         let mut test = SdlTest::default();
 
@@ -771,7 +819,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_draw() {
         let mut test = SdlTest::default();
         let console = test.console();
@@ -889,7 +936,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_draw_zero_sized_shapes() {
         let mut test = SdlTest::default();
         let console = test.console();
@@ -913,7 +959,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_draw_one_sized_rectangles() {
         let mut test = SdlTest::default();
         let console = test.console();
@@ -932,7 +977,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_peek_pixel_exact_match() {
         let mut test = SdlTest::default();
 
@@ -944,7 +988,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_peek_pixel_out_of_bounds() {
         let test = SdlTest::default();
 
@@ -963,7 +1006,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_show_cursor() {
         let mut test = SdlTest::default();
 
@@ -974,7 +1016,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_sync() {
         let mut test = SdlTest::default();
 
@@ -988,7 +1029,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_sdl_console_write_positions() {
         let mut test = SdlTest::default();
 

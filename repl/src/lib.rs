@@ -337,7 +337,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_print_welcome_draw_logo_default() {
         let mut test = SdlTest::default();
         print_welcome(test.console()).unwrap();
@@ -345,7 +344,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_print_welcome_draw_logo_tiny() {
         let mut test = SdlTest::new(800, 600, &FONT_5X8);
         print_welcome(test.console()).unwrap();
@@ -353,7 +351,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires a graphical environment"]
     fn test_print_welcome_draw_logo_big() {
         let mut test = SdlTest::new(800, 600, &FONT_16X16);
         print_welcome(test.console()).unwrap();
