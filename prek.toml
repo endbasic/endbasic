@@ -29,7 +29,7 @@ id = "check-merge-conflict"
 
 [[repos.hooks]]
 id = "check-shebang-scripts-are-executable"
-exclude = "^cli/tests/cli/shebang-.*\\.bas$"
+exclude = "^cli/tests/cli/(propline|shebang)-.*\\.bas$"
 
 [[repos.hooks]]
 id = "detect-private-key"

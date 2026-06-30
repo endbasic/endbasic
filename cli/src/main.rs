@@ -68,7 +68,7 @@ fn app_build(builder: Builder) -> Builder {
 }
 
 fn app_main(matches: Matches) -> Result<i32> {
-    let console_spec = matches.opt_str("console");
+    let mut console_spec = matches.opt_str("console");
 
     let gpio_pins_spec = matches.opt_str("gpio-pins");
 
@@ -76,11 +76,17 @@ fn app_main(matches: Matches) -> Result<i32> {
         .opt_str("service-url")
         .unwrap_or_else(|| endbasic_client::PROD_API_ADDRESS.to_owned());
 
+    let app_mode = AppMode::from_matches(matches)?;
+    if let AppMode::RunScript(path) = &app_mode {
+        let propline = extract_propline(path)?;
+        if console_spec.is_none() {
+            console_spec = propline.console_spec;
+        }
+    }
+
     let (signals_tx, signals_rx) = async_channel::unbounded();
     let (console_host, console_factory) =
         setup_console(console_spec.as_deref(), signals_tx.clone())?;
-
-    let app_mode = AppMode::from_matches(matches)?;
 
     let interpreter = thread::spawn(move || -> Result<i32> {
         let runtime = tokio::runtime::Runtime::new()?;

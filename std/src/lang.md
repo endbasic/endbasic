@@ -129,6 +129,13 @@ EndBASIC scripts can start with a shebang in the first line so that Unix-like sy
 
     #!/usr/bin/env endbasic
 
+When a script starts with a shebang, EndBASIC also recognizes an optional property line in the second line to configure CLI defaults for the script.  The only supported property today is `console=...`, which can be written in either of these two forms:
+
+    ' endbasic cli: console=sdl
+    REM endbasic cli: console=sdl
+
+No other syntax is recognized.  If an explicit `--console=...` flag is given in the command line, that value overrides the one in the script.
+
 # IF
 
 Multiline and uniline IF statements

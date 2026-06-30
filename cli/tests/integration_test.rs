@@ -252,6 +252,42 @@ fn test_lang_shebang_exec() {
 }
 
 #[test]
+fn test_cli_propline_errors() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/cli/propline-bad-comment.bas")],
+        1,
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/cli/propline-bad-comment.err")),
+    );
+}
+
+#[test]
+fn test_cli_propline_sets_default_console() {
+    check(
+        bin_path("endbasic"),
+        &[&src_str("cli/tests/cli/propline-bad-console.bas")],
+        1,
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/cli/propline-bad-console.err")),
+    );
+}
+
+#[test]
+fn test_cli_flag_overrides_propline_console() {
+    check(
+        bin_path("endbasic"),
+        &["--console=text", &src_str("cli/tests/cli/propline-override-console.bas")],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/cli/propline-override-console.out")),
+        Behavior::Null,
+    );
+}
+
+#[test]
 fn test_cli_help() {
     fn check_with_args(args: &[&str]) {
         let mut src = String::from("cli/tests/cli/help.out");

@@ -84,7 +84,7 @@ for the time being.**
 *   Added support to edit lines longer than the console's width in the REPL
     and in `INPUT` prompts, instead of rejecting input when the line is full.
 
-*   Issue #139: Added support for shebangs in scripts.
+*   Issue #139: Added support for shebangs and property lines in scripts.
 
 ## Changes in version 0.13.0
 
