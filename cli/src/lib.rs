@@ -34,6 +34,9 @@ pub use console::setup_console;
 mod gpio;
 use gpio::setup_gpio_pins;
 
+mod propline;
+pub use propline::{PropLine, extract_propline};
+
 mod storage;
 use storage::{get_local_drive_spec, setup_storage};
 
