@@ -73,6 +73,7 @@ one_test!(test_relational_le);
 one_test!(test_relational_lt);
 one_test!(test_relational_ne);
 one_test!(test_select);
+one_test!(test_shebang);
 one_test!(test_strings);
 one_test!(test_subs);
 one_test!(test_types);

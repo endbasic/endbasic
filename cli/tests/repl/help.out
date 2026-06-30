@@ -233,6 +233,7 @@ Output from HELP "LANG":
     >> [38;5;14mJumps      [39m    GOTO, GOSUB, END, and labels
     >> [38;5;14mON ERROR   [39m    Error handling
     >> [38;5;14mSELECT CASE[39m    Conditional statement to choose among values
+    >> [38;5;14mShebang    [39m    Interpreter selection and CLI metadata for scripts
     >> [38;5;14mStyle      [39m    Spacing, comments, and general style
     >> [38;5;14mSubroutines[39m    User-defined subroutines
     >> [38;5;14mTypes      [39m    Primitive types and arrays
@@ -548,6 +549,15 @@ Output from HELP "SELECT CASE":
     only once at as the last case guard.
 
     When using the `IS` guard, all relational operators can be specified.
+
+Output from HELP "SHEBANG":
+
+[38;5;11m    Interpreter selection and CLI metadata for scripts
+[39m
+    EndBASIC scripts can start with a shebang in the first line so that
+    Unix-like systems can execute them directly:
+
+        #!/usr/bin/env endbasic
 
 Output from HELP "SUBROUTINES":
 

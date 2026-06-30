@@ -18,6 +18,8 @@
 use std::env;
 use std::fs::{self, File};
 use std::io::Read;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -218,6 +220,34 @@ fn test_cli_autoexec_is_ignored() {
         Behavior::Null,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/cli/interactive.err")),
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_lang_shebang_exec() {
+    let dir = tempfile::tempdir().unwrap();
+    let script = dir.path().join("shebang-exec");
+
+    let mut template = read_golden(&src_path("cli/tests/cli/shebang-exec.bas"));
+    let interpreter = bin_path("endbasic");
+    template = template.replace(
+        "__ENDBASIC__",
+        interpreter.to_str().expect("Interpreter path must be valid UTF-8"),
+    );
+    fs::write(&script, template).unwrap();
+
+    let mut perms = fs::metadata(&script).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&script, perms).unwrap();
+
+    check(
+        script,
+        &[],
+        0,
+        Behavior::Null,
+        Behavior::File(src_path("cli/tests/cli/shebang-exec.out")),
+        Behavior::Null,
     );
 }
 
