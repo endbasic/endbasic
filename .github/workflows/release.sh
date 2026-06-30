@@ -102,14 +102,16 @@ main() {
             cp .github/workflows/macos-launcher.sh "${distname}/endbasic"
 
             # Bundle the necessary shared libraries as provided by Homebrew.
-            cp "${brew}"/Cellar/sdl2/*/lib/libSDL2-*.dylib "${distname}"
-            cp "${brew}"/Cellar/sdl2/*/LICENSE.txt "${distname}/LICENSE.sdl2"
+            cp "${brew}"/Cellar/sdl2-compat/*/lib/lib*.dylib "${distname}"
+            cp "${brew}"/Cellar/sdl2-compat/*/LICENSE.txt "${distname}/LICENSE.sdl2-compat"
+            cp "${brew}"/Cellar/sdl3/*/lib/lib*.dylib "${distname}"
+            cp "${brew}"/Cellar/sdl3/*/LICENSE.txt "${distname}/LICENSE.sdl3"
             cp "${brew}"/Cellar/freetype/*/lib/libfreetype.*.dylib "${distname}"
             cp "${brew}"/Cellar/freetype/*/LICENSE.TXT "${distname}/LICENSE.freetype"
             cp "${brew}"/Cellar/libpng/*/lib/libpng16.*.dylib "${distname}"
             cp "${brew}"/Cellar/libpng/*/LICENSE "${distname}/LICENSE.libpng"
 
-            brew uninstall --ignore-dependencies sdl2 freetype libpng
+            brew uninstall --ignore-dependencies sdl2-compat sdl3 freetype libpng
             sanity_check "${distname}/endbasic"
             ;;
 
