@@ -581,7 +581,7 @@ impl SharedContext {
     #[cfg(any(test, feature = "testutils"))]
     fn save_bmp(&self, path: &Path) -> io::Result<()> {
         let ctx = (*self.0).borrow_mut();
-        let surface = ctx.window.surface(&ctx.event_pump).map_err(string_error_to_io_error)?;
+        let surface = ctx.canvas.surface();
         surface.save_bmp(path).map_err(string_error_to_io_error)
     }
 }
