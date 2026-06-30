@@ -669,6 +669,24 @@ impl<'a> Lexer<'a> {
     /// Note that this returns errors only on fatal I/O conditions.  EOF and malformed tokens are
     /// both returned as the special token types `Token::Eof` and `Token::Bad` respectively.
     pub fn read(&mut self) -> io::Result<TokenSpan> {
+        if let Some(Ok(ch_span)) = self.input.peek()
+            && ch_span.pos == (LineCol { line: 1, col: 1 })
+            && ch_span.ch == '#'
+        {
+            let first = self.input.next().unwrap()?;
+            match self.input.peek() {
+                Some(Ok(ch_span)) if ch_span.ch == '!' => {
+                    self.input.next().unwrap()?;
+                    let _end = self.consume_rest_of_line()?;
+                    return self.read();
+                }
+                Some(Ok(_)) | None => {
+                    return self.handle_bad_read("Unknown character: #", first.pos);
+                }
+                Some(Err(_)) => return Err(self.input.next().unwrap().unwrap_err()),
+            }
+        }
+
         let ch_span = self.advance_and_read_next()?;
         if ch_span.is_none() {
             let last_pos = self.input.next_pos();
@@ -1012,6 +1030,116 @@ mod tests {
                 ts(Token::Not, 2, 1, 3),
                 ts(Token::Eol, 2, 22, 1),
                 ts(Token::Eof, 3, 1, 0),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_shebang() {
+        do_ok_test(
+            "#!/usr/bin/env endbasic\nOUT 1\n",
+            &[
+                ts(new_auto_symbol("OUT"), 2, 1, 3),
+                ts(Token::Integer(1), 2, 5, 1),
+                ts(Token::Eol, 2, 6, 1),
+                ts(Token::Eof, 3, 1, 0),
+            ],
+        );
+
+        do_ok_test("#!/usr/bin/env endbasic", &[ts(Token::Eof, 1, 24, 0)]);
+    }
+
+    #[test]
+    fn test_invalid_hashes() {
+        do_ok_test(
+            "#\n",
+            &[
+                ts(Token::Bad("Unknown character: #".to_owned()), 1, 1, 1),
+                ts(Token::Eol, 1, 2, 1),
+                ts(Token::Eof, 2, 1, 0),
+            ],
+        );
+
+        do_ok_test(
+            "\n#!/usr/bin/env endbasic\n",
+            &[
+                ts(Token::Eol, 1, 1, 1),
+                ts(Token::Bad("Unknown character: #".to_owned()), 2, 1, 2),
+                ts(Token::Divide, 2, 3, 1),
+                ts(new_auto_symbol("usr"), 2, 4, 3),
+                ts(Token::Divide, 2, 7, 1),
+                ts(new_auto_symbol("bin"), 2, 8, 3),
+                ts(Token::Divide, 2, 11, 1),
+                ts(new_auto_symbol("env"), 2, 12, 3),
+                ts(new_auto_symbol("endbasic"), 2, 16, 8),
+                ts(Token::Eol, 2, 24, 1),
+                ts(Token::Eof, 3, 1, 0),
+            ],
+        );
+
+        do_ok_test(
+            " #!/usr/bin/env endbasic\n",
+            &[
+                ts(Token::Bad("Unknown character: #".to_owned()), 1, 2, 2),
+                ts(Token::Divide, 1, 4, 1),
+                ts(new_auto_symbol("usr"), 1, 5, 3),
+                ts(Token::Divide, 1, 8, 1),
+                ts(new_auto_symbol("bin"), 1, 9, 3),
+                ts(Token::Divide, 1, 12, 1),
+                ts(new_auto_symbol("env"), 1, 13, 3),
+                ts(new_auto_symbol("endbasic"), 1, 17, 8),
+                ts(Token::Eol, 1, 25, 1),
+                ts(Token::Eof, 2, 1, 0),
+            ],
+        );
+
+        do_ok_test(
+            "\t#!/usr/bin/env endbasic\n",
+            &[
+                ts(Token::Bad("Unknown character: #".to_owned()), 1, 9, 2),
+                ts(Token::Divide, 1, 11, 1),
+                ts(new_auto_symbol("usr"), 1, 12, 3),
+                ts(Token::Divide, 1, 15, 1),
+                ts(new_auto_symbol("bin"), 1, 16, 3),
+                ts(Token::Divide, 1, 19, 1),
+                ts(new_auto_symbol("env"), 1, 20, 3),
+                ts(new_auto_symbol("endbasic"), 1, 24, 8),
+                ts(Token::Eol, 1, 32, 1),
+                ts(Token::Eof, 2, 1, 0),
+            ],
+        );
+
+        do_ok_test(
+            "# !/usr/bin/env endbasic\n",
+            &[
+                ts(Token::Bad("Unknown character: #".to_owned()), 1, 1, 1),
+                ts(Token::Bad("Unknown character: !".to_owned()), 1, 3, 1),
+                ts(Token::Divide, 1, 4, 1),
+                ts(new_auto_symbol("usr"), 1, 5, 3),
+                ts(Token::Divide, 1, 8, 1),
+                ts(new_auto_symbol("bin"), 1, 9, 3),
+                ts(Token::Divide, 1, 12, 1),
+                ts(new_auto_symbol("env"), 1, 13, 3),
+                ts(new_auto_symbol("endbasic"), 1, 17, 8),
+                ts(Token::Eol, 1, 25, 1),
+                ts(Token::Eof, 2, 1, 0),
+            ],
+        );
+
+        do_ok_test(
+            "#\t!/usr/bin/env endbasic\n",
+            &[
+                ts(Token::Bad("Unknown character: #".to_owned()), 1, 1, 1),
+                ts(Token::Bad("Unknown character: !".to_owned()), 1, 9, 1),
+                ts(Token::Divide, 1, 10, 1),
+                ts(new_auto_symbol("usr"), 1, 11, 3),
+                ts(Token::Divide, 1, 14, 1),
+                ts(new_auto_symbol("bin"), 1, 15, 3),
+                ts(Token::Divide, 1, 18, 1),
+                ts(new_auto_symbol("env"), 1, 19, 3),
+                ts(new_auto_symbol("endbasic"), 1, 23, 8),
+                ts(Token::Eol, 1, 31, 1),
+                ts(Token::Eof, 2, 1, 0),
             ],
         );
     }

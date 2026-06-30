@@ -121,6 +121,14 @@ The common EndBASIC style in documentation and sample programs is to:
 
 These are just style guidelines and they are neither required nor enforced in your own code.  For a more modern look, you can type all code in lowercase letters and avoid type identifiers.
 
+# Shebang
+
+Interpreter selection and CLI metadata for scripts
+
+EndBASIC scripts can start with a shebang in the first line so that Unix-like systems can execute them directly:
+
+    #!/usr/bin/env endbasic
+
 # IF
 
 Multiline and uniline IF statements
