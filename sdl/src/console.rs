@@ -429,7 +429,7 @@ pub mod testutils {
                     .unwrap()
                     .into_canvas()
                     .unwrap()
-                    .read_pixels(None, PixelFormatEnum::BGR888)
+                    .read_pixels(None, PixelFormatEnum::RGB24)
                     .unwrap()
             };
 
@@ -443,7 +443,7 @@ pub mod testutils {
                     .unwrap()
                     .into_canvas()
                     .unwrap()
-                    .read_pixels(None, PixelFormatEnum::BGR888)
+                    .read_pixels(None, PixelFormatEnum::RGB24)
                     .unwrap()
             };
 
@@ -452,33 +452,12 @@ pub mod testutils {
             // above, or else tests misbehave.
             drop(self);
 
-            // Compare images for equality.  In theory, they should be pixel-perfect across
-            // platforms, but in practice, I'm encountering minor color variations (e.g. FreeBSD
-            // renders colors that differ by one compared to Windows) that I haven't been able to
-            // explain.  Cope with those here by tolerating minor differences in the comparison.
-            let mut equal = true;
             assert_eq!(golden.len(), actual.len());
             for i in 0..golden.len() {
                 let pixel1 = golden[i];
                 let pixel2 = actual[i];
-
-                let pixel2min = match pixel2 {
-                    0 => pixel2,
-                    1 => pixel2 - 1,
-                    _ => pixel2 - 2,
-                };
-                let pixel2max = match pixel2 {
-                    255 => pixel2,
-                    254 => pixel2 + 1,
-                    _ => pixel2 + 2,
-                };
-
-                if pixel1 < pixel2min || pixel1 > pixel2max {
-                    eprintln!("Diff at pixel {}: {} vs. {}", i, pixel1, pixel2);
-                    equal = false;
-                }
+                assert_eq!(pixel1, pixel2, "Diff at pixel {}", i);
             }
-            assert!(equal, "Images do not match; see test output");
         }
     }
 
