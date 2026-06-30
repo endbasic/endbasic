@@ -106,12 +106,8 @@ main() {
             cp "${brew}"/Cellar/sdl2-compat/*/LICENSE.txt "${distname}/LICENSE.sdl2-compat"
             cp "${brew}"/Cellar/sdl3/*/lib/lib*.dylib "${distname}"
             cp "${brew}"/Cellar/sdl3/*/LICENSE.txt "${distname}/LICENSE.sdl3"
-            cp "${brew}"/Cellar/freetype/*/lib/libfreetype.*.dylib "${distname}"
-            cp "${brew}"/Cellar/freetype/*/LICENSE.TXT "${distname}/LICENSE.freetype"
-            cp "${brew}"/Cellar/libpng/*/lib/libpng16.*.dylib "${distname}"
-            cp "${brew}"/Cellar/libpng/*/LICENSE "${distname}/LICENSE.libpng"
 
-            brew uninstall --ignore-dependencies sdl2-compat sdl3 freetype libpng
+            brew uninstall --ignore-dependencies sdl2-compat sdl3
             sanity_check "${distname}/endbasic"
             ;;
 
