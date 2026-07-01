@@ -134,6 +134,16 @@ fn rect_origin_size(origin: PixelsXY, size: SizeInPixels) -> Rect {
     )
 }
 
+/// Returns the logical console size in pixels for explicit resolutions.
+fn requested_size_pixels(resolution: Resolution) -> Option<SizeInPixels> {
+    match resolution {
+        Resolution::FullScreen(size) | Resolution::Windowed(size) => {
+            Some(SizeInPixels::new(size.0.get().clamped_into(), size.1.get().clamped_into()))
+        }
+        Resolution::FullScreenDesktop => None,
+    }
+}
+
 /// Converts our own `RGB` type to an SDL `Color`.
 fn rgb_to_color(rgb: RGB) -> Color {
     Color::RGB(rgb.0, rgb.1, rgb.2)
@@ -285,10 +295,10 @@ impl Context {
         activate_app();
         window.raise();
 
-        let size_pixels = {
-            let (width, height) = window.drawable_size();
+        let size_pixels = requested_size_pixels(resolution).unwrap_or_else(|| {
+            let (width, height) = window.size();
             SizeInPixels::new(width.clamped_into(), height.clamped_into())
-        };
+        });
         let size_chars = font.chars_in_area(size_pixels);
 
         write!(
@@ -423,7 +433,7 @@ impl RasterOps for Context {
             self.window.surface(&self.event_pump).map_err(string_error_to_io_error)?;
         self.canvas
             .surface()
-            .blit(None, &mut window_surface, None)
+            .blit_scaled(None, &mut window_surface, None)
             .map_err(string_error_to_io_error)?;
         window_surface.finish().map_err(string_error_to_io_error)
     }
@@ -903,6 +913,7 @@ impl ConsoleHost for SdlConsoleHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::num::NonZeroU32;
 
     /// Creates an `Event::KeyDown` struct for `keycode` with `keymod`.
     fn key_down(keycode: Keycode, keymod: Mod) -> Event {
@@ -935,5 +946,22 @@ mod tests {
             Rect::new(-31000, -32000, 63000, 64000),
             rect_origin_size(PixelsXY { x: -31000, y: -32000 }, SizeInPixels::new(63000, 64000))
         );
+    }
+
+    #[test]
+    fn test_requested_size_pixels_uses_requested_size_for_explicit_resolutions() {
+        let size = requested_size_pixels(Resolution::Windowed((
+            NonZeroU32::new(1024).unwrap(),
+            NonZeroU32::new(768).unwrap(),
+        )));
+        assert_eq!(Some(SizeInPixels::new(1024, 768)), size);
+
+        let size = requested_size_pixels(Resolution::FullScreen((
+            NonZeroU32::new(640).unwrap(),
+            NonZeroU32::new(480).unwrap(),
+        )));
+        assert_eq!(Some(SizeInPixels::new(640, 480)), size);
+
+        assert_eq!(None, requested_size_pixels(Resolution::FullScreenDesktop));
     }
 }
