@@ -163,6 +163,7 @@ fn check<P: AsRef<Path>>(
         .stdin(golden_stdin)
         .env("LINES", "24")
         .env("COLUMNS", "80")
+        .env_remove("NO_COLOR")
         .output()
         .expect("Failed to execute subprocess");
     let code = result.status.code().expect("Subprocess didn't exit cleanly");
