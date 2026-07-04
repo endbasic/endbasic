@@ -16,8 +16,12 @@
 
 ' Cycles through rising and falling tones until a key is pressed.
 
-PRINT "Press any key to stop..."
+PRINT "Press any key to start the alarm..."
+WHILE INKEY = ""
+    SLEEP 0.01
+WEND
 
+PRINT "Press any key to stop the alarm..."
 DO
     FOR pitch = 800 TO 1200 STEP 10
         SOUND pitch, 0.02

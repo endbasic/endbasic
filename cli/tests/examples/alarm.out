@@ -4,6 +4,7 @@
 
     Type HELP for interactive usage information.
 
-Press any key to stop...
-ERROR: 23:9: No audio support in this console
+Press any key to start the alarm...
+Press any key to stop the alarm...
+ERROR: 27:9: No audio support in this console
 End of input by CTRL-D
