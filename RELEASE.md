@@ -23,6 +23,7 @@
     *   `README.md`: Update latest version number and release date.
     *   `*/Cargo.toml`: Update version number and `endbasic-*` dependencies.
     *   `Cargo.lock`: Reflects the new version number.
+    *   `repl/src/welcome-banner-*`: Golden images need regeneration.
     *   `web/package*.json`: Update version number.
     *   `.github/workflows/deploy-release.yml`: Update tag number.
 

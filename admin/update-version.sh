@@ -120,6 +120,8 @@ main() {
     replace web/package.json -E "/\"version\"/s/[0-9]+\\.[0-9]+\\.[0-9]+/${version}/g"
     fix_cargo_lock Cargo.lock "${version}"
     fix_package_lock web/package-lock.json "${version}"
+
+    REGEN=true cargo test -p endbasic-repl
 }
 
 main "${@}"
