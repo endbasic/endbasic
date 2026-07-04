@@ -10,9 +10,11 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
-## Changes in version 0.13.99
+## Changes in version 0.14.0
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET**
+**Released on 2026-07-04.**
+
+Graphics additions and improvements:
 
 *   Changed the sdl and web graphics backends to use our own font rendering
     engine (the one implemented for the ST7735s LCD).
@@ -31,12 +33,16 @@ for the time being.**
 
 *   Added `GFX_FILL` to perform a 4-way bucket fill.
 
+*   Added the `DEMOS:/BOUNCE.BAS` graphics demo to showcase animated shapes.
+
+Brand-new sound support:
+
 *   Issue #124: Added the `BEEP` and `SOUND` commands to reproduce tones on
     audio-capable consoles.
 
 *   Added the `DEMOS:/ALARM.BAS` sound demo to showcase tone playback.
 
-*   Added the `DEMOS:/BOUNCE.BAS` graphics demo to showcase animated shapes.
+Standard library improvements:
 
 *   Added the `INSTR`, `LCASE`, `SPACE`, `TRIM`, `UCASE`, and `VAL`
     string functions.
@@ -51,6 +57,8 @@ for the time being.**
 
 *   Issue #258: Added the `MONOTONIC` function to query a monotonic timestamp
     for elapsed-time measurements.
+
+Console fixes and improvements:
 
 *   Fixed the web frontend so that commands that print long outputs (like
     `HELP` or `DIR`) don't block and print everything at once: the contents
@@ -67,9 +75,6 @@ for the time being.**
 *   Added SDL2 support for the prebuilt binaries for the Raspberry Pi that we
     distribute from the website.
 
-*   Switched the EndBASIC Service client to use Rustls instead of OpenSSL for
-    easier cross-compilation and consistency across builds.
-
 *   Added an aarch64 SDL2 prebuilt binary for the Raspberry Pi in addition to
     the existing armv7 build to support Raspbian 64 bits.
 
@@ -83,6 +88,11 @@ for the time being.**
 
 *   Added support to edit lines longer than the console's width in the REPL
     and in `INPUT` prompts, instead of rejecting input when the line is full.
+
+Miscellaneous fixes and improvements:
+
+*   Switched the EndBASIC Service client to use Rustls instead of OpenSSL for
+    easier cross-compilation and consistency across builds.
 
 *   Issue #139: Added support for shebangs and property lines in scripts.
 
