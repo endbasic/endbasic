@@ -152,12 +152,14 @@ pub async fn run_interactive(
 
     match path.strip_prefix("cloud://") {
         Some(username_path) => {
-            let code = endbasic_repl::run_from_cloud(
+            let path =
+                endbasic_repl::mount_cloud_share(console.clone(), storage.clone(), username_path)?;
+            let code = endbasic_repl::run_from_storage_path(
                 &mut machine,
                 console.clone(),
                 storage.clone(),
                 program.clone(),
-                username_path,
+                &path,
                 false,
             )
             .await?;
