@@ -115,31 +115,41 @@ pub async fn try_load_autoexec(
     }
 }
 
-/// Loads the program given in `username_path` pair (which is of the form `user/path`) from the
-/// cloud and executes it on the `machine`.
-pub async fn run_from_cloud(
-    machine: &mut Machine,
+/// Resolves `username_path`, which must be of the form `user/path`, into an `AUTORUN` location.
+pub fn mount_cloud_share(
     console: Rc<RefCell<dyn Console>>,
     storage: Rc<RefCell<Storage>>,
-    program: Rc<RefCell<dyn Program>>,
     username_path: &str,
-    will_run_repl: bool,
-) -> io::Result<i32> {
+) -> io::Result<String> {
     let (fs_uri, path) = match username_path.split_once('/') {
         Some((username, path)) => (format!("cloud://{}", username), format!("AUTORUN:/{}", path)),
         None => {
-            let mut console = console.borrow_mut();
-            console.print(&format!(
-                "Invalid program to run '{}'; must be of the form 'username/path'",
-                username_path
-            ))?;
-            return Ok(1);
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "Invalid program to run '{}'; must be of the form 'username/path'",
+                    username_path
+                ),
+            ));
         }
     };
 
     console.borrow_mut().print(&format!("Mounting {} as AUTORUN...", fs_uri))?;
     storage.borrow_mut().mount("AUTORUN", &fs_uri)?;
     storage.borrow_mut().cd("AUTORUN:/")?;
+    Ok(path)
+}
+
+/// Loads the program given by `path` from storage and executes it on the `machine`.
+pub async fn run_from_storage_path(
+    machine: &mut Machine,
+    console: Rc<RefCell<dyn Console>>,
+    storage: Rc<RefCell<Storage>>,
+    program: Rc<RefCell<dyn Program>>,
+    path: &str,
+    will_run_repl: bool,
+) -> io::Result<i32> {
+    let path = storage.borrow().make_canonical_with_extension(path, "bas")?;
 
     console.borrow_mut().print(&format!("Loading {}...", path))?;
     let content = storage.borrow().get(&path).await?;
@@ -448,65 +458,90 @@ mod tests {
     }
 
     #[test]
-    fn test_run_from_cloud_no_repl() {
+    fn test_mount_cloud_share_invalid_path() {
         let tester = Tester::default();
-        let (console, storage, program) =
-            (tester.get_console(), tester.get_storage(), tester.get_program());
-        let mut continuation = tester.continue_from_here();
+        let (console, storage) = (tester.get_console(), tester.get_storage());
+
+        let e = mount_cloud_share(console, storage, "foo").unwrap_err();
+        assert_eq!(io::ErrorKind::InvalidInput, e.kind());
+        assert_eq!(
+            "Invalid program to run 'foo'; must be of the form 'username/path'",
+            format!("{}", e)
+        );
+    }
+
+    #[test]
+    fn test_mount_cloud_share_ok() {
+        let tester = Tester::default();
+        let (console, storage) = (tester.get_console(), tester.get_storage());
+        let continuation = tester.continue_from_here();
 
         storage.borrow_mut().register_scheme(
             "cloud",
             Box::from(MockDriveFactory { exp_username: "foo", exp_file: "bar.bas" }),
         );
 
-        block_on(run_from_cloud(
-            continuation.get_machine(),
-            console,
-            storage,
-            program,
-            "foo/bar.bas",
-            false,
-        ))
-        .unwrap();
-        continuation
-            .run("")
-            .expect_prints([
-                "Mounting cloud://foo as AUTORUN...",
-                "Loading AUTORUN:/bar.bas...",
-                "Starting...",
-                "",
-            ])
-            .expect_clear()
-            .expect_prints(["Success", "", "**** Program exited due to EOF ****"])
-            .expect_program(Some("AUTORUN:/bar.bas"), MockDriveFactory::SCRIPT)
-            .check();
+        let path = mount_cloud_share(console, storage, "foo/bar.bas").unwrap();
+        assert_eq!("AUTORUN:/bar.bas", path);
+        assert_eq!(Some(&"cloud://foo"), tester.get_storage().borrow().mounted().get("AUTORUN"));
+        assert_eq!("AUTORUN:/", tester.get_storage().borrow().cwd());
+        continuation.run("").expect_prints(["Mounting cloud://foo as AUTORUN..."]).check();
     }
 
     #[test]
-    fn test_run_from_cloud_repl() {
+    fn test_run_from_storage_path_no_repl() {
         let tester = Tester::default();
         let (console, storage, program) =
             (tester.get_console(), tester.get_storage(), tester.get_program());
         let mut continuation = tester.continue_from_here();
 
-        storage.borrow_mut().register_scheme(
-            "cloud",
-            Box::from(MockDriveFactory { exp_username: "abcd", exp_file: "the-path.bas" }),
-        );
+        storage.borrow_mut().mount("SOME", "memory://").unwrap();
+        block_on(storage.borrow_mut().put("SOME:bar.bas", MockDriveFactory::SCRIPT.as_bytes()))
+            .unwrap();
 
-        block_on(run_from_cloud(
+        block_on(run_from_storage_path(
             continuation.get_machine(),
             console,
             storage,
             program,
-            "abcd/the-path.bas",
+            "some:bar.bas",
+            false,
+        ))
+        .unwrap();
+        continuation
+            .run("")
+            .expect_prints(["Loading SOME:bar.bas...", "Starting...", ""])
+            .expect_clear()
+            .expect_prints(["Success", "", "**** Program exited due to EOF ****"])
+            .expect_file("SOME:/bar.bas", MockDriveFactory::SCRIPT)
+            .expect_program(Some("SOME:bar.bas"), MockDriveFactory::SCRIPT)
+            .check();
+    }
+
+    #[test]
+    fn test_run_from_storage_path_with_default_extension_and_repl() {
+        let tester = Tester::default().write_file("demo.bas", MockDriveFactory::SCRIPT);
+        let (console, storage, program) =
+            (tester.get_console(), tester.get_storage(), tester.get_program());
+        let mut continuation = tester.continue_from_here();
+
+        block_on(run_from_storage_path(
+            continuation.get_machine(),
+            console,
+            storage,
+            program,
+            "memory:demo",
             true,
         ))
         .unwrap();
         let mut checker = continuation.run("");
         let output = flatten_output(checker.take_captured_out());
-        checker.expect_program(Some("AUTORUN:/the-path.bas"), MockDriveFactory::SCRIPT).check();
+        checker
+            .expect_file("MEMORY:/demo.bas", MockDriveFactory::SCRIPT)
+            .expect_program(Some("MEMORY:demo.bas"), MockDriveFactory::SCRIPT)
+            .check();
 
+        assert!(output.contains("Loading MEMORY:demo.bas..."));
         assert!(output.contains("You are now being dropped into"));
     }
 

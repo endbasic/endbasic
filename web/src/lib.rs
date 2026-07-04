@@ -305,20 +305,37 @@ impl WebTerminal {
             }
         }
         if let Some(auto_run) = auto_run {
-            match endbasic_repl::run_from_cloud(
-                &mut machine,
-                console.clone(),
-                storage.clone(),
-                program.clone(),
-                &auto_run,
-                true,
-            )
-            .await
-            {
-                Ok(_code) => (),
-                Err(e) => console
-                    .borrow_mut()
-                    .print(&format!("Failed to execute requested program: {}", e))?,
+            let is_abs_path = auto_run.contains(':');
+            let path = if is_abs_path {
+                auto_run.into_owned()
+            } else {
+                match endbasic_repl::mount_cloud_share(console.clone(), storage.clone(), &auto_run)
+                {
+                    Ok(path) => path,
+                    Err(e) => {
+                        console
+                            .borrow_mut()
+                            .print(&format!("Failed to execute requested program: {}", e))?;
+                        String::new()
+                    }
+                }
+            };
+            if !path.is_empty() {
+                match endbasic_repl::run_from_storage_path(
+                    &mut machine,
+                    console.clone(),
+                    storage.clone(),
+                    program.clone(),
+                    &path,
+                    true,
+                )
+                .await
+                {
+                    Ok(_code) => (),
+                    Err(e) => console
+                        .borrow_mut()
+                        .print(&format!("Failed to execute requested program: {}", e))?,
+                }
             }
         }
 
