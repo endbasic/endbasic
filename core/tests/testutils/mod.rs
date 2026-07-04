@@ -30,20 +30,10 @@ use tempfile::NamedTempFile;
 
 mod callables;
 
-/// Computes the path to the directory where this test's binary lives.
-fn self_dir() -> PathBuf {
-    let self_exe = env::current_exe().expect("Cannot get self's executable path");
-    let dir = self_exe.parent().expect("Cannot get self's directory");
-    assert!(dir.ends_with("target/debug/deps") || dir.ends_with("target/release/deps"));
-    dir.to_owned()
-}
-
 /// Computes the path to the source file `name`.
 pub(super) fn src_path(name: &str) -> PathBuf {
-    let test_dir = self_dir();
-    let debug_or_release_dir = test_dir.parent().expect("Failed to get parent directory");
-    let target_dir = debug_or_release_dir.parent().expect("Failed to get parent directory");
-    let dir = target_dir.parent().expect("Failed to get parent directory");
+    let dir =
+        Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("Failed to get parent directory");
 
     // Sanity-check that we landed in the right location.
     assert!(dir.join("Cargo.lock").exists());
