@@ -2084,7 +2084,7 @@ mod tests {
             "7:6: Type annotation not allowed in print$",
             format!(
                 "{}",
-                &vref_to_unannotated_string(
+                vref_to_unannotated_string(
                     VarRef::new("print", Some(ExprType::Text)),
                     LineCol { line: 7, col: 6 }
                 )
