@@ -593,9 +593,9 @@ dependencies = [
 
 [[package]]
 name = "getoptsargs"
-version = "0.2.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0947f8936691c13a2e8d2eca537e2d3edf0106d544f8082b96b38bd7cf7185b6"
+checksum = "9364b7bcdafc83c16b8b130246a1a8535e1431fb7f642a20b5b76722511630d6"
 dependencies = [
  "anyhow",
  "getopts",

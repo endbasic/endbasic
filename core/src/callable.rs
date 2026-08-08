@@ -44,7 +44,7 @@ pub enum CallError {
 
     /// I/O error.
     #[error("{0}")]
-    IoError(#[from] io::Error),
+    IoError(io::Error),
 
     /// Callable precondition failure.
     #[error("{0}")]
@@ -53,6 +53,12 @@ pub enum CallError {
     /// Indicates a syntax error only detectable at runtime.
     #[error("{0}: {1}")]
     Syntax(LineCol, String),
+}
+
+impl From<io::Error> for CallError {
+    fn from(value: io::Error) -> Self {
+        Self::IoError(value)
+    }
 }
 
 impl From<HeapOverflowError> for CallError {
@@ -122,6 +128,18 @@ impl UpcallError {
             UpcallError::Precondition(pos, message) => (*pos, message.clone()),
             UpcallError::Syntax(pos, message) => (*pos, message.clone()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_io_error_has_no_source() {
+        let error = CallError::from(io::Error::other("Some I/O error"));
+
+        assert!(std::error::Error::source(&error).is_none());
     }
 }
 

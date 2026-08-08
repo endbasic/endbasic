@@ -50,15 +50,15 @@ pub mod testutils;
 pub enum Error {
     /// Fails due to a callable-specific execution error.
     #[error("{0}")]
-    CallError(#[from] CallError),
+    CallError(CallError),
 
     /// Fails due to a program compilation error.
     #[error("{0}")]
-    CompilerError(#[from] CompilerError),
+    CompilerError(CompilerError),
 
     /// Fails due to an I/O error in the underlying runtime.
     #[error("{0}")]
-    IoError(#[from] io::Error),
+    IoError(io::Error),
 
     /// Fails due to a runtime error at a specific source location.
     #[error("{0}: {1}")]
@@ -67,6 +67,24 @@ pub enum Error {
     /// Aborts execution due to an external break signal.
     #[error("Break")]
     Break,
+}
+
+impl From<CallError> for Error {
+    fn from(value: CallError) -> Self {
+        Self::CallError(value)
+    }
+}
+
+impl From<CompilerError> for Error {
+    fn from(value: CompilerError) -> Self {
+        Self::CompilerError(value)
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
+        Self::IoError(value)
+    }
 }
 
 /// Result type for callable execution.
@@ -498,6 +516,21 @@ impl InteractiveMachineBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_error_wrappers_have_no_sources() {
+        let call_error = Error::from(CallError::Eval("Call error".to_owned()));
+        assert!(std::error::Error::source(&call_error).is_none());
+
+        let compiler_error = Error::from(CompilerError::Parse(
+            LineCol { line: 1, col: 2 },
+            "Compiler error".to_owned(),
+        ));
+        assert!(std::error::Error::source(&compiler_error).is_none());
+
+        let io_error = Error::from(io::Error::other("I/O error"));
+        assert!(std::error::Error::source(&io_error).is_none());
+    }
 
     #[test]
     fn test_should_stop_with_closed_channel() {
