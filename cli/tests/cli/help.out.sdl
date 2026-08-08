@@ -1,8 +1,6 @@
 Usage: endbasic [options] [program-file]
 
 Options:
-    -h, --help          show command-line usage information and exit
-        --version       show version information and exit
         --console CONSOLE-SPEC
                         type and properties of the console to use
         --gpio-pins GPIO-PINS-SPEC
@@ -12,6 +10,8 @@ Options:
                         location of the drive to mount as LOCAL
         --service-url URL
                         base URL of the cloud service
+    -h, --help          show command-line usage information and exit
+        --version       show version information and exit
 
 Arguments:
     [program-file]      script to execute without entering interactive mode
