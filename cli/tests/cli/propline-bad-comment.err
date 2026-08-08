@@ -1,1 +1,1 @@
-endbasic: Invalid EndBASIC propline: ' endbasic cli: nope
+endbasic: Cannot extract properties from program file /PATH/TO/SRCDIR/tests/cli/propline-bad-comment.bas: Invalid EndBASIC propline: ' endbasic cli: nope

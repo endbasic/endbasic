@@ -16,6 +16,7 @@
 
 //! Command-line interface for the EndBASIC language.
 
+use anyhow::Context;
 use endbasic::*;
 use getoptsargs::prelude::*;
 use std::io;
@@ -78,7 +79,8 @@ fn app_main(matches: Matches) -> Result<i32> {
 
     let app_mode = AppMode::from_matches(matches)?;
     if let AppMode::RunScript(path) = &app_mode {
-        let propline = extract_propline(path)?;
+        let propline = extract_propline(path)
+            .with_context(|| format!("Cannot extract properties from program file {}", path))?;
         if console_spec.is_none() {
             console_spec = propline.console_spec;
         }
