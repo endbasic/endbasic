@@ -29,6 +29,9 @@ const DATE_RE: &str = "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-2][0-9]:[0-5][0-9]";
 /// Matches a `file://` URI.
 const FILE_URI_RE: &str = "file://[^ \n\"]+";
 
+/// Placeholder for the source directory in test output.
+const SOURCE_DIR: &str = "/PATH/TO/SRCDIR";
+
 /// Matches a version number.
 const VERSION_RE: &str = "[0-9]+\\.[0-9]+\\.[0-9]+";
 
@@ -112,6 +115,8 @@ fn read_golden(path: &Path) -> String {
 
 /// Replaces the parts of the output that can change due to the environment with placeholders.
 fn apply_mocks(input: String) -> String {
+    let input = input.replace(env!("CARGO_MANIFEST_DIR"), SOURCE_DIR);
+
     let version_re = regex::Regex::new(VERSION_RE).unwrap();
     let input = version_re.replace_all(&input, "X.Y.Z").into_owned();
 
@@ -260,6 +265,24 @@ fn test_cli_propline_errors() {
         Behavior::Null,
         Behavior::Null,
         Behavior::File(src_path("cli/tests/cli/propline-bad-comment.err")),
+    );
+}
+
+#[test]
+fn test_cli_missing_program() {
+    let stderr = if cfg!(target_os = "windows") {
+        "endbasic: Cannot extract properties from program file missing.bas: The system cannot find the file specified. (os error 2)\n"
+    } else {
+        "endbasic: Cannot extract properties from program file missing.bas: No such file or directory (os error 2)\n"
+    };
+
+    check(
+        bin_path("endbasic"),
+        &["missing.bas"],
+        1,
+        Behavior::Null,
+        Behavior::Null,
+        Behavior::Literal(stderr.to_owned()),
     );
 }
 
