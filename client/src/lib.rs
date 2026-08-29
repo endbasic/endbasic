@@ -71,13 +71,6 @@ impl AccessToken {
     }
 }
 
-/// Representation of the details of an error response.
-#[derive(Deserialize)]
-#[cfg_attr(test, derive(Debug, Serialize))]
-pub struct ErrorResponse {
-    pub(crate) message: String,
-}
-
 /// Representation of a login response.
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(Debug, Serialize))]

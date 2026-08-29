@@ -14,7 +14,8 @@ for the time being.**
 
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET**
 
-*   No changes recorded.
+*   Updated the cloud service client to deal with a small protocol change that
+    reports errors as simpler text responses (no JSON).
 
 ## Changes in version 0.14.0
 
