@@ -15,13 +15,14 @@
 
 //! Integration tests that use golden input and output files.
 
+use assert_cmd::Command;
+use predicates::prelude::{Predicate, predicate};
 use std::env;
 use std::fs::{self, File};
 use std::io::Read;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process;
 
 /// Matches a formatted date.
 const DATE_RE: &str = "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-2][0-9]:[0-5][0-9]";
@@ -38,20 +39,15 @@ const VERSION_RE: &str = "[0-9]+\\.[0-9]+\\.[0-9]+";
 /// Matches a year range.
 const YEAR_RANGE_RE: &str = "[0-9]{4}-[0-9]{4}";
 
-/// Computes the path to the cargo profile directory for this test.
-fn profile_dir() -> PathBuf {
-    deps_dir().parent().expect("Failed to get parent directory").to_owned()
+/// Configures a command with a deterministic terminal environment.
+fn configure_cmd(mut cmd: Command) -> Command {
+    cmd.env("LINES", "24").env("COLUMNS", "80").env_remove("NO_COLOR");
+    cmd
 }
 
-/// Computes the path to the directory where this test's binary lives.
-fn deps_dir() -> PathBuf {
-    let self_exe = env::current_exe().expect("Cannot get self's executable path");
-    self_exe.parent().expect("Cannot get self's directory").to_owned()
-}
-
-/// Computes the path to the built binary `name`.
-fn bin_path<P: AsRef<Path>>(name: P) -> PathBuf {
-    profile_dir().join(name).with_extension(env::consts::EXE_EXTENSION)
+/// Creates a command to run EndBASIC with a deterministic terminal environment.
+fn endbasic_cmd() -> Command {
+    configure_cmd(Command::cargo_bin("endbasic").unwrap())
 }
 
 /// Computes the path to the source file `name`.
@@ -70,24 +66,10 @@ fn src_str(p: &str) -> String {
     src_path(p).to_str().expect("Need paths to be valid strings").to_owned()
 }
 
-/// Describes the behavior for one of the three streams (stdin, stdout, stderr) connected to a
-/// program.
-enum Behavior {
-    /// Ensure the stream is silent.
-    Null,
-
-    /// If stdin, feed the given path as the program's input.  If stdout/stderr, expect the contents
-    /// of the stream to match this file.
-    File(PathBuf),
-
-    /// If stdin, this is not supported.  If stdout/stderr, expect the contents of the stream to
-    /// match this literal string.
-    Literal(String),
-}
-
 /// Reads the contents of a golden data file.
-fn read_golden(path: &Path) -> String {
-    let mut f = File::open(path).expect("Failed to open golden data file");
+fn read_golden(name: &str) -> String {
+    let path = src_path(name);
+    let mut f = File::open(&path).expect("Failed to open golden data file");
     let mut golden = vec![];
     f.read_to_end(&mut golden).expect("Failed to read golden data file");
     let raw = String::from_utf8(golden).expect("Golden data file is not valid UTF-8");
@@ -130,102 +112,39 @@ fn apply_mocks(input: String) -> String {
     file_uri_re.replace_all(&input, "file:///PATH/TO/TMPDIR").into()
 }
 
-/// Runs `bin` with arguments `args` and checks its behavior against expectations.
-///
-/// `exp_code` is the expected error code from the program.  `stdin_behavior` indicates what to feed
-/// to the program's stdin.  `stdout_behavior` and `stderr_behavior` indicate what to expect from
-/// the program's textual output.
-fn check<P: AsRef<Path>>(
-    bin: P,
-    args: &[&str],
-    exp_code: i32,
-    stdin_behavior: Behavior,
-    stdout_behavior: Behavior,
-    stderr_behavior: Behavior,
-) {
+/// Compares a sanitized output stream against a golden file.
+fn golden(name: &str) -> impl Predicate<[u8]> {
     let regen = matches!(env::var("REGEN").as_deref(), Ok("1") | Ok("true") | Ok("yes"));
-
-    let golden_stdin = match stdin_behavior {
-        Behavior::Null => process::Stdio::null(),
-        Behavior::File(path) => File::open(path).unwrap().into(),
-        Behavior::Literal(_) => panic!("Literals not supported for stdin"),
-    };
-
-    let exp_stdout = match &stdout_behavior {
-        Behavior::Null => "".to_owned(),
-        Behavior::File(path) => read_golden(path),
-        Behavior::Literal(text) => text.clone(),
-    };
-
-    let exp_stderr = match &stderr_behavior {
-        Behavior::Null => "".to_owned(),
-        Behavior::File(path) => read_golden(path),
-        Behavior::Literal(text) => text.clone(),
-    };
-
-    let result = process::Command::new(bin.as_ref())
-        .args(args)
-        .stdin(golden_stdin)
-        .env("LINES", "24")
-        .env("COLUMNS", "80")
-        .env_remove("NO_COLOR")
-        .output()
-        .expect("Failed to execute subprocess");
-    let code = result.status.code().expect("Subprocess didn't exit cleanly");
-    let stdout =
-        apply_mocks(String::from_utf8(result.stdout).expect("Stdout not is not valid UTF-8"));
-    let stderr =
-        apply_mocks(String::from_utf8(result.stderr).expect("Stderr not is not valid UTF-8"));
-
-    let stdout_mismatch = exp_stdout != stdout;
-    let stderr_mismatch = exp_stderr != stderr;
-    let mut regenerated = false;
-
-    if regen
-        && stdout_mismatch
-        && let Behavior::File(path) = &stdout_behavior
-    {
-        fs::write(path, &stdout).expect("Failed to rewrite golden stdout file");
-        regenerated = true;
-    }
-
-    if regen
-        && stderr_mismatch
-        && let Behavior::File(path) = &stderr_behavior
-    {
-        fs::write(path, &stderr).expect("Failed to rewrite golden stderr file");
-        regenerated = true;
-    }
-
-    if regenerated {
-        panic!("Golden data regenerated; flip REGEN back to false");
-    }
-
-    if exp_code != code || stdout_mismatch || stderr_mismatch {
-        eprintln!("Exit code: {}", code);
-        eprintln!("stdout:\n{}", stdout);
-        eprintln!("stderr:\n{}", stderr);
-        assert_eq!(exp_code, code);
-        assert_eq!(exp_stdout, stdout);
-        assert_eq!(exp_stderr, stderr);
-    }
+    let path = src_path(name);
+    let expected = read_golden(name);
+    predicate::function(move |actual: &[u8]| {
+        let actual =
+            apply_mocks(String::from_utf8(actual.to_owned()).expect("Output is not valid UTF-8"));
+        if expected == actual {
+            return true;
+        }
+        if regen {
+            fs::write(&path, actual).expect("Failed to rewrite golden output file");
+            panic!("Golden data regenerated; flip REGEN back to false");
+        }
+        false
+    })
+    .fn_name("matches golden output")
 }
 
 #[test]
 fn test_cli_autoexec_is_ignored() {
     let dir = tempfile::tempdir().unwrap();
     fs::copy(src_path("cli/tests/repl/autoexec.bas"), dir.path().join("AUTOEXEC.BAS")).unwrap();
-    check(
-        bin_path("endbasic"),
-        &[
+    endbasic_cmd()
+        .args([
             &format!("--local-drive=file://{}", dir.path().to_str().unwrap()),
             &src_str("cli/tests/cli/interactive.bas"),
-        ],
-        1,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/cli/interactive.err")),
-    );
+        ])
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(golden("cli/tests/cli/interactive.err"));
 }
 
 #[cfg(unix)]
@@ -234,8 +153,8 @@ fn test_lang_shebang_exec() {
     let dir = tempfile::tempdir().unwrap();
     let script = dir.path().join("shebang-exec");
 
-    let mut template = read_golden(&src_path("cli/tests/cli/shebang-exec.bas"));
-    let interpreter = bin_path("endbasic");
+    let mut template = read_golden("cli/tests/cli/shebang-exec.bas");
+    let interpreter = assert_cmd::cargo::cargo_bin("endbasic");
     template = template.replace(
         "__ENDBASIC__",
         interpreter.to_str().expect("Interpreter path must be valid UTF-8"),
@@ -246,26 +165,21 @@ fn test_lang_shebang_exec() {
     perms.set_mode(0o755);
     fs::set_permissions(&script, perms).unwrap();
 
-    check(
-        script,
-        &[],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/cli/shebang-exec.out")),
-        Behavior::Null,
-    );
+    configure_cmd(Command::new(script))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/cli/shebang-exec.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_cli_propline_errors() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("cli/tests/cli/propline-bad-comment.bas")],
-        1,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/cli/propline-bad-comment.err")),
-    );
+    endbasic_cmd()
+        .args([&src_str("cli/tests/cli/propline-bad-comment.bas")])
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(golden("cli/tests/cli/propline-bad-comment.err"));
 }
 
 #[test]
@@ -276,38 +190,27 @@ fn test_cli_missing_program() {
         "endbasic: Cannot extract properties from program file missing.bas: No such file or directory (os error 2)\n"
     };
 
-    check(
-        bin_path("endbasic"),
-        &["missing.bas"],
-        1,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::Literal(stderr.to_owned()),
-    );
+    endbasic_cmd().args(["missing.bas"]).assert().code(1).stdout("").stderr(stderr);
 }
 
 #[test]
 fn test_cli_propline_sets_default_console() {
-    check(
-        bin_path("endbasic"),
-        &[&src_str("cli/tests/cli/propline-bad-console.bas")],
-        1,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/cli/propline-bad-console.err")),
-    );
+    endbasic_cmd()
+        .args([&src_str("cli/tests/cli/propline-bad-console.bas")])
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(golden("cli/tests/cli/propline-bad-console.err"));
 }
 
 #[test]
 fn test_cli_flag_overrides_propline_console() {
-    check(
-        bin_path("endbasic"),
-        &["--console=text", &src_str("cli/tests/cli/propline-override-console.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/cli/propline-override-console.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--console=text", &src_str("cli/tests/cli/propline-override-console.bas")])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/cli/propline-override-console.out"))
+        .stderr("");
 }
 
 #[test]
@@ -320,14 +223,7 @@ fn test_cli_help() {
         if cfg!(feature = "sdl") {
             src.push_str(".sdl");
         }
-        check(
-            bin_path("endbasic"),
-            args,
-            0,
-            Behavior::Null,
-            Behavior::File(src_path(&src)),
-            Behavior::Null,
-        );
+        endbasic_cmd().args(args).assert().code(0).stdout(golden(&src)).stderr("");
     }
     check_with_args(&["-h"]);
     check_with_args(&["--help"]);
@@ -337,32 +233,30 @@ fn test_cli_help() {
 
 #[test]
 fn test_cli_interactive() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/cli/interactive.bas")],
-        1,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/cli/interactive.err")),
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/cli/interactive.bas")])
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(golden("cli/tests/cli/interactive.err"));
 
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", "-i", &src_str("cli/tests/cli/interactive.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/cli/interactive.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", "-i", &src_str("cli/tests/cli/interactive.bas")])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/cli/interactive.out"))
+        .stderr("");
 
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/cli/interactive.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/cli/interactive.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args([
+            "--local-drive=memory://",
+            "--interactive",
+            &src_str("cli/tests/cli/interactive.bas"),
+        ])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/cli/interactive.out"))
+        .stderr("");
 }
 
 #[test]
@@ -370,14 +264,12 @@ fn test_cli_interactive() {
 fn test_cli_run_from_cloud() {
     let service_url = env::var("SERVICE_URL").expect("Expected env config not found");
 
-    check(
-        bin_path("endbasic"),
-        &["--service-url", &service_url, "--interactive", "cloud://endbasic/welcome.bas"],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/cli/run-from-cloud.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--service-url", &service_url, "--interactive", "cloud://endbasic/welcome.bas"])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/cli/run-from-cloud.out"))
+        .stderr("");
 }
 
 // TODO(jmmv): This test fails almost always on Linux CI builds with `Text file busy` when
@@ -386,74 +278,45 @@ fn test_cli_run_from_cloud() {
 #[cfg(not(target_os = "linux"))]
 #[test]
 fn test_cli_program_name_uses_arg0() {
-    struct DeleteOnDrop<'a> {
-        path: &'a Path,
-    }
-
-    impl<'a> Drop for DeleteOnDrop<'a> {
-        fn drop(&mut self) {
-            let _best_effort_removal = fs::remove_file(self.path);
-        }
-    }
-
-    let original = bin_path("endbasic");
-    let custom = deps_dir().join("custom-name").with_extension(env::consts::EXE_EXTENSION);
-    let _delete_custom = DeleteOnDrop { path: &custom };
+    let dir = tempfile::tempdir().unwrap();
+    let original = assert_cmd::cargo::cargo_bin("endbasic");
+    let custom = dir.path().join("custom-name").with_extension(env::consts::EXE_EXTENSION);
     fs::copy(&original, &custom).unwrap();
-    check(
-        &custom,
-        &["one", "two", "three"],
-        2,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::Literal(
+    configure_cmd(Command::new(&custom))
+        .args(["one", "two", "three"])
+        .assert()
+        .code(2)
+        .stdout("")
+        .stderr(
             "Usage error: Too many arguments\nType `custom-name --help` for more information\n"
                 .to_owned(),
-        ),
-    );
+        );
 }
 
 #[test]
 fn test_cli_too_many_args() {
-    check(
-        bin_path("endbasic"),
-        &["foo", "bar"],
-        2,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::Literal(
-            "Usage error: Too many arguments\nType `endbasic --help` for more information\n"
-                .to_owned(),
-        ),
+    endbasic_cmd().args(["foo", "bar"]).assert().code(2).stdout("").stderr(
+        "Usage error: Too many arguments\nType `endbasic --help` for more information\n".to_owned(),
     );
 }
 
 #[test]
 fn test_cli_unknown_option() {
-    check(
-        bin_path("endbasic"),
-        &["-Z", "some-file"],
-        2,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::Literal(
-            "Usage error: Unrecognized option: 'Z'\nType `endbasic --help` for more information\n"
-                .to_owned(),
-        ),
+    endbasic_cmd().args(["-Z", "some-file"]).assert().code(2).stdout("").stderr(
+        "Usage error: Unrecognized option: 'Z'\nType `endbasic --help` for more information\n"
+            .to_owned(),
     );
 }
 
 #[test]
 fn test_cli_version() {
     fn check_with_args(args: &[&str]) {
-        check(
-            bin_path("endbasic"),
-            args,
-            0,
-            Behavior::Null,
-            Behavior::File(src_path("cli/tests/cli/version.out")),
-            Behavior::Null,
-        );
+        endbasic_cmd()
+            .args(args)
+            .assert()
+            .code(0)
+            .stdout(golden("cli/tests/cli/version.out"))
+            .stderr("");
     }
     check_with_args(&["--version"]);
     check_with_args(&["the", "--version", "flag wins over arguments"]);
@@ -461,430 +324,381 @@ fn test_cli_version() {
 
 #[test]
 fn test_example_alarm() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive"],
-        0,
-        Behavior::File(src_path("cli/tests/examples/alarm.in")),
-        Behavior::File(src_path("cli/tests/examples/alarm.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", "--interactive"])
+        .write_stdin(read_golden("cli/tests/examples/alarm.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/examples/alarm.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_example_bounce() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive"],
-        0,
-        Behavior::File(src_path("cli/tests/examples/bounce.in")),
-        Behavior::File(src_path("cli/tests/examples/bounce.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", "--interactive"])
+        .write_stdin(read_golden("cli/tests/examples/bounce.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/examples/bounce.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_example_fibonacci() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive"],
-        0,
-        Behavior::File(src_path("cli/tests/examples/fibonacci.in")),
-        Behavior::File(src_path("cli/tests/examples/fibonacci.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", "--interactive"])
+        .write_stdin(read_golden("cli/tests/examples/fibonacci.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/examples/fibonacci.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_example_gpio() {
-    check(
-        bin_path("endbasic"),
-        &["--gpio-pins=mock", "--local-drive=memory://", "--interactive"],
-        0,
-        Behavior::File(src_path("cli/tests/examples/gpio.in")),
-        Behavior::File(src_path("cli/tests/examples/gpio.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--gpio-pins=mock", "--local-drive=memory://", "--interactive"])
+        .write_stdin(read_golden("cli/tests/examples/gpio.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/examples/gpio.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_example_guess() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive"],
-        0,
-        Behavior::File(src_path("cli/tests/examples/guess.in")),
-        Behavior::File(src_path("cli/tests/examples/guess.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", "--interactive"])
+        .write_stdin(read_golden("cli/tests/examples/guess.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/examples/guess.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_example_hello() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive"],
-        0,
-        Behavior::File(src_path("cli/tests/examples/hello.in")),
-        Behavior::File(src_path("cli/tests/examples/hello.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", "--interactive"])
+        .write_stdin(read_golden("cli/tests/examples/hello.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/examples/hello.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_example_palette() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive"],
-        0,
-        Behavior::File(src_path("cli/tests/examples/palette.in")),
-        Behavior::File(src_path("cli/tests/examples/palette.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", "--interactive"])
+        .write_stdin(read_golden("cli/tests/examples/palette.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/examples/palette.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_example_tour() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive"],
-        0,
-        Behavior::File(src_path("cli/tests/examples/tour.in")),
-        Behavior::File(src_path("cli/tests/examples/tour.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", "--interactive"])
+        .write_stdin(read_golden("cli/tests/examples/tour.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/examples/tour.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_bitwise() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/bitwise.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/bitwise.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/bitwise.bas")])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/bitwise.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_control_flow() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/control-flow.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/control-flow.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/control-flow.bas")])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/control-flow.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_control_flow_errors() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/lang/control-flow-errors.in")),
-        Behavior::File(src_path("cli/tests/lang/control-flow-errors.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/lang/control-flow-errors.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/control-flow-errors.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_exec_error() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/exec-error.bas")],
-        1,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/exec-error.out")),
-        Behavior::File(src_path("cli/tests/lang/exec-error.err")),
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/exec-error.bas")])
+        .assert()
+        .code(1)
+        .stdout(golden("cli/tests/lang/exec-error.out"))
+        .stderr(golden("cli/tests/lang/exec-error.err"));
 }
 
 #[test]
 fn test_lang_exprs() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/exprs.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/exprs.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/exprs.bas")])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/exprs.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_exprs_errors() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/lang/exprs-errors.in")),
-        Behavior::File(src_path("cli/tests/lang/exprs-errors.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/lang/exprs-errors.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/exprs-errors.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_functions() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/functions.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/functions.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/functions.bas")])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/functions.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_hello() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/hello.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/hello.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/hello.bas")])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/hello.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_lexer_error() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/lexer-error.bas")],
-        1,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/lexer-error.err")),
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/lexer-error.bas")])
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(golden("cli/tests/lang/lexer-error.err"));
 }
 
 #[test]
 fn test_lang_matrix() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/matrix.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/matrix.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/matrix.bas")])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/matrix.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_operators() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/lang/operators.in")),
-        Behavior::File(src_path("cli/tests/lang/operators.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/lang/operators.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/operators.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_parser_error() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/parser-error.bas")],
-        1,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/lang/parser-error.err")),
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/parser-error.bas")])
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(golden("cli/tests/lang/parser-error.err"));
 }
 
 #[test]
 fn test_lang_types() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/lang/types.in")),
-        Behavior::File(src_path("cli/tests/lang/types.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/lang/types.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/types.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_utf8() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/utf8.bas")],
-        0,
-        Behavior::File(src_path("cli/tests/lang/utf8.in")),
-        Behavior::File(src_path("cli/tests/lang/utf8.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/utf8.bas")])
+        .write_stdin(read_golden("cli/tests/lang/utf8.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/utf8.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_lang_yes_no() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/lang/yes-no.bas")],
-        0,
-        Behavior::File(src_path("cli/tests/lang/yes-no.in")),
-        Behavior::File(src_path("cli/tests/lang/yes-no.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/lang/yes-no.bas")])
+        .write_stdin(read_golden("cli/tests/lang/yes-no.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/lang/yes-no.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_autoexec() {
     let dir = tempfile::tempdir().unwrap();
     fs::copy(src_path("cli/tests/repl/autoexec.bas"), dir.path().join("AUTOEXEC.BAS")).unwrap();
-    check(
-        bin_path("endbasic"),
-        &[&format!("--local-drive=file://{}", dir.path().to_str().unwrap())],
-        0,
-        Behavior::File(src_path("cli/tests/repl/hello.bas")),
-        Behavior::File(src_path("cli/tests/repl/autoexec.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args([&format!("--local-drive=file://{}", dir.path().to_str().unwrap())])
+        .write_stdin(read_golden("cli/tests/repl/hello.bas"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/autoexec.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_colors() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/repl/colors.in")),
-        Behavior::File(src_path("cli/tests/repl/colors.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/repl/colors.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/colors.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_console() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/repl/console.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/repl/console.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/repl/console.bas")])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/console.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_dir() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/repl/dir.in")),
-        Behavior::File(src_path("cli/tests/repl/dir.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/repl/dir.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/dir.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_editor() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/repl/editor.in")),
-        Behavior::File(src_path("cli/tests/repl/editor.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/repl/editor.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/editor.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_exit_nonzero() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/repl/exit-nonzero.bas")],
-        78,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/repl/exit-nonzero.bas")])
+        .assert()
+        .code(78)
+        .stdout("")
+        .stderr("");
 
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        78,
-        Behavior::File(src_path("cli/tests/repl/exit-nonzero.bas")),
-        Behavior::File(src_path("cli/tests/repl/exit.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/repl/exit-nonzero.bas"))
+        .assert()
+        .code(78)
+        .stdout(golden("cli/tests/repl/exit.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_exit_saved() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/repl/exit-saved.in")),
-        Behavior::File(src_path("cli/tests/repl/exit-saved.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/repl/exit-saved.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/exit-saved.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_exit_unsaved() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/repl/exit-unsaved.in")),
-        Behavior::File(src_path("cli/tests/repl/exit-unsaved.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/repl/exit-unsaved.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/exit-unsaved.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_exit_zero() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", &src_str("cli/tests/repl/exit-zero.bas")],
-        0,
-        Behavior::Null,
-        Behavior::Null,
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", &src_str("cli/tests/repl/exit-zero.bas")])
+        .assert()
+        .code(0)
+        .stdout("")
+        .stderr("");
 
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/repl/exit-zero.bas")),
-        Behavior::File(src_path("cli/tests/repl/exit.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/repl/exit-zero.bas"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/exit.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_help() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://", "--interactive", &src_str("cli/tests/repl/help.bas")],
-        0,
-        Behavior::Null,
-        Behavior::File(src_path("cli/tests/repl/help.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://", "--interactive", &src_str("cli/tests/repl/help.bas")])
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/help.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_interactive() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/repl/interactive.in")),
-        Behavior::File(src_path("cli/tests/repl/interactive.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/repl/interactive.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/interactive.out"))
+        .stderr("");
 }
 
 #[test]
@@ -892,40 +706,37 @@ fn test_repl_load_save() {
     let dir = tempfile::tempdir().unwrap();
     fs::copy(src_path("cli/tests/repl/hello.bas"), dir.path().join("hello.bas")).unwrap();
     assert!(!dir.path().join("hello2.bas").exists());
-    check(
-        bin_path("endbasic"),
-        &[&format!("--local-drive=file://{}", dir.path().to_str().unwrap())],
-        0,
-        Behavior::File(src_path("cli/tests/repl/load-save.in")),
-        Behavior::File(src_path("cli/tests/repl/load-save.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args([&format!("--local-drive=file://{}", dir.path().to_str().unwrap())])
+        .write_stdin(read_golden("cli/tests/repl/load-save.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/load-save.out"))
+        .stderr("");
     assert!(dir.path().join("hello2.bas").exists());
 }
 
 #[test]
 fn test_repl_state_sharing() {
-    check(
-        bin_path("endbasic"),
-        &["--local-drive=memory://"],
-        0,
-        Behavior::File(src_path("cli/tests/repl/state-sharing.in")),
-        Behavior::File(src_path("cli/tests/repl/state-sharing.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args(["--local-drive=memory://"])
+        .write_stdin(read_golden("cli/tests/repl/state-sharing.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/state-sharing.out"))
+        .stderr("");
 }
 
 #[test]
 fn test_repl_storage() {
     let dir = tempfile::tempdir().unwrap();
     let dir = dir.path().join("create-me");
-    check(
-        bin_path("endbasic"),
-        &[&format!("--local-drive=file://{}", dir.to_str().unwrap())],
-        0,
-        Behavior::File(src_path("cli/tests/repl/storage.in")),
-        Behavior::File(src_path("cli/tests/repl/storage.out")),
-        Behavior::Null,
-    );
+    endbasic_cmd()
+        .args([&format!("--local-drive=file://{}", dir.to_str().unwrap())])
+        .write_stdin(read_golden("cli/tests/repl/storage.in"))
+        .assert()
+        .code(0)
+        .stdout(golden("cli/tests/repl/storage.out"))
+        .stderr("");
     assert!(dir.exists());
 }
