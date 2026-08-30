@@ -121,7 +121,8 @@ main() {
     fix_cargo_lock Cargo.lock "${version}"
     fix_package_lock web/package-lock.json "${version}"
 
-    REGEN=true cargo test -p endbasic-repl
+    REGEN=true cargo test -p endbasic-repl || true
+    cargo test -p endbasic-repl
 }
 
 main "${@}"
