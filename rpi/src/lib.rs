@@ -15,12 +15,6 @@
 
 //! Support for the Raspberry Pi specific features.
 
-// Keep these in sync with other top-level files.
-#![allow(clippy::await_holding_refcell_ref)]
-#![allow(clippy::collapsible_else_if)]
-#![warn(anonymous_parameters, bad_style, missing_docs)]
-#![warn(unused, unused_extern_crates, unused_import_braces, unused_qualifications)]
-
 mod gpio;
 pub use gpio::RppalPins;
 mod spi;
