@@ -274,18 +274,11 @@ fn parse_lang_reference(lang_md: &'static str) -> Vec<(&'static str, &'static st
     // Cope with Windows checkouts.  It's tempting to make this a build-time conditional on the OS
     // name, but we don't know how the files are checked out.  Assume CRLF delimiters if we see at
     // least one of them.
-    let line_end;
-    let section_start;
-    let body_start;
-    if lang_md.contains("\r\n") {
-        line_end = "\r\n";
-        section_start = "\r\n\r\n# ";
-        body_start = "\r\n\r\n";
+    let (line_end, section_start, body_start) = if lang_md.contains("\r\n") {
+        ("\r\n", "\r\n\r\n# ", "\r\n\r\n")
     } else {
-        line_end = "\n";
-        section_start = "\n\n# ";
-        body_start = "\n\n";
-    }
+        ("\n", "\n\n# ", "\n\n")
+    };
 
     for (start, _match) in lang_md.match_indices(section_start) {
         let section = &lang_md[start + section_start.len()..];

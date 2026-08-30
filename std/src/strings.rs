@@ -1028,7 +1028,7 @@ mod tests {
         for s in &["ye", "0", "1", " true"] {
             assert_eq!(
                 format!("Invalid boolean literal {}", s),
-                format!("{}", parse_boolean(s).unwrap_err())
+                parse_boolean(s).unwrap_err().to_string()
             );
         }
     }
@@ -1050,15 +1050,15 @@ mod tests {
 
         assert_eq!(
             "Invalid double-precision floating point literal ",
-            format!("{}", parse_double("").unwrap_err())
+            parse_double("").unwrap_err().to_string()
         );
         assert_eq!(
             "Invalid double-precision floating point literal - 3.0",
-            format!("{}", parse_double("- 3.0").unwrap_err())
+            parse_double("- 3.0").unwrap_err().to_string()
         );
         assert_eq!(
             "Invalid double-precision floating point literal 34ab3.1",
-            format!("{}", parse_double("34ab3.1").unwrap_err())
+            parse_double("34ab3.1").unwrap_err().to_string()
         );
     }
 
@@ -1068,11 +1068,11 @@ mod tests {
         assert_eq!(0, parse_integer("0").unwrap());
         assert_eq!(-21, parse_integer("-21").unwrap());
 
-        assert_eq!("Invalid integer literal ", format!("{}", parse_integer("").unwrap_err()));
-        assert_eq!("Invalid integer literal - 3", format!("{}", parse_integer("- 3").unwrap_err()));
+        assert_eq!("Invalid integer literal ", parse_integer("").unwrap_err().to_string());
+        assert_eq!("Invalid integer literal - 3", parse_integer("- 3").unwrap_err().to_string());
         assert_eq!(
             "Invalid integer literal 34ab3",
-            format!("{}", parse_integer("34ab3").unwrap_err())
+            parse_integer("34ab3").unwrap_err().to_string()
         );
     }
 
