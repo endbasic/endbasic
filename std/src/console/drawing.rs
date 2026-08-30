@@ -344,7 +344,7 @@ where
         }
 
         xs.sort_unstable();
-        for pair in xs.chunks_exact(2) {
+        for pair in xs.as_chunks::<2>().0 {
             rasops.draw_line(
                 PixelsXY::new(pair[0].clamped_into(), y.clamped_into()),
                 PixelsXY::new(pair[1].clamped_into(), y.clamped_into()),
