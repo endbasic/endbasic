@@ -19,6 +19,7 @@ async-trait = "0.1"
 thiserror = "1.0"
 
 [dev-dependencies]
+assert_cmd = "2"
 futures-lite = "2.2"
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }

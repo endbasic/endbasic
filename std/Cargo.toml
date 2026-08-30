@@ -38,6 +38,7 @@ default-features = false
 features = ["small_rng", "std", "std_rng"]
 
 [dev-dependencies]
+assert_cmd = "2"
 flate2 = "1.0"
 filetime = "0.2"
 tempfile = "3"
