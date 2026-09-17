@@ -195,7 +195,7 @@ impl Service for CloudService {
         let response = {
             let auth_data = Self::require_auth_data(auth_data.as_ref())?;
             self.client
-                .post(self.make_url(&format!("api/users/{}/logout", auth_data.username)))
+                .post(self.make_url("api/logout"))
                 .headers(self.default_headers())
                 .header("Content-Length", 0)
                 .bearer_auth(auth_data.access_token.as_str())

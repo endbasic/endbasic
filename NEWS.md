@@ -15,7 +15,8 @@ for the time being.**
 **STILL UNDER DEVELOPMENT; NOT RELEASED YET**
 
 *   Updated the cloud service client to deal with a small protocol change that
-    reports errors as simpler text responses (no JSON).
+    reports errors as simpler text responses (no JSON) and that changed where
+    the logout API path is.
 
 ## Changes in version 0.14.0
 
