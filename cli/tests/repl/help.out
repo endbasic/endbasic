@@ -61,6 +61,7 @@ Output from HELP "CLOUD":
 
     >> [38;5;14mLOGIN [39m    Logs into the user's account.
     >> [38;5;14mLOGOUT[39m    Logs the user out of their account.
+    >> [38;5;14mPASSWD[39m    Changes the password of the logged in account interactively.
     >> [38;5;14mSHARE [39m    Displays or modifies the ACLs of a file.
     >> [38;5;14mSIGNUP[39m    Creates a new user account interactively.
 
@@ -1082,6 +1083,12 @@ Output from HELP "NEW":
     The stored program is also discarded from memory, but NEW will pause to
     ask before discarding any unsaved modifications.  To reset resources
     but avoid clearing the stored program, use CLEAR instead.
+
+Output from HELP "PASSWD":
+
+[38;5;11m    PASSWD
+[39m
+    Changes the password of the logged in account interactively.
 
 Output from HELP "PRINT":
 

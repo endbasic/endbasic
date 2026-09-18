@@ -30,5 +30,6 @@ This library extends the interpreter with the following commands:
 
 *   `LOGIN`: Logs into an account and mounts the user's own cloud drive.
 *   `LOGOUT`: Logs out of an account.
+*   `PASSWD`: Changes the password of the logged in account.
 *   `SHARE`: Gets or modifies sharing permissions on a file.
 *   `SIGNUP`: Interactively creates an account.
