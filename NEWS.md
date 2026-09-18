@@ -18,6 +18,8 @@ for the time being.**
     reports errors as simpler text responses (no JSON) and that changed where
     the logout API path is.
 
+*   Added the `PASSWD` command to change an account password.
+
 ## Changes in version 0.14.0
 
 **Released on 2026-07-04.**

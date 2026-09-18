@@ -122,6 +122,9 @@ pub trait Service {
     /// Logs out from the service and clears the access token from this object.
     async fn logout(&mut self) -> io::Result<()>;
 
+    /// Changes the password of the logged in account.
+    async fn change_password(&mut self, old_password: &str, new_password: &str) -> io::Result<()>;
+
     /// Checks if there is an active session against the service.
     fn is_logged_in(&self) -> bool;
 

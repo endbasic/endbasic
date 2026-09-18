@@ -241,6 +241,69 @@ impl Callable for LogoutCommand {
     }
 }
 
+/// The `PASSWD` command.
+pub struct PasswdCommand {
+    metadata: Rc<CallableMetadata>,
+    service: Rc<RefCell<dyn Service>>,
+    console: Rc<RefCell<dyn Console>>,
+}
+
+impl PasswdCommand {
+    /// Creates a new `PASSWD` command.
+    pub fn new(service: Rc<RefCell<dyn Service>>, console: Rc<RefCell<dyn Console>>) -> Rc<Self> {
+        Rc::from(Self {
+            metadata: CallableMetadataBuilder::new("PASSWD")
+                .with_async(true)
+                .with_syntax(&[(&[], None)])
+                .with_category(CATEGORY)
+                .with_description("Changes the password of the logged in account interactively.")
+                .build(),
+            service,
+            console,
+        })
+    }
+}
+
+#[async_trait(?Send)]
+impl Callable for PasswdCommand {
+    fn metadata(&self) -> Rc<CallableMetadata> {
+        self.metadata.clone()
+    }
+
+    async fn async_exec(&self, scope: Scope<'_>) -> CallResult<()> {
+        debug_assert_eq!(0, scope.nargs());
+        if !self.service.borrow().is_logged_in() {
+            return Err(CallError::Precondition("Must LOGIN first".to_owned()));
+        }
+
+        let mut console = self.console.borrow_mut();
+        let old_password =
+            read_line_secure(&mut *console, "Current password: ").await.map_err(CallError::from)?;
+        let new_password = loop {
+            let password =
+                read_line_secure(&mut *console, "New password: ").await.map_err(CallError::from)?;
+            if let Err(e) = validate_password_complexity(&password) {
+                console.print(&format!("Invalid password: {}; try again.", e))?;
+                continue;
+            }
+            let repeated = read_line_secure(&mut *console, "Retype password: ")
+                .await
+                .map_err(CallError::from)?;
+            if repeated != password {
+                console.print("Passwords do not match; try again.")?;
+                continue;
+            }
+            break password;
+        };
+        self.service
+            .borrow_mut()
+            .change_password(&old_password, &new_password)
+            .await
+            .map_err(CallError::from)?;
+        console.print("Password changed.").map_err(CallError::from)
+    }
+}
+
 /// The `SHARE` command.
 ///
 /// Note that this command is not exclusively for use by the cloud drive as this interacts with the
@@ -602,6 +665,7 @@ pub fn add_all<S: Into<String>>(
 
     machine.add_callable(LoginCommand::new(service.clone(), console.clone(), storage.clone()));
     machine.add_callable(LogoutCommand::new(service.clone(), console.clone(), storage.clone()));
+    machine.add_callable(PasswdCommand::new(service.clone(), console.clone()));
     machine.add_callable(ShareCommand::new(
         service.clone(),
         console.clone(),
@@ -805,6 +869,45 @@ mod tests {
             .expect_access_token("$")
             .check();
         assert!(t.get_storage().borrow().mounted().contains_key("CLOUD"));
+    }
+
+    #[tokio::test]
+    async fn test_passwd_ok() {
+        let t = ClientTester::default();
+        t.get_service().borrow_mut().do_login().await;
+        t.get_service().borrow_mut().add_mock_change_password(
+            "oldPassword1",
+            "newPassword2",
+            Ok(()),
+        );
+        t.get_console().borrow_mut().set_interactive(true);
+        let mut exp_output = Vec::new();
+        for (prompt, password) in [
+            ("Current password: ", "oldPassword1"),
+            ("New password: ", "newPassword2"),
+            ("Retype password: ", "newPassword2"),
+        ] {
+            exp_output.push(CapturedOut::Write(prompt.to_owned()));
+            exp_output.push(CapturedOut::SyncNow);
+            for _ in 0..password.len() {
+                exp_output.push(CapturedOut::Write("*".to_owned()));
+            }
+            exp_output.push(CapturedOut::Print("".to_owned()));
+        }
+        exp_output.push(CapturedOut::Print("Password changed.".to_owned()));
+        t.add_input_chars("oldPassword1\n")
+            .add_input_chars("newPassword2\n")
+            .add_input_chars("newPassword2\n")
+            .run("PASSWD")
+            .expect_access_token("$")
+            .expect_output(exp_output)
+            .check();
+    }
+
+    #[test]
+    fn test_passwd_errors() {
+        client_check_stmt_compilation_err("1:1: PASSWD expected no arguments", r#"PASSWD "a""#);
+        client_check_stmt_err("1:1: Must LOGIN first", "PASSWD");
     }
 
     #[test]

@@ -16,7 +16,7 @@
 
 //! Test utilities for the cloud service.
 
-use crate::cmds::{LoginCommand, LogoutCommand, ShareCommand, SignupCommand};
+use crate::cmds::{LoginCommand, LogoutCommand, PasswdCommand, ShareCommand, SignupCommand};
 use crate::{AccessToken, GetFilesResponse, LoginResponse, Service, SignupRequest};
 use async_trait::async_trait;
 use endbasic_std::storage::{FileAcls, Storage};
@@ -35,6 +35,7 @@ pub struct MockService {
 
     mock_signup: VecDeque<(SignupRequest, io::Result<()>)>,
     mock_login: VecDeque<((String, String), io::Result<LoginResponse>)>,
+    mock_change_password: VecDeque<((String, String), io::Result<()>)>,
     mock_get_files: VecDeque<(String, io::Result<GetFilesResponse>)>,
     mock_get_file: VecDeque<((String, String), io::Result<Vec<u8>>)>,
     mock_get_file_acls: VecDeque<((String, String), io::Result<FileAcls>)>,
@@ -73,6 +74,17 @@ impl MockService {
     ) {
         let exp_request = (username.to_owned(), password.to_owned());
         self.mock_login.push_back((exp_request, result));
+    }
+
+    #[cfg(test)]
+    pub(crate) fn add_mock_change_password(
+        &mut self,
+        old_password: &str,
+        new_password: &str,
+        result: io::Result<()>,
+    ) {
+        self.mock_change_password
+            .push_back(((old_password.to_owned(), new_password.to_owned()), result));
     }
 
     /// Records the behavior of an upcoming "get files" operation for `username` and that returns
@@ -165,6 +177,7 @@ impl MockService {
     pub(crate) fn verify_all_used(&mut self) {
         assert!(self.mock_signup.is_empty(), "Mock requests not fully consumed");
         assert!(self.mock_login.is_empty(), "Mock requests not fully consumed");
+        assert!(self.mock_change_password.is_empty(), "Mock requests not fully consumed");
         assert!(self.mock_get_files.is_empty(), "Mock requests not fully consumed");
         assert!(self.mock_get_file.is_empty(), "Mock requests not fully consumed");
         assert!(self.mock_get_file_acls.is_empty(), "Mock requests not fully consumed");
@@ -198,6 +211,14 @@ impl Service for MockService {
         self.access_token.as_ref().expect("login not called yet");
         self.access_token = None;
         Ok(())
+    }
+
+    async fn change_password(&mut self, old_password: &str, new_password: &str) -> io::Result<()> {
+        self.access_token.as_ref().expect("login not called yet");
+        let mock = self.mock_change_password.pop_front().expect("No mock requests available");
+        assert_eq!(&mock.0.0, old_password);
+        assert_eq!(&mock.0.1, new_password);
+        mock.1
     }
 
     fn is_logged_in(&self) -> bool {
@@ -294,6 +315,7 @@ impl Default for ClientTester {
         let tester = tester
             .add_callable(LoginCommand::new(service.clone(), console.clone(), storage.clone()))
             .add_callable(LogoutCommand::new(service.clone(), console.clone(), storage.clone()))
+            .add_callable(PasswdCommand::new(service.clone(), console.clone()))
             .add_callable(ShareCommand::new(
                 service.clone(),
                 console.clone(),

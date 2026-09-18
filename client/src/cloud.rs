@@ -212,6 +212,35 @@ impl Service for CloudService {
         }
     }
 
+    async fn change_password(&mut self, old_password: &str, new_password: &str) -> io::Result<()> {
+        let (username, access_token) = {
+            let auth_data = self.auth_data.borrow();
+            let auth_data = Self::require_auth_data(auth_data.as_ref())?;
+            (auth_data.username.clone(), auth_data.access_token.clone())
+        };
+        let response = self
+            .client
+            .put(self.make_url("api/password"))
+            .headers(self.default_headers())
+            .header("Content-Type", "application/json")
+            .bearer_auth(access_token.as_str())
+            .body(serde_json::to_vec(&serde_json::json!({
+                "old_password": old_password,
+                "new_password": new_password,
+            }))?)
+            .send()
+            .await
+            .map_err(reqwest_error_to_io_error)?;
+        match response.status() {
+            StatusCode::OK => {
+                *self.auth_data.borrow_mut() = None;
+                let _response = self.login(&username, new_password).await?;
+                Ok(())
+            }
+            _ => Err(http_response_to_io_error(response).await),
+        }
+    }
+
     fn is_logged_in(&self) -> bool {
         self.auth_data.borrow().is_some()
     }
@@ -414,6 +443,19 @@ mod testutils {
             let result = self.service.logout().await;
             if result.is_ok() {
                 self.current_user = None;
+            }
+            result
+        }
+
+        async fn change_password(
+            &mut self,
+            old_password: &str,
+            new_password: &str,
+        ) -> io::Result<()> {
+            let result = self.service.change_password(old_password, new_password).await;
+            if result.is_ok() {
+                self.current_user.as_mut().expect("change password without login").1 =
+                    new_password.to_owned();
             }
             result
         }
