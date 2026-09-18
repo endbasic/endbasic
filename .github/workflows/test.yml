@@ -81,6 +81,8 @@ jobs:
     windows-test:
         runs-on: windows-latest
         env:
+            RUSTC_WRAPPER: "${{ github.workspace }}/admin/rustc-wrapper.exe"
+            SCCACHE_GHA_ENABLED: "true"
             SERVICE_URL: ${{ secrets.SERVICE_URL }}
             TEST_ACCOUNT_1_USERNAME: ${{ secrets.TEST_ACCOUNT_1_USERNAME }}
             TEST_ACCOUNT_1_PASSWORD: ${{ secrets.TEST_ACCOUNT_1_PASSWORD }}
@@ -88,6 +90,8 @@ jobs:
             TEST_ACCOUNT_2_PASSWORD: ${{ secrets.TEST_ACCOUNT_2_PASSWORD }}
         steps:
             - uses: actions/checkout@v6
+            - uses: mozilla-actions/sccache-action@v0.0.10
+            - run: rustc admin/rustc-wrapper.rs -o admin/rustc-wrapper.exe
             - run: choco install --allow-empty-checksums unzip zip
             - run: ./admin/setup-sdl.ps1
             - run: cargo test --package=endbasic-client -- --include-ignored
