@@ -10,9 +10,9 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
-## Changes in version 0.14.99
+## Changes in version 0.14.1
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET**
+**Released on 2026-09-20.**
 
 *   Updated the cloud service client to deal with a small protocol change that
     reports errors as simpler text responses (no JSON) and that changed where
