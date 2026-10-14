@@ -54,6 +54,7 @@ impl Tone {
 }
 
 /// Primitive audio operations.
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 pub trait AudioOps {
     /// Reproduces `tone` and returns once playback completes.

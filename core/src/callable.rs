@@ -1068,6 +1068,7 @@ impl<'a> Scope<'a> {
 ///
 /// Idiomatically, these objects need to provide a `new()` method that returns an `Rc<Callable>`, as
 /// that's the type used throughout the execution engine.
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 pub trait Callable {
     /// Returns the metadata for this function.

@@ -197,6 +197,7 @@ impl SizeInPixels {
 }
 
 /// Hooks to implement the commands that manipulate the console.
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 pub trait Console {
     /// Clears the part of the console given by `how`.

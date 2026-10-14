@@ -32,6 +32,7 @@ use crate::MachineBuilder;
 pub(crate) const CATEGORY: &str = "Date and time";
 
 /// Interface to date and time functionality provided by the host.
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 pub trait DateTime {
     /// Returns the current monotonic timestamp.

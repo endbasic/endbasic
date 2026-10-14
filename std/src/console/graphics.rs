@@ -263,6 +263,7 @@ pub trait RasterOps {
 }
 
 /// Primitive graphical console input operations.
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 pub trait InputOps {
     /// Returns the next key press if any is available.
