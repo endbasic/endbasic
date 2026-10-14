@@ -38,22 +38,28 @@ run_scenario() {
 
     local scenario_name="${scenario_file##*/}"
 
-    local tmpfile="${tmpdir}/${scenario_name}.csv"
+    local tmpfile="${tmpdir}/${scenario_name}.json"
     hyperfine \
         --warmup 1 \
-        --export-csv "${tmpfile}" \
+        --export-json "${tmpfile}" \
         "${before} ${scenario_file}" \
         "${after} ${scenario_file}"
 
-    awk -F, -v scenario_name="${scenario_name}" '
-        NR == 2 { before = $2 }
-        NR == 3 { after = $2 }
-        END {
-            if (before == "" || after == "") {
-                exit 1
-            }
-            printf "%s,%s,%s,%.6f\n", scenario_name, before, after, before / after
-        }
+    jq -r --arg scenario_name "${scenario_name}" '
+        .results as $results |
+        [
+            $results[] |
+            (.mean // .summary.time_wall_clock.mean)
+        ] as $means |
+        if ($means | length) != 2 or ($means | any(.[]; type != "number" or . <= 0)) then
+            error("Expected two results with positive mean values")
+        else
+            [
+                $means[0],
+                $means[1],
+                ($means[0] / $means[1])
+            ] | @csv | $scenario_name + "," + .
+        end
     ' "${tmpfile}" >>"${output}" || err "Failed to extract results for ${scenario_file}"
 }
 

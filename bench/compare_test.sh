@@ -63,7 +63,7 @@ main() {
     local tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/endbasic-bench.XXXXXX")"
     trap "rm -rf '${tmpdir}'" EXIT HUP INT TERM
 
-    echo >"${tmpdir}/endbasic" <<EOF
+    cat >"${tmpdir}/endbasic" <<EOF
 #! /bin/sh
 true
 EOF
