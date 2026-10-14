@@ -118,6 +118,7 @@ pub enum Signal {
 }
 
 /// Trait to decide when the machine should cooperatively yield to the host.
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 pub trait Yielder {
     /// Yields execution to the host.

@@ -141,6 +141,7 @@ impl DriveFiles {
 }
 
 /// Abstract operations to load and store programs on some storage medium.
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 pub trait Drive {
     /// Deletes the program given by `name`.

@@ -54,6 +54,7 @@ pub const BREAK_MSG: &str = "**** BREAK ****";
 const DEFAULT_EXTENSION: &str = "bas";
 
 /// Representation of the single program that we can keep in memory.
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 pub trait Program {
     /// Returns true if the program was modified since it was last saved (as indicated by a call to

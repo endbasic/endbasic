@@ -108,6 +108,7 @@ pub struct SignupRequest {
 }
 
 /// Abstract interface to interact with an EndBASIC service server.
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 pub trait Service {
     /// Interactively creates an account based on the details provided in `request`.

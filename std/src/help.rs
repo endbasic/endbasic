@@ -53,6 +53,7 @@ fn header() -> Vec<String> {
 }
 
 /// Handler for a specific help topic.
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 trait Topic {
     /// Returns the name of the topic.
