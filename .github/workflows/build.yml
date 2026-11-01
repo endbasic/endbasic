@@ -30,6 +30,9 @@ jobs:
                   target: aarch64-unknown-linux-gnu
             - uses: actions/checkout@v6
             - uses: mozilla-actions/sccache-action@v0.0.10
+            - uses: jwlawson/actions-setup-cmake@v2
+              with:
+                  cmake-version: '3.31.x'
             - run: sudo apt update
             - run: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
             - run: ./.github/workflows/release.sh linux-aarch64-rpi-sdl
@@ -51,6 +54,9 @@ jobs:
                   target: armv7-unknown-linux-gnueabihf
             - uses: actions/checkout@v6
             - uses: mozilla-actions/sccache-action@v0.0.10
+            - uses: jwlawson/actions-setup-cmake@v2
+              with:
+                  cmake-version: '3.31.x'
             - run: sudo apt update
             - run: sudo apt install gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
             - run: ./.github/workflows/release.sh linux-armv7-rpi-sdl
