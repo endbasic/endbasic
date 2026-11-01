@@ -14,7 +14,7 @@
 # under the License.
 
 Invoke-WebRequest `
-    -Uri https://www.libsdl.org/release/SDL2-devel-2.32.10-VC.zip `
+    -Uri https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-devel-2.32.10-VC.zip `
     -OutFile SDL2-devel-2.32.10-VC.zip
 
 unzip SDL2-devel-2.32.10-VC.zip
