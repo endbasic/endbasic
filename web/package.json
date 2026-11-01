@@ -19,6 +19,9 @@
         "url": "https://github.com/endbasic/endbasic/issues"
     },
     "homepage": "https://www.endbasic.dev/",
+    "engines": {
+        "node": ">=22.15.0"
+    },
     "dependencies": {
         "jquery": "3.7.1"
     },
@@ -26,8 +29,8 @@
         "copy-webpack-plugin": "^14.0.0",
         "geckodriver": "^6.1.0",
         "html-webpack-plugin": "^5.6.3",
-        "webpack": "^5.96.1",
-        "webpack-cli": "^5.1.4",
-        "webpack-dev-server": "^5.1.0"
+        "webpack": "^5.112.2",
+        "webpack-cli": "^7.3.1",
+        "webpack-dev-server": "^6.1.0"
     }
 }
