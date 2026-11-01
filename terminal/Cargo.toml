@@ -21,10 +21,6 @@ crossterm = { version = "0.27", features = ["event-stream"] }
 futures-util = "0.3"
 tokio = { version = "1", features = ["macros", "rt"] }
 
-[dependencies.endbasic-core]
-version = "0.14.1" # ENDBASIC-VERSION
-path = "../core"
-
 [dependencies.endbasic-std]
 version = "0.14.1" # ENDBASIC-VERSION
 path = "../std"

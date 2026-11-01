@@ -18,10 +18,6 @@ workspace = true
 async-trait = "0.1"
 time = { version = "0.3", features = ["std"] }
 
-[dependencies.endbasic-core]
-version = "0.14.1" # ENDBASIC-VERSION
-path = "../core"
-
 [dependencies.endbasic-std]
 version = "0.14.1" # ENDBASIC-VERSION
 path = "../std"

@@ -32,6 +32,9 @@ path = "../core"
 version = "0.2"
 features = ["js"]
 
+[package.metadata.cargo-machete]
+ignored = ["getrandom"]
+
 [dependencies.rand]
 version = "0.8"
 default-features = false
