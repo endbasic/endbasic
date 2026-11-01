@@ -23,7 +23,7 @@ operating systems and platforms, including macOS, Windows, and Linux.
 
 EndBASIC is free software under the [AGPL v3+](LICENSE).
 
-**The latest version of EndBASIC is 0.14.1 and was released on 2026-09-20.**
+**The latest version of EndBASIC is 0.14.2 and was released on 2026-11-01.**
 
 ## Quick start on the web
 
@@ -45,7 +45,7 @@ for the cloud service and upload your programs to share them with the world.
 ## Quick start on your machine
 
 Visit the
-[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.14.1)
+[release page](https://github.com/endbasic/endbasic/releases/tag/endbasic-0.14.2)
 to download prebuilt binaries.  Once downloaded, unpack the archive and run the
 `endbasic` binary to get started.
 
