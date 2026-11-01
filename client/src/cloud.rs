@@ -155,7 +155,7 @@ impl Service for CloudService {
             .await
             .map_err(reqwest_error_to_io_error)?;
         match response.status() {
-            StatusCode::OK => Ok(()),
+            StatusCode::ACCEPTED | StatusCode::OK => Ok(()),
             _ => Err(http_response_to_io_error(response).await),
         }
     }

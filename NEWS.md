@@ -10,6 +10,13 @@ to talk to the cloud service.  If you use the web interface, this should not be
 a problem, but if you use local builds, please try to stay on the latest release
 for the time being.**
 
+## Changes in version 0.14.2
+
+**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+
+*   Updated the cloud service client to deal with a small protocol change in
+    account signups.
+
 ## Changes in version 0.14.1
 
 **Released on 2026-09-20.**
