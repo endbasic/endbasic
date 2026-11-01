@@ -64,7 +64,7 @@ async fn show_dir(
     let canonical_path = storage.make_canonical(path)?;
     let files = storage.enumerate(path).await?;
 
-    let format = format_description::parse("[year]-[month]-[day] [hour]:[minute]")
+    let format = format_description::parse_borrowed::<3>("[year]-[month]-[day] [hour]:[minute]")
         .expect("Hardcoded format must be valid");
     let show_narrow = is_narrow(&*console);
 
