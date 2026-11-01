@@ -12,7 +12,7 @@ for the time being.**
 
 ## Changes in version 0.14.2
 
-**STILL UNDER DEVELOPMENT; NOT RELEASED YET.**
+**Released on 2026-11-01.**
 
 *   Updated the cloud service client to deal with a small protocol change in
     account signups.
