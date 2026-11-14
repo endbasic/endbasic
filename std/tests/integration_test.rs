@@ -49,8 +49,8 @@ fn read_golden(name: &str) -> String {
 
 #[test]
 fn test_example_script_runner() {
-    Command::cargo_bin("examples/script-runner")
-        .unwrap()
+    Command::new(env!("CARGO"))
+        .args(["run", "--quiet", "--example", "script-runner", "--"])
         .arg(src_str("std/tests/script.bas"))
         .assert()
         .success()
@@ -60,8 +60,8 @@ fn test_example_script_runner() {
 
 #[test]
 fn test_example_script_runner_errors() {
-    Command::cargo_bin("examples/script-runner")
-        .unwrap()
+    Command::new(env!("CARGO"))
+        .args(["run", "--quiet", "--example", "script-runner", "--"])
         .arg(src_str("std/tests/script-errors.bas"))
         .assert()
         .code(1)

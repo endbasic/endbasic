@@ -71,7 +71,12 @@ main() {
         linux-aarch64-rpi-sdl)
             [ ! -f .cargo/config ] || err "Won't override existing .cargo/config"
             cp .cargo/config.rpi64 .cargo/config
-            ( cd cli && cargo build --release --features=rpi,sdl-bundled )
+            (
+                cd cli
+                # sdl2-sys 0.38 requires this directory to copy bundled libraries.
+                mkdir -p "${CARGO_TARGET_DIR:-../target}/aarch64-unknown-linux-gnu/release/deps"
+                cargo build --release --features=rpi,sdl-bundled
+            )
             rm -f .cargo/config
 
             cp ./target/aarch64-unknown-linux-gnu/release/endbasic "${distname}"
@@ -81,7 +86,12 @@ main() {
         linux-armv7-rpi-sdl)
             [ ! -f .cargo/config ] || err "Won't override existing .cargo/config"
             cp .cargo/config.rpi .cargo/config
-            ( cd cli && cargo build --release --features=rpi,sdl-bundled )
+            (
+                cd cli
+                # sdl2-sys 0.38 requires this directory to copy bundled libraries.
+                mkdir -p "${CARGO_TARGET_DIR:-../target}/armv7-unknown-linux-gnueabihf/release/deps"
+                cargo build --release --features=rpi,sdl-bundled
+            )
             rm -f .cargo/config
 
             cp ./target/armv7-unknown-linux-gnueabihf/release/endbasic "${distname}"
