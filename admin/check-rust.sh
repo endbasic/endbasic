@@ -17,6 +17,9 @@
 
 set -eux
 
+# sdl2-sys 0.38 copies bundled libraries here, but Cargo 1.100 no longer creates it.
+mkdir -p "${CARGO_TARGET_DIR:-target}/debug/deps"
+
 cargo clippy --all-targets -- -D warnings
 
 # The --workspace and --all-features flags trigger the build/check of the

@@ -43,8 +43,8 @@ fn read_golden(name: &str) -> String {
 
 #[test]
 fn test_config() {
-    Command::cargo_bin("examples/core-config")
-        .unwrap()
+    Command::new(env!("CARGO"))
+        .args(["run", "--quiet", "--example", "core-config", "--"])
         .assert()
         .success()
         .stdout(read_golden("core/tests/config.out"))
