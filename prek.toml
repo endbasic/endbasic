@@ -65,11 +65,10 @@ always_run = true
 [[repos.hooks]]
 id = "cargo-machete"
 name = "Check Rust unused dependencies"
-language = "system"
-entry = "cargo"
-args = ["machete"]
+language = "script"
+entry = "admin/check-dependencies.sh"
 pass_filenames = false
-files = { glob = ["**/Cargo.toml", "**/Cargo.lock"] }
+files = { glob = ["**/Cargo.toml", "**/Cargo.lock", "admin/check-dependencies.sh", "prek.toml"] }
 
 [[repos.hooks]]
 id = "cargo-rust"
